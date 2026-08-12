@@ -20,6 +20,8 @@
 
 목표는 미래 가격을 확정적으로 예측하는 것이 아니라, 흩어진 시장 데이터를 **수집 → 구조화 → 분석 → 설명**할 수 있는 재현 가능한 데이터 파이프라인을 구축하는 것이다.
 
+1차 사용자는 파이프라인 상태와 데이터 일관성을 확인하는 프로젝트 운영자/데이터 엔지니어이며, 2차 사용자는 PostgreSQL에서 bar·feature·alert를 조회하는 데이터 분석가다. FastAPI/Streamlit 사용자는 선택 구현 범위다.
+
 ### 사용할 데이터와 출처
 
 | 데이터 | 출처 | 사용 목적 |
@@ -116,6 +118,7 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 - [최종 프로젝트 비전](docs/final-vision.md): 데이터 파이프라인부터 Agent·MCP·RAG·평가까지의 전체 목표
 - [4주·8회차 실행 계획](PROJECT_PLAN.md): 필수 산출물, 회차별 Exit Gate, 부하·장애 검증
 - [MVP 아키텍처](docs/architecture.md): 실시간·배치 흐름, Kafka topic, 장애 처리
+- [설계 결정](docs/design-decisions.md): 사용자, 처리량 측정, Kafka 파티션, 저장·조회·인덱스 전략
 - [데이터 모델](docs/data-model.md): 이벤트 계약, 테이블, 멱등 키, 시간 기준
 - [데이터·플랫폼 선택](docs/api-selection.md): API와 Spark 선택 근거, 재검증 체크리스트
 

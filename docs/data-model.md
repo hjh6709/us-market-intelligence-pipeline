@@ -6,6 +6,8 @@
 
 이 문서는 provider와 내부 처리 사이의 안정된 계약 및 PostgreSQL의 논리 모델을 정의한다. 실제 migration의 이름·타입은 구현 중 테스트와 함께 확정한다.
 
+P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.md#7-조회-패턴과-인덱스)을 기준으로 migration과 함께 검증한다.
+
 ## 1. 공통 원칙
 
 - 모든 timestamp는 timezone-aware UTC다.
@@ -304,8 +306,8 @@ MVP 기본값:
 
 - raw market Kafka: 24h
 - aggregated bars/features/signals: PostgreSQL, 프로젝트 기간 보존
-- raw news Kafka: 72h
-- market events: PostgreSQL, 프로젝트 기간 보존
+- raw news Kafka (선택 구현 시): 72h
+- market events (선택 구현 시): PostgreSQL, 프로젝트 기간 보존
 - DLQ: 7d 또는 수동 정리
 
 보존 기간은 실제 일일 byte 수를 측정한 뒤에만 늘린다. S3/Parquet archive는 stretch goal이다.

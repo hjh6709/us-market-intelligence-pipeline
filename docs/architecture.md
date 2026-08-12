@@ -8,6 +8,8 @@
 
 이 문서는 [최종 프로젝트 비전](final-vision.md)의 Stage A만 상세화한다. Agent·MCP·RAG 목표 아키텍처는 최종 비전 문서를 기준으로 한다.
 
+사용자·조회 패턴과 Kafka/Spark/Airflow/저장소의 비교 근거는 [MVP 설계 결정](design-decisions.md)에 정의한다.
+
 ## 1. Architecture drivers
 
 1. 한 명이 31일 안에 구현·설명·운영할 수 있어야 한다.
@@ -122,10 +124,10 @@ Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. 
 
 ## 6. MVP Kafka topics
 
-| Topic | Key | Producer | Consumer | 기본 보존 |
-| --- | --- | --- | --- | --- |
-| `raw.market.v1` | symbol | market collector/replay | Spark Structured Streaming | 24h |
-| `dead-letter.v1` | original key | Spark/news processors | manual inspection/reporting | 7d |
+| Topic | Key | Producer | Consumer | Partitions | 기본 보존 |
+| --- | --- | --- | --- | ---: | --- |
+| `raw.market.v1` | symbol | market collector/replay | Spark Structured Streaming | 3 | 24h |
+| `dead-letter.v1` | original key | Spark/news processors | manual inspection/reporting | 1 | 7d |
 
 선택 구현에서 live/replay news processor를 만들 때만 `raw.news.v1`을 추가한다. `market.bars.1m.v1`, `market.events.v1`, `market.features.v1`, `market.signals.v1`은 실제 두 번째 consumer가 생기기 전에는 만들지 않는다. Spark 결과와 LLM market event는 MVP에서 PostgreSQL에 직접 저장한다.
 

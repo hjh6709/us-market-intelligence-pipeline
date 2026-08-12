@@ -138,12 +138,16 @@ tests/
 - `Kafka → Spark → PostgreSQL`, `FRED → Airflow → PostgreSQL` 구조도
 - Kafka/Spark/Airflow/PostgreSQL 선정 이유
 - 공통 event envelope와 DB logical schema
+- 1차/2차 사용자와 P0 query pattern
+- 초기 Kafka partition/retention과 재검토 조건
+- PostgreSQL business key와 최소 index 후보
 
 Exit gate:
 
 - Spark가 담당할 처리와 담당하지 않을 처리가 한 문장씩 정의되어 있다.
 - IEX coverage, 22-symbol limit, UTC, replay 원칙이 문서에 표시되어 있다.
 - local runtime/Java/Spark/Kafka 호환 버전 검증 계획이 있다.
+- 실제 EPS는 미측정으로 표시되고 측정 방법과 partition 재결정 조건이 문서화되어 있다.
 
 ### 3회차 — Kafka 수집 설계 및 구현
 
