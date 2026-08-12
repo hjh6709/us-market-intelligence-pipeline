@@ -26,7 +26,8 @@
 
 | 데이터 | 출처 | 사용 목적 |
 | --- | --- | --- |
-| 미국 주식·ETF trade/OHLCV | [Alpaca Market Data API](https://docs.alpaca.markets/us/docs/about-market-data-api) | 실시간 수집, 1분 bar, 가격·거래량 분석 |
+| 미국 주식·ETF IEX trade | [Alpaca Market Data API](https://docs.alpaca.markets/us/docs/about-market-data-api) | 무료 실시간 수집, IEX 1분 bar, 예비 이상 징후 |
+| 15분 이상 지난 미국 전체시장 bar | [Alpaca historical SIP](https://docs.alpaca.markets/us/docs/market-data-faq) | IEX alert 정합성 검증과 확정/기각 |
 | CPI·PCE·고용·금리·국채금리·VIX | [FRED API](https://fred.stlouisfed.org/docs/api/fred/overview.html) | 거시경제 환경과 변화 방향 분석 |
 | 기업·산업·거시경제 뉴스 | [Alpaca News API](https://docs.alpaca.markets/us/docs/historical-news-data) | 뉴스 중복 제거, 중요 이벤트 구조화 |
 | Replay/합성 fixture | 실제 응답 스키마 기반 자체 생성 | 장외 시간, 장애, 중복·지연 시나리오 재현 |
@@ -37,14 +38,17 @@
 
 ```mermaid
 flowchart LR
-    Market["Alpaca 실시간 시세"] --> Normalize["수집·정규화"]
+    Market["Alpaca IEX 실시간 trade"] --> Normalize["수집·정규화"]
     Normalize --> Kafka["Kafka"]
     Kafka --> Spark["Spark Structured Streaming\n검증·1분 집계"]
-    Spark --> Bars["OHLCV·Feature·이상 징후"]
+    Spark --> Bars["IEX OHLCV·Feature\nPRELIMINARY_IEX"]
     Bars --> DB[("PostgreSQL")]
 
-    Macro["FRED 거시지표"] --> Airflow["Airflow 정기 수집"]
-    Airflow --> DB
+    Macro["FRED 거시지표"] --> MacroDAG["Airflow FRED DAG"]
+    MacroDAG --> DB
+    SIP["15분 이상 지난 SIP bar"] --> ReconcileDAG["Airflow reconciliation DAG"]
+    ReconcileDAG --> Reconcile["IEX/SIP 정합성 검사"]
+    Reconcile --> DB
 
     News["금융 뉴스 (선택)"] --> Filter["중복 제거·필터링"]
     Filter --> Event["LLM 구조화 이벤트 (선택)"]
@@ -55,7 +59,7 @@ flowchart LR
     API --> Dashboard["Streamlit (선택)"]
 ```
 
-실시간 데이터는 Kafka로 생산자와 소비자를 분리하고, 예약 데이터는 Airflow로 수집한다. PostgreSQL에는 raw tick 전체가 아니라 애플리케이션과 분석에 필요한 1분 bar, feature, 이벤트, 신호를 저장한다.
+실시간 IEX 데이터는 Kafka로 생산자와 소비자를 분리하고, 15분 이상 지난 SIP bar와 FRED 데이터는 Airflow로 수집한다. IEX alert는 `PRELIMINARY_IEX`로만 생성하고 SIP 검증 후 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 전이한다. PostgreSQL에는 raw tick 전체가 아니라 애플리케이션과 분석에 필요한 1분 bar, feature, 정합성 결과, alert를 저장한다.
 
 ### 사용해보고 싶은 기술 후보
 
@@ -64,7 +68,7 @@ flowchart LR
 | Language | Python | 데이터 처리와 API 구현 |
 | Event Streaming | Apache Kafka | 실시간 이벤트 buffering, replay, producer/consumer 분리 |
 | Stream Processing | Spark Structured Streaming (local) | schema 검증, event-time 1분 window, checkpoint·복구 |
-| Workflow | Apache Airflow | FRED 수집, 백필, 품질 검사, 재실행 |
+| Workflow | Apache Airflow | FRED 수집, 지연 SIP 정합성 검사, 백필, 품질 검사, 재실행 |
 | Database | PostgreSQL | 정규화 데이터와 분석 결과의 멱등 저장 |
 | AI | 외부 LLM API | 비정형 뉴스를 구조화된 시장 이벤트로 변환 |
 | Backend/UI | FastAPI, Streamlit | 분석 결과 조회와 프로젝트 시연 |
@@ -103,8 +107,9 @@ flowchart TB
 실시간/replay 시세
 → Kafka
 → Spark Structured Streaming
-→ 1분 OHLCV와 이상 징후 feature
+→ IEX 1분 OHLCV와 PRELIMINARY_IEX alert
 → PostgreSQL
++ 15분 이상 지난 SIP bar → Airflow → 정합성 검사 → alert 확정/기각
 + FRED → Airflow → PostgreSQL
 → Load test·장애 복구 검증
 ```
@@ -125,6 +130,8 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 ## 제약과 안전
 
 - Alpaca Basic의 실시간 주식 데이터는 IEX 범위이므로 전체 미국 거래소 거래량을 대표한다고 주장하지 않는다.
+- IEX와 SIP feature/baseline을 서로 섞지 않으며, 실시간 IEX alert는 항상 예비 상태와 `feed=iex`를 노출한다.
+- 무료 범위에서 전체시장 실시간 경고를 제공한다고 주장하지 않는다. SIP 확인은 최소 15분 지연된 historical query다.
 - FRED는 시장 컨센서스 forecast 공급자가 아니므로 forecast가 없으면 economic surprise를 계산하지 않는다.
 - 유료 API나 유료 plan으로 자동 전환하지 않는다.
 - LLM 결과는 schema validation을 거치며 확정적 투자 권유를 생성하지 않는다.

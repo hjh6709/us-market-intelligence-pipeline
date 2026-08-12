@@ -8,32 +8,39 @@
 
 | 역할 | MVP 선택 | 대체 방식 | 결정 |
 | --- | --- | --- | --- |
-| Market data | Alpaca Trading API Basic / IEX | replay fixture | 채택 |
+| Realtime market data | Alpaca Trading API Basic / IEX | replay fixture | 채택 |
+| Market reconciliation | Alpaca historical SIP, `end <= now - 15m` | stored SIP fixture | 채택 |
 | News | Alpaca News | stored fixture | 선택 구현, account entitlement smoke test 필요 |
 | Macro | FRED API | stored response fixture | 채택 |
 | LLM | Groq API | deterministic stub/cache | 선택 구현 1차 후보, account quota smoke test 필요 |
 | Market calendar | Alpaca Calendar/Clock | calendar fixture | 채택 |
 
-한 기능에 상용 provider 여러 개를 동시에 구현하지 않는다. adapter 계약과 fixture가 교체 가능성을 제공하며, 실제 대체 공급자는 필요가 생겼을 때 추가한다.
+한 기능에 상용 provider 여러 개를 동시에 구현하지 않는다. adapter 계약과 fixture가 교체 가능성을 제공하며, 실제 대체 공급자는 필요가 생겼을 때 추가한다. 무료 조건에서 22개 종목의 전체 미국시장 SIP raw trade를 실시간 제공하는 검증된 공급자는 없으므로, 전체시장 실시간 경고를 MVP 요구사항으로 두지 않는다.
 
 ## 2. Alpaca Market Data
 
-공식 문서상 Trading API Basic은 무료이며 미국 주식/ETF를 지원한다. 다만 실시간 주식 범위는 IEX이고 WebSocket subscription은 30 symbols, historical API는 200 calls/min이며 최근 15분 historical data에 제한이 있다.
+공식 문서상 Trading API Basic은 무료이며 미국 주식/ETF를 지원한다. 다만 실시간 주식 범위는 IEX이고 WebSocket subscription은 30 symbols, historical API는 200 calls/min이며 최근 15분 historical data에 제한이 있다. 구독하지 않은 계정도 historical SIP query의 `end`가 최소 15분 이전이면 조회할 수 있으므로, 이를 실시간 IEX 결과의 지연 정합성 검증에 사용한다.
 
 MVP 결정:
 
 - 22 symbols만 subscribe한다.
 - feed는 명시적으로 `iex`로 저장·표시한다.
 - trade channel만 P0로 사용한다. quote는 실제 signal requirement가 생길 때 추가한다.
-- startup warm-up은 저장된 bar/replay를 우선하고 historical 최신 15분 제한을 가정한다.
+- IEX feature와 threshold baseline은 historical IEX만 사용한다.
+- SIP feature와 threshold baseline은 historical SIP만 사용하며 IEX baseline과 혼합하지 않는다.
+- 실시간 alert는 `PRELIMINARY_IEX`, SIP 정합성 검사 후 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 기록한다.
+- startup warm-up은 feed가 일치하는 historical bar/replay를 사용하고 historical 최신 15분 제한을 가정한다.
 - 한 계정의 active stream connection 제한을 고려해 collector 하나가 구독을 소유한다.
 - SIP 수준 coverage나 전체시장 VWAP이라고 표현하지 않는다.
+- historical SIP 수집은 latest endpoint를 사용하지 않고 `end <= now - 15m`인 닫힌 1분 window만 요청한다.
 
 공식 출처:
 
 - [About Market Data API — subscription plans](https://docs.alpaca.markets/us/docs/about-market-data-api)
 - [Real-time Stock Data — feeds, channels and schemas](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data)
 - [WebSocket Stream — connection and subscription behavior](https://docs.alpaca.markets/us/docs/streaming-market-data)
+- [Market Data FAQ — IEX/SIP 차이와 무료 historical SIP 제한](https://docs.alpaca.markets/us/docs/market-data-faq)
+- [Market Data FAQ — trade condition별 bar 집계 규칙](https://docs.alpaca.markets/us/docs/market-data-faq#how-are-bars-aggregated)
 
 실행 전 smoke check:
 
@@ -42,7 +49,31 @@ MVP 결정:
 3. 22 symbols trade subscription acknowledgement
 4. 장전/장후 trade 수신 여부와 실제 coverage
 5. 406 connection limit, 429, reconnect 동작
-6. historical endpoint의 실제 최신 15분 제한
+6. `feed=sip`, `end <= now - 16m` historical 1분 bar 조회 권한
+7. IEX raw trade 직접 집계와 Alpaca IEX 1분 bar의 condition 적용 결과
+8. 동일 window의 IEX/SIP close·volume 차이와 reconciliation upsert
+
+### 무료 대안 재검토
+
+| 후보 | 무료 범위에서 확인된 사실 | 미선택 이유 |
+| --- | --- | --- |
+| KIS Open API | 미국 0분 지연 가격, WebSocket 전체 상품 합산 41건 | 계좌·서비스 신청이 필요하고 `HDFSCNT0`에 고유 trade id, tape, trade condition이 없으며 미국 feed의 전체 SIP coverage가 공개 계약으로 확인되지 않음 |
+| Finnhub Free | 60 REST calls/min, WebSocket 50 symbols, price/time/volume/condition | 무료 표에 historical OHLC/tick data가 없고 WebSocket event에 고유 trade id, exchange, tape가 없으며 전체 SIP coverage가 명시되지 않음 |
+| yfinance | 동기/비동기 Yahoo price WebSocket과 historical download | Yahoo가 승인한 공식 market-data SDK가 아니고 개인 용도로 안내되며 raw trade id/condition/tape 계약이 없음 |
+| Twelve Data Basic | 실시간 US equity와 8 trial WebSocket credits | 22 symbols 동시 구독 불가 |
+| Massive Basic | EOD와 제한된 historical data | 무료 WebSocket 없음 |
+
+무료 후보의 종목 수만 비교하지 않는다. P0는 raw event identity, source/feed 투명성, 22종목 재현성, feed가 일치하는 historical baseline을 더 높은 우선순위로 평가한다. 이 기준에서는 Alpaca Basic IEX + 지연 SIP reconciliation이 최선이다.
+
+대안 공식 출처:
+
+- [KIS 공식 Open API 샘플 — 해외주식 WebSocket schema](https://github.com/koreainvestment/open-trading-api/blob/main/examples_user/overseas_stock/overseas_stock_functions_ws.py)
+- [KIS WebSocket 합산 41건 안내](https://apiportal.koreainvestment.com/community/10000000-0000-0011-0000-000000000001/post/d0d1a83f-6f8d-4437-9700-6d26702fd989)
+- [Finnhub Free plan](https://finnhub.io/pricing)
+- [Finnhub trade WebSocket schema](https://finnhub.io/docs/api/websocket-trades)
+- [yfinance repository and usage notice](https://github.com/ranaroussi/yfinance)
+- [Twelve Data pricing](https://twelvedata.com/pricing)
+- [Massive stocks pricing](https://massive.com/stocks)
 
 ## 3. Alpaca News
 

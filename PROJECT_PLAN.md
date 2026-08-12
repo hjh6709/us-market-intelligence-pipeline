@@ -10,16 +10,20 @@
 
 ## 1. 프로젝트 목표
 
-> Alpaca의 미국 주식 실시간 trade 데이터를 Kafka로 수집하고 Spark Structured Streaming으로 1분 OHLCV와 이상 징후 feature를 계산해 PostgreSQL에 저장하며, Airflow로 FRED 거시경제 데이터를 통합하는 재현 가능한 금융 데이터 파이프라인을 구축한다.
+> Alpaca IEX의 미국 주식 실시간 trade 데이터를 Kafka로 수집하고 Spark Structured Streaming으로 1분 OHLCV와 예비 이상 징후를 계산해 PostgreSQL에 저장하며, Airflow로 15분 이상 지난 SIP 데이터의 정합성 검증과 FRED 거시경제 수집을 수행하는 재현 가능한 금융 데이터 파이프라인을 구축한다.
 
 핵심 데모:
 
 ```text
-Alpaca or deterministic replay
+Alpaca IEX or deterministic replay
 → Kafka
 → Spark Structured Streaming
-→ 1-minute bars / anomaly features
+→ IEX 1-minute bars / PRELIMINARY_IEX alerts
 → PostgreSQL
+
+Alpaca historical SIP (end <= now - 15m)
+→ Airflow reconciliation
+→ CONFIRMED_SIP / REJECTED_AFTER_RECONCILIATION
 
 FRED
 → Airflow
@@ -53,7 +57,7 @@ Kafka source
 1. Kafka Producer + replay dataset
 2. Spark Structured Streaming preprocess/aggregation
 3. PostgreSQL schema + idempotent load
-4. Airflow FRED DAG
+4. Airflow SIP reconciliation + FRED DAG
 5. Load test + failure recovery
 6. Technical/anomaly features
 --------------------------------
@@ -72,8 +76,8 @@ Kafka source
 | P0-2 | Spark 전처리 | Spark가 schema, symbol, timestamp, price, volume을 검증하고 중복/지연 데이터를 정의된 정책으로 처리한다. |
 | P0-3 | Spark 집계 | event-time 1분 window로 OHLCV, VWAP, trade count를 계산한다. |
 | P0-4 | 데이터 저장 | `foreachBatch` sink가 PostgreSQL business key upsert를 수행하며 같은 input replay에도 row 수와 값이 일관된다. |
-| P0-5 | Feature/anomaly | 확정 bar에서 return과 volume feature를 계산하고 설명 가능한 threshold 기반 alert를 저장한다. |
-| P0-6 | Airflow | FRED DAG가 주요 series를 예약/백필 수집하고 같은 logical date 재실행 시 중복되지 않는다. |
+| P0-5 | Feature/anomaly | 확정 IEX bar와 IEX 전용 baseline에서 feature를 계산하고 `PRELIMINARY_IEX` alert와 source/feed를 저장한다. |
+| P0-6 | Airflow | historical SIP reconciliation과 FRED DAG가 예약/백필 수집을 수행하며 같은 logical date/window 재실행 시 중복되지 않는다. |
 | P0-7 | Load test | replay 배속별 throughput, Spark processing rate, batch duration, Kafka lag, DB latency, CPU/memory를 기록한다. |
 | P0-8 | Failure recovery | Kafka/Spark/PostgreSQL 중단, duplicate, out-of-order, invalid event 시나리오의 복구 결과가 남는다. |
 | P0-9 | Reproducibility | clean checkout에서 Docker Compose와 문서화된 명령으로 local pipeline과 offline replay를 실행한다. |
@@ -95,12 +99,16 @@ src/
 ├── features/
 │   └── anomaly.py               # finalized bar → feature/alert
 ├── providers/
+│   ├── alpaca.py                # IEX stream + delayed SIP bars
 │   └── fred.py
+├── reconciliation/
+│   └── market.py               # IEX/SIP compare + alert transition
 ├── repositories/
 │   └── postgres.py              # idempotent upsert
 └── api/                         # optional
 
 airflow/dags/
+├── market_reconciliation_dag.py
 └── fred_macro_dag.py
 
 tests/
@@ -132,10 +140,11 @@ tests/
 필수 산출물:
 
 - Dataset A: Alpaca real-time market trades
-- Dataset B: FRED macro observations
-- Dataset C: Alpaca news, 선택 구현
-- Dataset D: deterministic replay Parquet/JSON fixtures
-- `Kafka → Spark → PostgreSQL`, `FRED → Airflow → PostgreSQL` 구조도
+- Dataset B: Alpaca historical SIP 1-minute bars, 15분 이상 지연 검증
+- Dataset C: FRED macro observations
+- Dataset D: Alpaca news, 선택 구현
+- Dataset E: deterministic replay Parquet/JSON fixtures
+- `IEX → Kafka → Spark → PostgreSQL`, `SIP/FRED → Airflow → PostgreSQL` 구조도
 - Kafka/Spark/Airflow/PostgreSQL 선정 이유
 - 공통 event envelope와 DB logical schema
 - 1차/2차 사용자와 P0 query pattern
@@ -145,7 +154,8 @@ tests/
 Exit gate:
 
 - Spark가 담당할 처리와 담당하지 않을 처리가 한 문장씩 정의되어 있다.
-- IEX coverage, 22-symbol limit, UTC, replay 원칙이 문서에 표시되어 있다.
+- IEX coverage, 22-symbol limit, SIP 15분 지연, UTC, replay 원칙이 문서에 표시되어 있다.
+- IEX/SIP baseline 분리와 alert 상태 전이가 데이터 모델에 정의되어 있다.
 - local runtime/Java/Spark/Kafka 호환 버전 검증 계획이 있다.
 - 실제 EPS는 미측정으로 표시되고 측정 방법과 partition 재결정 조건이 문서화되어 있다.
 
@@ -179,7 +189,7 @@ Exit gate:
 1. Spark local Structured Streaming의 Kafka source
 2. explicit JSON schema parsing과 valid/invalid 분기
 3. `event_timestamp` watermark와 event-id dedup
-4. symbol + 1-minute event-time window OHLCV/VWAP/count
+4. Alpaca trade condition 정책을 적용한 symbol + 1-minute event-time window OHLCV/VWAP/count
 5. append output mode로 watermark 이후 final bar 출력
 6. checkpoint directory 분리
 7. `foreachBatch` PostgreSQL business-key upsert
@@ -202,11 +212,11 @@ Exit gate:
 
 작업:
 
-1. FRED series 설정과 provider
-2. extract → validate → upsert → quality check task
-3. logical date 기반 증분/백필 범위
-4. retry, exponential backoff, timeout
-5. pipeline status 기록
+1. 15분 이상 지난 닫힌 window를 고르는 SIP reconciliation provider/task
+2. SIP bar validate/upsert → IEX/SIP 비교 → alert 상태 전이
+3. FRED series 설정과 extract → validate → upsert → quality check task
+4. logical date/window 기반 증분·백필 범위와 idempotency
+5. retry, exponential backoff, timeout, pipeline status 기록
 
 권장 최소 series:
 
@@ -215,6 +225,8 @@ Exit gate:
 Exit gate:
 
 - 같은 logical date로 DAG를 두 번 실행해도 중복이 없다.
+- 같은 market window를 다시 검증해도 reconciliation과 alert history가 중복되지 않는다.
+- SIP 실패/누락 시 alert는 `PRELIMINARY_IEX` 상태를 유지한다.
 - fixture contract test와 실제 API smoke test가 분리되어 있다.
 - 429, timeout, missing value를 재현한 task test가 통과한다.
 
@@ -279,11 +291,12 @@ Exit gate:
 1. 데이터 출처와 IEX 한계를 설명한다.
 2. replay producer로 Kafka에 trade를 발행한다.
 3. Spark UI/metrics와 1분 window 결과를 보여준다.
-4. PostgreSQL bar, feature, alert를 확인한다.
-5. Airflow DAG와 macro data를 확인한다.
-6. load-test 결과와 장애 복구 trace를 설명한다.
-7. 선택 구현이 있으면 API/dashboard를 보여준다.
-8. Agent·MCP·RAG는 검증된 후속 단계로만 제시한다.
+4. PostgreSQL IEX bar, feature, `PRELIMINARY_IEX` alert를 확인한다.
+5. 15분 이상 지난 SIP fixture/API로 Airflow reconciliation을 실행하고 confirmed/rejected 상태 전이를 확인한다.
+6. Airflow FRED DAG와 macro data를 확인한다.
+7. load-test 결과와 장애 복구 trace를 설명한다.
+8. 선택 구현이 있으면 API/dashboard를 보여준다.
+9. Agent·MCP·RAG는 검증된 후속 단계로만 제시한다.
 
 ## 6. 처리 경계와 Trigger
 
@@ -300,9 +313,18 @@ Trade
 
 ```text
 Finalized 1m bar
-→ return / volume baseline / ATR-derived feature
+→ same-feed return / volume baseline / ATR-derived feature
 → technical_features
-→ threshold-based anomaly_alerts
+→ PRELIMINARY_IEX anomaly_alerts
+```
+
+### Airflow Market Reconciliation
+
+```text
+IEX finalized window ending <= now - 15m
++ matching historical SIP bar and SIP baseline
+→ reconciliation evidence
+→ CONFIRMED_SIP or REJECTED_AFTER_RECONCILIATION
 ```
 
 ### Optional Signal Engine
@@ -357,6 +379,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - valid/invalid schema 분기
 - OHLCV/VWAP aggregation
 - feature/anomaly threshold와 warm-up
+- IEX/SIP baseline isolation과 alert state transition
 - UTC/DST/calendar transform
 - FRED normalization
 
@@ -365,6 +388,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - replay → Kafka → Spark → PostgreSQL
 - Spark checkpoint restart
 - FRED fixture → Airflow task → PostgreSQL
+- IEX/SIP bar fixture → reconciliation task → alert status/history
 - optional news fixture → processor/LLM stub → PostgreSQL
 
 ### Contract
@@ -385,6 +409,8 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 | JDBC `foreachBatch` 중복 | DB row 증가 | business unique key + upsert + replay integration test |
 | watermark 오해 | late data 유실/지연 | output mode별 fixture와 dropped/updated count 기록 |
 | IEX가 전체 시장 거래량이 아님 | 분석 과장 | `feed=iex` 표시, NBBO/전체시장 주장 금지 |
+| historical SIP 검증 실패·지연 | 예비 경고 확정 지연 | alert를 preliminary로 유지, bounded retry, pending/confirmation latency 관측 |
+| IEX/SIP baseline 혼합 | 통계 왜곡과 잘못된 판정 | feed를 business key에 포함하고 feed별 feature/baseline contract test |
 | API 가입·quota 변경 | live demo 중단 | 동일 schema replay를 기본 데모로 준비 |
 | Airflow+Spark+Kafka local 자원 | stack 불안정 | Compose profile, 순차 실행 가능, CPU/memory 측정 |
 | UI/LLM 범위 확장 | 필수 코드 미완성 | P0 gate 이후에만 선택 구현 시작 |
@@ -397,7 +423,8 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - [ ] Kafka market/replay producer
 - [ ] Spark Structured Streaming `preprocess.py`
 - [ ] PostgreSQL schema, migration, load/upsert logic
-- [ ] Airflow FRED DAG
+- [ ] Airflow historical SIP reconciliation DAG와 FRED DAG
+- [ ] IEX/SIP reconciliation 결과와 alert 상태 전이 이력
 - [ ] load-test dataset, runner, metric report
 - [ ] 장애 시나리오와 복구 결과
 - [ ] unit/integration/contract tests
@@ -414,6 +441,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - checkpoint 재시작과 full replay의 차이를 설명할 수 있는가?
 - 중복·지연·DB 장애에도 PostgreSQL 결과가 일관적인가?
 - Airflow 재실행과 백필이 멱등적인가?
+- 실시간 IEX 예비 경고와 지연 SIP 검증을 구분하고 feed별 baseline을 지켰는가?
 - 처리량과 지연의 병목을 metric으로 찾았는가?
 - 사용한 각 플랫폼이 어떤 문제를 해결하는지 설명할 수 있는가?
 

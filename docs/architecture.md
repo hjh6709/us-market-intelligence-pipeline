@@ -19,6 +19,7 @@
 5. 시장이 닫혔거나 외부 API가 실패해도 결정적 replay로 데모할 수 있어야 한다.
 6. Spark Structured Streaming을 local mode에서 핵심 처리 엔진으로 직접 구현해야 한다.
 7. 신호와 이상 징후는 설명 가능하고 데이터 품질 저하를 명시해야 한다.
+8. 무료 IEX 실시간 범위와 15분 지연 SIP 검증 범위를 사용자에게 구분해 보여주고, 서로 다른 feed의 baseline을 섞지 않아야 한다.
 
 ## 2. System boundary
 
@@ -27,7 +28,8 @@
 ```mermaid
 flowchart TB
     subgraph External["External providers"]
-      AM["Alpaca Market Data"]
+      AI["Alpaca IEX realtime"]
+      AS["Alpaca historical SIP\nend <= now - 15m"]
       AN["Alpaca News (optional)"]
       FR["FRED"]
       GR["Groq LLM (optional)"]
@@ -43,6 +45,7 @@ flowchart TB
     subgraph Batch["Scheduled path"]
       AF["Airflow"]
       MAC["Macro task"]
+      REC["SIP reconciliation task"]
     end
 
     subgraph Intelligence["Application path"]
@@ -53,13 +56,15 @@ flowchart TB
       UI["Streamlit"]
     end
 
-    AM --> COL --> K
+    AI --> COL --> K
     K --> SP --> PG
     AN -. optional .-> NP
     NP <--> GR
     NP --> PG
     FR --> MAC
     AF --> MAC --> PG
+    AS --> REC
+    AF --> REC --> PG
     PG --> FE --> PG
     PG --> SE --> PG
     PG --> API --> UI
@@ -72,10 +77,11 @@ flowchart TB
 | Provider adapter | 인증, 원천 payload 수신, normalized model 변환 | score 계산, DB schema 노출 |
 | Market collector | subscribe, heartbeat, reconnect, raw event publish | bar 계산, 장기 저장 |
 | Spark market processor | Kafka consume, schema validation, event-time watermark/dedup, 1분 OHLCV, PostgreSQL micro-batch upsert | 외부 API 호출, LLM 분석, signal 계산 |
-| Feature/anomaly engine | 확정 bar에서 return/volume/ATR 계열 feature와 threshold alert 계산 | raw trade 재집계, 매수·매도 결정 |
+| Feature/anomaly engine | 확정 IEX bar에서 IEX 전용 baseline과 feature를 계산하고 `PRELIMINARY_IEX` alert 생성 | raw trade 재집계, SIP baseline 혼합, 매수·매도 결정 |
 | Optional news collector | 지정 symbol 뉴스 수신, source id 보존 | LLM 호출 |
 | Optional news processor | dedup, relevance filter, budget, LLM schema validation | 매매 신호 직접 결정 |
 | Airflow macro DAG | 예약 수집, transform, quality check, upsert | 실시간 tick 처리 |
+| Airflow market reconciliation DAG | 15분 이상 지난 window의 SIP bar 수집, IEX/SIP 비교, alert 상태 전이와 감사 기록 | 실시간 alert 생성, SIP로 IEX 원천 bar 덮어쓰기 |
 | Optional signal engine | 같은 `as_of` snapshot에서 subscore/composite/reasons 생성 | 주문/리스크 포지션 관리 |
 | FastAPI | read-only query contract, health/freshness | ingestion orchestration |
 | Streamlit | 현황·근거·제약 표시 | 비즈니스 규칙 재구현 |
@@ -88,12 +94,13 @@ flowchart TB
 
 ```text
 MarketDataProvider.stream_trades(symbols) -> AsyncIterator[MarketTrade]
+MarketDataProvider.fetch_bars(symbols, feed, start, end) -> list[MarketBar]
 NewsProvider.fetch_or_stream(symbols, cursor) -> Iterator[NewsArticle]
 MacroProvider.fetch_series(series_id, since) -> list[MacroObservation]
 LLMProvider.classify(article) -> MarketEvent
 ```
 
-P0 구현은 Alpaca market, replay, FRED다. Alpaca news와 Groq는 7회차 선택 구현이다. replay/stub은 외부 구현의 대체 test adapter이며 두 번째 상용 provider가 아니다.
+P0 구현은 Alpaca IEX 실시간 trade, Alpaca historical SIP bar, replay, FRED다. historical SIP 요청은 `end <= now - 15m`인 닫힌 구간만 허용한다. Alpaca news와 Groq는 7회차 선택 구현이다. replay/stub은 외부 구현의 대체 test adapter이며 두 번째 상용 provider가 아니다.
 
 계약 밖에 provider 전용 필드를 노출하지 않는다. 추적이 필요한 원문 식별자는 `source_event_id`, 제한 정보는 `metadata`의 allowlisted field로 보존한다.
 
@@ -101,7 +108,7 @@ P0 구현은 Alpaca market, replay, FRED다. Alpaca news와 Groq는 7회차 선�
 
 ```mermaid
 sequenceDiagram
-    participant A as Alpaca/replay
+    participant A as Alpaca IEX/replay
     participant C as Collector
     participant K as Kafka
     participant S as Spark Structured Streaming
@@ -133,7 +140,9 @@ Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. 
 
 개발 환경은 single broker, replication factor 1이다. 이는 재현 가능한 로컬 개발 선택이지 production durability 구성이 아니다.
 
-## 7. Macro batch flow
+## 7. Scheduled batch flows
+
+### 7.1 Macro
 
 Airflow daily DAG:
 
@@ -150,6 +159,23 @@ check configuration
 DAG의 logical date와 `series_id + observation_date + realtime_start` unique key를 사용한다. 같은 실행을 반복해도 결과가 증가하지 않아야 한다.
 
 `forecast`와 `surprise`는 nullable이다. 검증된 forecast provider 없이 FRED actual에서 forecast를 추정하거나 previous를 forecast로 오용하지 않는다. 발표 시점의 정확한 release timestamp를 확인하지 못하면 observation date와 release time을 별도 필드로 유지한다.
+
+### 7.2 Delayed market reconciliation
+
+Airflow reconciliation DAG:
+
+```text
+select finalized IEX windows whose end <= now - 15m
+→ fetch matching Alpaca historical SIP 1m bars
+→ validate and upsert as source=alpaca, feed=sip
+→ compare each SIP bar with the matching IEX bar
+→ store reconciliation metrics and decision
+→ PRELIMINARY_IEX alert
+   → CONFIRMED_SIP or REJECTED_AFTER_RECONCILIATION
+→ update pipeline_status
+```
+
+SIP는 무료 실시간 전체 시장 feed가 아니라 지연 검증 source다. `symbol + bar_start + timeframe + source + feed`로 IEX와 SIP 원천 bar를 별도 저장하며 어느 한쪽으로 다른 쪽을 덮어쓰지 않는다. Bar 비교는 `symbol + bar_start + timeframe + rule_version`, alert 재평가는 `alert_id + rule_version`을 idempotency key로 사용한다. API 실패나 SIP bar 누락 시 alert를 성급히 확정하거나 기각하지 않고 `PRELIMINARY_IEX`와 pending 사유를 유지한다.
 
 ## 8. Optional news and LLM flow
 
@@ -188,7 +214,9 @@ LLM은 strict JSON Schema가 가능한 모델을 우선 사용하지만 애플�
 
 ### Anomaly
 
-Spark가 확정한 bar를 입력 경계로 삼는다. MVP anomaly는 설명 가능한 가격·거래량 규칙으로 제한한다. `return_5m`, `volume_zscore`, `ATR-normalized move` 중 설정된 조건을 만족할 때 alert를 만들고, 실제 관측값·threshold version·source/feed를 함께 저장한다. 충분한 warm-up 데이터가 없으면 alert를 만들지 않고 `INSUFFICIENT_WARMUP`을 기록한다.
+Spark가 확정한 IEX bar를 입력 경계로 삼는다. IEX feature는 IEX 이력으로 만든 baseline과만 비교하며 SIP bar나 SIP baseline을 끼워 넣지 않는다. MVP anomaly는 설명 가능한 가격·거래량 규칙으로 제한한다. `return_5m`, `volume_zscore`, `ATR-normalized move` 중 설정된 조건을 만족할 때 `PRELIMINARY_IEX` alert를 만들고, 실제 관측값·threshold version·source/feed를 함께 저장한다. 충분한 warm-up 데이터가 없으면 alert를 만들지 않고 `INSUFFICIENT_WARMUP`을 기록한다.
+
+15분 이상 지난 동일 window의 SIP bar와 SIP 전용 baseline으로 규칙을 다시 평가한 뒤 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 전이한다. 검증 결과는 원래 IEX 관측값을 수정하지 않고 별도 reconciliation evidence로 연결한다. 이 구조는 무료 IEX의 시장 범위 한계를 숨기지 않으면서도 실시간 감지와 사후 정합성 검증을 모두 보여준다.
 
 ### Macro
 
@@ -243,6 +271,7 @@ event     = 0.30
 | invalid event | DLQ + validation code | affected source degraded |
 | Spark query 실패 | checkpoint 기반 restart, query status 기록 | `DATA_DEGRADED` |
 | DB unavailable | `foreachBatch` 실패, checkpoint 미진행, 재처리 | `DATA_DEGRADED` |
+| historical SIP API 실패/미도착 | bounded retry 후 다음 DAG run에서 재처리, IEX alert 상태 유지 | `RECONCILIATION_PENDING` |
 | LLM 429/budget | 호출 중단, cached/UNCLASSIFIED 유지 | event component low confidence |
 | critical market data stale | signal freshness 위반 | `TRADING_DISABLED` |
 | market closed | 마지막 signal과 as_of 표시, live라고 표시하지 않음 | 정상 closed state |
@@ -282,6 +311,8 @@ S3/Parquet와 EC2는 stretch architecture다. 도입 시에도 raw archive는 Ka
 - LLM calls, cache hit, skipped, invalid, daily budget remaining
 - DB health and latest successful Airflow logical date
 - invalid/duplicate/out-of-order event counts
+- reconciliation pending/confirmed/rejected count와 confirmation latency
+- IEX/SIP close difference, volume coverage ratio, missing bar count
 
 Dashboard는 단순 green/red 대신 값과 `as_of`를 보여준다.
 
@@ -309,4 +340,5 @@ Replay producer는 동일 dataset을 `1x`, `10x`, `50x`, `100x` 순서로 전송
 | S3 archive | raw replay 보존 요구가 확인될 때 | daily volume/cost |
 | EC2 instance size | local 통합 후 | measured CPU/RAM/disk/network |
 | 별도 Spark cluster/scale-out | local Spark가 load-test 목표를 충족하지 못할 때 | lag/throughput/CPU-memory benchmark |
+| SIP confirmation tolerance | fixture와 실제 IEX/SIP 쌍을 수집한 뒤 | close difference와 volume coverage distribution |
 | paper/live execution | backtest와 risk engine 후 | out-of-sample evidence, safety review |

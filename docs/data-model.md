@@ -17,6 +17,7 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 - 원천 payload 전체를 애플리케이션 테이블에 복사하지 않는다.
 - at-least-once delivery를 가정하고 deterministic id/unique key를 둔다.
 - signal 계산에 사용한 값은 `as_of` 이후에 알려진 정보를 포함하지 않는다.
+- `source`와 `feed`가 다른 bar·feature·baseline은 결합하거나 서로 덮어쓰지 않는다.
 
 ## 2. Common event envelope
 
@@ -193,9 +194,56 @@ sample_count, is_ready, calculated_at, feature_version
 
 Unique key: `(symbol, as_of, timeframe, feature_version, source, feed)`.
 
-Spark market processor가 `market_bars`를 확정한 뒤 Feature/Anomaly Engine이 이 snapshot을 입력으로 사용한다. `is_ready=false`인 feature는 score 계산에서 0으로 처리하지 않는다. ATR은 OHLC bar, VWAP은 같은 market session의 누적 가격×거래량으로 계산한다.
+IEX는 Spark가 `market_bars`를 확정한 뒤 Feature/Anomaly Engine이 snapshot을 만들고, SIP는 reconciliation batch가 같은 feature contract를 feed별로 계산한다. `is_ready=false`인 feature는 score 계산에서 0으로 처리하지 않는다. ATR은 OHLC bar, VWAP은 같은 market session의 누적 가격×거래량으로 계산한다.
 
-## 9. Anomaly alert
+## 9. Market reconciliation
+
+```json
+{
+  "reconciliation_id": "sha256:...",
+  "symbol": "NVDA",
+  "bar_start": "2026-08-13T14:00:00Z",
+  "timeframe": "1m",
+  "iex_bar_key": "NVDA|2026-08-13T14:00:00Z|1m|alpaca|iex",
+  "sip_bar_key": "NVDA|2026-08-13T14:00:00Z|1m|alpaca|sip",
+  "iex_close": 182.42,
+  "sip_close": 182.39,
+  "close_diff_bps": 1.64,
+  "iex_volume": 12500,
+  "sip_volume": 48120,
+  "iex_volume_ratio": 0.2598,
+  "bar_comparison_status": "DIVERGED",
+  "rule_version": 1,
+  "reconciled_at": "2026-08-13T14:16:05Z"
+}
+```
+
+Unique key: `(symbol, bar_start, timeframe, rule_version)`.
+
+`bar_comparison_status`는 `MATCHED | DIVERGED | MISSING_IEX | MISSING_SIP`다. 이 값은 두 bar의 차이를 나타낼 뿐 alert 확정 여부가 아니다. SIP 조회는 window end가 현재 시각보다 최소 15분 이전인 닫힌 window에만 수행한다. reconciliation은 IEX와 SIP 원천 bar를 수정하지 않는 파생 증거이며, 같은 window를 재실행해도 한 행으로 upsert되어야 한다.
+
+Alert 단위 SIP 재평가는 별도 계약으로 저장한다.
+
+```json
+{
+  "reconciliation_id": "sha256:...",
+  "alert_id": "alert:...",
+  "sip_feature_version": 1,
+  "sip_observations": {
+    "return_5m": 0.029,
+    "volume_zscore": 3.7,
+    "atr_normalized_move": 2.0
+  },
+  "decision": "CONFIRMED_SIP",
+  "reason_codes": ["RETURN_SPIKE", "VOLUME_SPIKE"],
+  "rule_version": 1,
+  "evaluated_at": "2026-08-13T14:16:05Z"
+}
+```
+
+`alert_reconciliations`의 unique key는 `(alert_id, rule_version)`이다. `decision`만 anomaly alert 상태를 전이시키며 bar의 `MATCHED/DIVERGED`만으로 확정 또는 기각하지 않는다.
+
+## 10. Anomaly alert
 
 ```json
 {
@@ -213,13 +261,25 @@ Spark market processor가 `market_bars`를 확정한 뒤 Feature/Anomaly Engine�
   "threshold_version": 1,
   "source": "alpaca",
   "feed": "iex",
+  "baseline_feed": "iex",
+  "status": "PRELIMINARY_IEX",
+  "reconciliation_id": null,
+  "reconciled_at": null,
   "created_at": "2026-08-13T14:00:02Z"
 }
 ```
 
-같은 symbol, anomaly window, alert type, threshold version에서 동일한 입력은 같은 결과를 만들어야 한다. Alert는 관측된 이상 변화이며 미래 가격 방향이나 매수·매도 권고가 아니다.
+같은 symbol, anomaly window, alert type, threshold version, source, feed에서 동일한 입력은 같은 결과를 만들어야 한다. IEX alert의 허용 상태 전이는 다음과 같다.
 
-## 10. Market signal — Optional
+```text
+PRELIMINARY_IEX
+├── CONFIRMED_SIP
+└── REJECTED_AFTER_RECONCILIATION
+```
+
+SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `PRELIMINARY_IEX`를 유지한다. 상태 전이는 idempotent해야 하며 `alert_status_history`에 이전 상태, 다음 상태, reconciliation id, rule version, 시각을 기록한다. Alert는 관측된 이상 변화이며 미래 가격 방향이나 매수·매도 권고가 아니다.
+
+## 11. Market signal — Optional
 
 ```json
 {
@@ -257,27 +317,30 @@ Spark market processor가 `market_bars`를 확정한 뒤 Feature/Anomaly Engine�
 
 `confidence`는 수익 확률이 아니다. 입력 coverage, freshness, agreement, 품질을 요약한 시스템 신뢰도다. 이 의미를 API/UI에 명시한다.
 
-## 11. PostgreSQL logical tables
+## 12. PostgreSQL logical tables
 
 | Table | 주요 목적 | Unique/idempotency key |
 | --- | --- | --- |
 | `symbols` | universe, role, active interval | `symbol` |
 | `market_bars` | 1분 OHLCV | symbol/bar/timeframe/source/feed |
 | `technical_features` | 계산 snapshot | symbol/as_of/version/source/feed |
+| `market_bar_reconciliations` | 같은 window의 IEX/SIP 차이와 판정 | symbol/bar/timeframe/rule_version |
+| `alert_reconciliations` | SIP feature로 alert 규칙을 다시 평가한 증거와 결정 | alert_id/rule_version |
 | `macro_series` | series metadata | series_id |
 | `macro_observations` | 값과 vintage | series/date/realtime_start |
 | `economic_events` | release event, optional forecast | event_type/reference/released/source |
 | `news_articles` (optional) | normalized news와 처리상태 | source/source_article_id, news_hash |
 | `llm_analyses` (optional) | cache/audit | news_hash/prompt/schema/provider/model |
 | `market_events` (optional) | validated structured events | event_id |
-| `anomaly_alerts` | 설명 가능한 가격·거래량 이상 징후 | alert_id, symbol/window/type/version |
+| `anomaly_alerts` | 설명 가능한 가격·거래량 이상 징후와 현재 검증 상태 | alert_id, symbol/window/type/version/source/feed |
+| `alert_status_history` | preliminary/confirmed/rejected 전이 감사 기록 | alert_id/to/reconciliation_id |
 | `market_signals` (optional) | composite snapshot | as_of/signal_version/universe_version |
 | `pipeline_status` | source/Spark query/Airflow freshness | component/instance |
 | `dead_letters` (optional) | queryable DLQ index | event_id/error_code |
 
 Kafka raw event를 PostgreSQL에 별도 tick table로 장기 저장하지 않는다.
 
-## 12. Data quality reason codes
+## 13. Data quality reason codes
 
 최소 reason code:
 
@@ -291,6 +354,10 @@ DUPLICATE_EVENT
 OUT_OF_ORDER_EVENT
 SOURCE_STALE
 INSUFFICIENT_WARMUP
+RECONCILIATION_PENDING
+SIP_BAR_MISSING
+IEX_SIP_PRICE_DIVERGENCE
+IEX_SIP_VOLUME_DIVERGENCE
 MISSING_MACRO_VALUE
 FORECAST_UNAVAILABLE
 LLM_SCHEMA_INVALID
@@ -300,7 +367,7 @@ LLM_BUDGET_EXHAUSTED
 
 validation 실패는 exception 문자열만 저장하지 않고 위 code, source, schema version, event id, 발생 시각을 남긴다. secret이나 전체 authorization metadata는 저장하지 않는다.
 
-## 13. Retention
+## 14. Retention
 
 MVP 기본값:
 

@@ -10,7 +10,7 @@
 
 ### 핵심 문제
 
-22개 미국 주식·ETF의 trade event를 지속적으로 수집하고 1분 OHLCV와 가격·거래량 이상 징후로 변환하여, 데이터가 중복·지연되거나 처리 프로세스가 재시작돼도 일관된 결과를 조회할 수 있게 한다.
+22개 미국 주식·ETF의 IEX trade event를 지속적으로 수집하고 1분 OHLCV와 가격·거래량 이상 징후로 변환하여, 데이터가 중복·지연되거나 처리 프로세스가 재시작돼도 일관된 결과를 조회할 수 있게 한다. 실시간 경고는 `PRELIMINARY_IEX`로 명시하고 15분 이상 지난 historical SIP bar로 검증해 확정 또는 기각한다.
 
 ### 1차 사용자 — 프로젝트 운영자 / 데이터 엔지니어
 
@@ -41,6 +41,8 @@
 
 - 지금 어떤 종목에 최신 alert가 있는가?
 - alert를 발생시킨 관측값과 threshold는 무엇인가?
+- alert가 IEX 예비 경고인지 SIP 검증이 끝난 경고인지?
+- IEX와 SIP의 가격 차이·거래량 coverage는 어느 정도인가?
 - 데이터가 최신이며 신뢰 가능한가?
 
 접근 방식: 7회차 선택 구현인 FastAPI/Streamlit. 주문과 포지션 변경 기능은 제공하지 않는다.
@@ -49,7 +51,8 @@
 
 | Dataset | 형태 | 도착 방식 | 시간 특성 | P0 여부 | 저장 |
 | --- | --- | --- | --- | --- | --- |
-| Alpaca market trade | 작은 JSON event | WebSocket 실시간 | event time, out-of-order 가능 | 필수 | Kafka 24h, PostgreSQL 1m bar |
+| Alpaca IEX market trade | 작은 JSON event | WebSocket 실시간 | event time, out-of-order 가능 | 필수 | Kafka 24h, PostgreSQL IEX 1m bar |
+| Alpaca historical SIP bar | 1분 OHLCV JSON | Airflow batch, 15분 이상 지연 | 닫힌 window 검증 | 필수 | PostgreSQL SIP 1m bar/reconciliation |
 | Replay market data | Parquet/JSON fixture | 조절 가능한 stream | 원래 inter-arrival 또는 배속 | 필수 | repository fixture, Kafka 경유 |
 | FRED macro | JSON observation | Airflow daily batch | 관측일·발표시각·수집시각 분리 | 필수 | PostgreSQL |
 | Alpaca news | JSON/document metadata | REST/WebSocket | publish/update time | 선택 | PostgreSQL metadata/event |
@@ -57,7 +60,8 @@
 ### 현재 확정된 규모
 
 - 분석 universe: 22 symbols
-- market feed: Alpaca Basic IEX
+- 실시간 market feed: Alpaca Basic IEX
+- 검증 market feed: Alpaca historical SIP, `end <= now - 15m`
 - 입력: trade 중심, quote는 P0 제외
 - 집계 단위: event-time 1 minute
 - local Kafka: single broker
@@ -193,7 +197,7 @@ P0에서 하지 않는 처리:
 
 ### cron 대신 Airflow를 쓰는 이유
 
-단일 FRED HTTP 요청 하나라면 cron으로도 충분하다. 이 프로젝트의 batch 흐름은 다음 의존성과 운영 증거가 필요하므로 Airflow local mode를 사용한다.
+단일 FRED HTTP 요청 하나라면 cron으로도 충분하다. 이 프로젝트의 macro 수집과 지연 market reconciliation은 다음 의존성과 운영 증거가 필요하므로 Airflow local mode를 사용한다.
 
 ```text
 configuration check
@@ -204,6 +208,17 @@ configuration check
 → pipeline status update
 ```
 
+별도 market reconciliation DAG는 다음 흐름을 실행한다.
+
+```text
+select finalized IEX windows ending <= now - 15m
+→ fetch matching historical SIP bars
+→ validate/upsert feed=sip
+→ compare IEX and SIP without mixing baselines
+→ store reconciliation evidence
+→ transition PRELIMINARY_IEX alert to confirmed or rejected
+```
+
 Airflow가 제공할 증거:
 
 - task dependency와 실행 순서
@@ -212,13 +227,13 @@ Airflow가 제공할 증거:
 - 개별 task 성공/실패와 재실행 기록
 - UI에서 확인 가능한 DAG run 상태
 
-Airflow는 실시간 trade, Spark query 시작/종료 반복, 초 단위 alert를 담당하지 않는다. FRED schedule은 daily로 시작하며 실제 series update 시각을 확인한 후 cron expression을 고정한다.
+Airflow는 실시간 trade, Spark query 시작/종료 반복, 초 단위 alert를 담당하지 않는다. 실시간 IEX 경고를 사후 검증할 뿐이다. FRED schedule은 daily로 시작하며 실제 series update 시각을 확인한 후 cron expression을 고정한다. reconciliation schedule은 Alpaca의 무료 SIP 지연 조건을 어기지 않도록 safety margin과 API quota를 측정한 뒤 고정한다.
 
 ## 6. 저장소 결정
 
 | 저장소 | 선택 | 역할 | 선택 이유 |
 | --- | --- | --- | --- |
-| PostgreSQL | P0 | bar, feature, macro, alert, pipeline status | 관계형 query, JOIN, unique key/upsert, SQL 분석 |
+| PostgreSQL | P0 | feed별 bar/feature, reconciliation, macro, alert/history, pipeline status | 관계형 query, JOIN, unique key/upsert, SQL 분석 |
 | Kafka | P0 | raw event 단기 buffer | 실시간 전달, lag 관찰, retention 내 재처리 |
 | Parquet/JSON | P0 fixture | deterministic replay | 반복 가능한 demo/load/failure test |
 | MongoDB | 미선택 | 없음 | P0 schema가 안정적이고 관계형·시간 조건 query가 중심 |
@@ -235,9 +250,10 @@ PostgreSQL에 raw tick을 장기 저장하지 않는다. Spark가 생성한 1분
 | Q1 | 분석가 | symbol·기간별 1분 bar를 시간순 조회 | `market_bars(symbol, timeframe, bar_start DESC)` |
 | Q2 | Dashboard/운영자 | 최신 `bar_start`의 모든 symbol 조회 | 선택 시 `market_bars(bar_start DESC, symbol)` |
 | Q3 | 분석가 | symbol·기간별 feature 조회 | `technical_features(symbol, timeframe, as_of DESC)` |
-| Q4 | 운영자 | 최신/기간별 anomaly alert 조회 | `anomaly_alerts(event_timestamp DESC)` 및 `(symbol, event_timestamp DESC)` |
+| Q4 | 운영자 | 상태별 최신/기간별 anomaly alert 조회 | `anomaly_alerts(status, event_timestamp DESC)` 및 `(symbol, event_timestamp DESC)` |
 | Q5 | Signal/분석가 | `as_of` 이전 최신 macro observation | `macro_observations(series_id, observation_date DESC, realtime_start DESC)` |
 | Q6 | 운영자 | component별 pipeline health | `pipeline_status` primary key `(component, instance)` |
+| Q7 | 분석가/운영자 | symbol·기간별 IEX/SIP 차이와 검증 결과 | `market_bar_reconciliations(symbol, bar_start DESC)` |
 
 Business uniqueness:
 
@@ -252,7 +268,13 @@ macro_observations:
 (series_id, observation_date, realtime_start)
 
 anomaly_alerts:
-(symbol, event_timestamp, alert_type, threshold_version)
+(symbol, event_timestamp, alert_type, threshold_version, source, feed)
+
+market_bar_reconciliations:
+(symbol, bar_start, timeframe, rule_version)
+
+alert_reconciliations:
+(alert_id, rule_version)
 ```
 
 표의 index는 migration 후보이며 측정 없이 모두 생성하는 목록이 아니다. Q2의 별도 index는 실제 dashboard/API를 구현할 때만 생성한다. 구현 후 `EXPLAIN (ANALYZE, BUFFERS)`로 Q1·Q3·Q4를 확인하고 사용되지 않는 중복 index는 추가하지 않는다.
@@ -288,5 +310,7 @@ anomaly_alerts:
 | Kafka partition 최종값 | 초기값 3 | partition skew와 end-to-end load test |
 | Q2 latest-bar index | 조건부 | FastAPI/Streamlit 구현 및 query plan |
 | 장기 Parquet/S3 archive | 후속 | daily raw bytes와 replay 보존 요구 |
+| SIP reconciliation schedule | 미결정 | API quota, DAG duration, confirmation latency |
+| SIP confirmation tolerance | 미결정 | 실제 IEX/SIP close 차이와 volume coverage 분포 |
 
 미결정 항목은 구현 중 임의로 숨겨 확정하지 않고 측정 결과와 함께 이 표를 갱신한다.

@@ -31,8 +31,8 @@
 목표 동작:
 
 ```text
-1. Alert 조회
-2. 경고 시점 전후 가격·거래량 feature 조회
+1. Alert의 `feed`와 `PRELIMINARY_IEX / CONFIRMED_SIP / REJECTED_AFTER_RECONCILIATION` 상태 조회
+2. 경고 시점 전후 같은 feed의 가격·거래량 feature와 reconciliation evidence 조회
 3. 데이터 파이프라인 상태와 신선도 확인
 4. 관련 뉴스·SEC 문서 검색
 5. 가격·거래량·문서 근거 비교
@@ -48,7 +48,8 @@
 ```mermaid
 flowchart TB
     subgraph Sources["Data Sources"]
-      Market["Alpaca Market Data"]
+      Market["Alpaca IEX Realtime"]
+      MarketSIP["Alpaca Historical SIP\nend <= now - 15m"]
       Macro["FRED"]
       News["Market News"]
       Filings["SEC Filings / Reports"]
@@ -62,6 +63,7 @@ flowchart TB
       Airflow["Airflow Batch Workflows"]
       Spark["Spark Structured Streaming\nlocal MVP"]
       Processors["Batch / Feature Processors"]
+      Reconcile["IEX / SIP Reconciliation"]
       Postgres[("PostgreSQL")]
       Archive[("Object Storage / Parquet\nFuture")]
     end
@@ -96,8 +98,11 @@ flowchart TB
     Market --> MarketAdapter
     Replay --> MarketAdapter
     MarketAdapter --> Kafka --> Spark --> Postgres
+    MarketSIP --> Reconcile
+    Airflow --> Reconcile --> Postgres
     News --> NewsProcessor --> Postgres
-    Macro --> Airflow --> Processors --> Postgres
+    Macro --> Processors
+    Airflow --> Processors --> Postgres
     Filings --> Ingest
     News --> Ingest
     Ingest --> Hybrid --> Rerank --> Index
@@ -132,6 +137,10 @@ Agent가 없어도 수집, 저장, feature, alert, signal, dashboard가 작동�
 
 Agent 답변은 Tool 결과와 문서 출처에 연결되어야 한다. 근거를 찾지 못하면 추측하지 않고 `INSUFFICIENT_EVIDENCE`로 종료한다.
 
+### Feed-scoped evidence
+
+무료 실시간 IEX 경고는 `PRELIMINARY_IEX`로 표시하고 15분 이상 지난 historical SIP로 검증한다. IEX와 SIP의 bar, feature, baseline은 feed별로 분리하며 한 feed의 값으로 다른 feed를 덮어쓰지 않는다. Agent와 UI는 현재 상태와 시장 coverage 한계를 답변 근거에 포함한다.
+
 ### Read-only before write
 
 MCP와 Agent의 첫 버전은 읽기 전용이다. Paper Trading처럼 상태를 변경하는 기능은 별도 risk engine, 사용자 승인, idempotency key, 감사 로그가 준비된 이후에만 추가한다.
@@ -145,13 +154,13 @@ Spark local mode는 과정의 필수 학습·산출물이므로 Kafka event-time
 ### Real-time path
 
 ```text
-Alpaca WebSocket / replay
+Alpaca IEX WebSocket / replay
 → provider adapter
 → normalized event envelope
 → Kafka
 → Spark Structured Streaming local
 → validation / watermark / event-time 1m aggregation
-→ technical features / anomalies
+→ feed-scoped technical features / PRELIMINARY_IEX anomalies
 → PostgreSQL
 ```
 
@@ -167,15 +176,15 @@ Alpaca WebSocket / replay
 ### Batch path
 
 ```text
-FRED / historical data / documents
+Alpaca historical SIP / FRED / historical data / documents
 → Airflow
 → raw response validation
 → normalization
-→ PostgreSQL or search index
+→ IEX/SIP reconciliation or PostgreSQL/search index
 → data quality checks
 ```
 
-Airflow는 실시간 tick을 처리하지 않는다. schedule, retry, backfill, logical date 기반 멱등성이 필요한 작업만 담당한다.
+Airflow는 실시간 tick을 처리하지 않는다. 15분 이상 지난 SIP window 검증과 같이 schedule, retry, backfill, logical date 기반 멱등성이 필요한 작업만 담당한다. SIP 검증 실패 시 IEX 경고는 예비 상태를 유지한다.
 
 ### Storage
 
@@ -210,9 +219,14 @@ Alert에는 최소한 다음 증거를 저장한다.
   },
   "threshold_version": 1,
   "source": "alpaca",
-  "feed": "iex"
+  "feed": "iex",
+  "baseline_feed": "iex",
+  "status": "PRELIMINARY_IEX",
+  "reconciliation_id": null
 }
 ```
+
+같은 window의 historical SIP bar가 도착하면 SIP 전용 baseline으로 규칙을 다시 평가하고 원래 IEX 증거를 보존한 채 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 전이한다.
 
 ### Signal Engine
 
@@ -275,6 +289,7 @@ Agent와 내부 데이터 사이의 경계로 read-only MCP Server를 둔다.
 ```text
 get_recent_alerts(symbol, start, end)
 get_market_features(symbol, start, end)
+get_alert_reconciliation(alert_id)
 get_market_signal(as_of)
 get_pipeline_status(component?)
 search_market_documents(query, symbols?, start?, end?)
@@ -346,9 +361,9 @@ Golden Dataset schema 예시:
 {
   "case_id": "alert-explain-001",
   "question": "NVDA 급등 경고가 발생한 이유는?",
-  "expected_tools": ["get_recent_alerts", "get_market_features"],
-  "expected_facts": ["return_5m", "volume_zscore"],
-  "required_sources": ["alert_id", "market_bar_timestamp"],
+  "expected_tools": ["get_recent_alerts", "get_market_features", "get_alert_reconciliation"],
+  "expected_facts": ["return_5m", "volume_zscore", "feed", "alert_status"],
+  "required_sources": ["alert_id", "market_bar_timestamp", "reconciliation_id"],
   "forbidden_claims": ["상승이 확정됐다", "반드시 매수해야 한다"]
 }
 ```
@@ -403,6 +418,8 @@ LLM cache hit and daily budget
 Agent Tool count, retry, termination reason
 RAG retrieval score and citation coverage
 DB/Airflow status
+reconciliation pending/confirmed/rejected count and confirmation latency
+IEX/SIP price difference and volume coverage
 duplicate, invalid, out-of-order event count
 Spark input/processed rows, batch duration, checkpoint recovery
 ```
@@ -426,7 +443,8 @@ Prometheus/Grafana는 metric이 정의되고 실제 운영·시연에서 time-se
 목표일: 2026-09-12
 
 ```text
-Market/replay → Kafka → Spark Structured Streaming → 1m bars → PostgreSQL
+IEX/replay → Kafka → Spark Structured Streaming → 1m bars → PRELIMINARY_IEX → PostgreSQL
+Historical SIP (>=15m delayed) → Airflow → reconciliation → confirmed/rejected
 FRED → Airflow → PostgreSQL
 Finalized bars → features/anomaly → PostgreSQL
 Optional: News/LLM and FastAPI/Streamlit
@@ -439,6 +457,7 @@ Optional: News/LLM and FastAPI/Streamlit
 - idempotency와 late/duplicate test
 - data freshness와 risk state
 - 설명 가능한 signal/anomaly
+- feed별 baseline 분리와 IEX→SIP alert 상태 전이
 - live와 offline demo
 
 상세 범위는 [4주·8회차 실행 계획](../PROJECT_PLAN.md)에 정의한다.
