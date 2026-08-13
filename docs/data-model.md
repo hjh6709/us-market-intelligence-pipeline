@@ -23,28 +23,45 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 
 ```json
 {
-  "event_id": "alpaca:trade:NVDA:2026-08-13T13:30:00.123456Z:12345",
-  "event_type": "market.trade",
+  "event_id": "alpaca:iex:trade:NVDA:12345",
+  "event_type": "market.trade.raw",
   "schema_version": 1,
   "source": "alpaca",
+  "feed": "iex",
   "source_event_id": "12345",
   "event_timestamp": "2026-08-13T13:30:00.123456Z",
   "ingested_at": "2026-08-13T13:30:00.200000Z",
-  "trace_id": "uuid",
-  "payload": {}
+  "trace_id": "collector-connection-or-replay-run-id",
+  "payload": {
+    "T": "t",
+    "S": "NVDA",
+    "i": 12345,
+    "x": "V",
+    "p": 182.42,
+    "s": 100,
+    "c": ["@"],
+    "t": "2026-08-13T13:30:00.123456Z",
+    "z": "C"
+  }
 }
 ```
 
-`event_id`는 provider가 안정적 id를 제공하면 그것을 포함한다. 그렇지 않으면 source, event type, identity fields의 canonical serialization을 hash한다. 무작위 UUID만으로 중복 제거하지 않는다. Kafka의 `raw.market.v1`에서는 `payload`에 provider 원본 JSON을 유지하며, 아래 `MarketTrade`는 Spark parsing 이후의 normalized contract다. API별 raw mapping은 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
+이 절이 `raw.market.v1` envelope의 **정본(canonical contract)** 이다. 필수 field는 `event_id`, `event_type`, `schema_version`, `source`, `feed`, `source_event_id`, `event_timestamp`, `ingested_at`, `payload`이며, `trace_id`는 collector 연결 또는 replay 실행 단위의 선택적 상관관계 ID다.
+
+`event_id`는 provider가 안정적 id를 제공하면 source·feed·event type·symbol과 함께 그것을 포함한다. 그렇지 않으면 identity field의 canonical serialization을 hash한다. 무작위 UUID만으로 중복 제거하지 않는다. Collector는 Kafka routing과 결정적 ID를 만들기 위해 raw `T`, `S`, `i`, `t`만 읽을 수 있다. 이 단계에서는 provider field를 rename하거나 거래 조건을 해석하지 않으며 원본 JSON을 `payload`에 그대로 보존한다. 전체 type/schema 검증, condition filter와 normalized field mapping은 Spark가 담당한다. API별 raw field의 의미는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
 
 ## 3. Market trade
 
 ```json
 {
+  "event_id": "alpaca:iex:trade:NVDA:12345",
+  "source_event_id": "12345",
+  "event_timestamp": "2026-08-13T13:30:00.123456Z",
   "symbol": "NVDA",
   "price": 182.42,
   "size": 100,
   "exchange": "V",
+  "source": "alpaca",
   "feed": "iex",
   "conditions": ["@"]
 }

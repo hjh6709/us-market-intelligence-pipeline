@@ -53,29 +53,16 @@ wss://stream.data.alpaca.markets/v2/iex
 | `t` | nanosecond RFC-3339 event timestamp | event-time window와 순서 |
 | `z` | tape | provenance와 품질 분석 |
 
-Kafka `raw.market.v1`은 이 provider payload를 수정하지 않고 common envelope의 `payload`에 넣는다. Collector는 인증·구독·재연결, 수신 시각과 source metadata, 결정적 `event_id`만 추가한다. 실제 field rename, type validation, condition filter는 Spark가 담당한다.
+Kafka `raw.market.v1`은 이 provider payload를 수정하지 않고 common envelope의 `payload`에 넣는다. Envelope의 field·필수 여부·ID 규칙은 [데이터 모델의 Common event envelope](data-model.md#2-common-event-envelope)가 정본이다. Collector는 인증·구독·재연결을 담당하고, routing과 결정적 ID를 위해 `T`, `S`, `i`, `t`만 읽어 다음 값을 채운다. 실제 field rename, 전체 type validation, condition filter는 Spark가 담당한다.
 
-```json
-{
-  "event_id": "alpaca:trade:NVDA:12345",
-  "event_type": "market.trade.raw",
-  "schema_version": 1,
-  "source": "alpaca",
-  "feed": "iex",
-  "ingested_at": "2026-08-13T14:00:03.100Z",
-  "payload": {
-    "T": "t",
-    "S": "NVDA",
-    "i": 12345,
-    "x": "V",
-    "p": 182.10,
-    "s": 100,
-    "c": ["@"],
-    "t": "2026-08-13T14:00:03Z",
-    "z": "C"
-  }
-}
-```
+| Envelope/Kafka 값 | Raw source | 규칙 |
+| --- | --- | --- |
+| `event_type` | `T` | trade이면 `market.trade.raw` |
+| Kafka key | `S` | symbol을 그대로 사용해 종목 내 순서 유지 |
+| `source_event_id` | `i` | 문자열로 변환 |
+| `event_timestamp` | `t` | timezone-aware UTC로 parse 가능해야 함 |
+| `event_id` | source, feed, `T`, `S`, `i` | 예: `alpaca:iex:trade:NVDA:12345` |
+| `payload` | 수신 JSON object | field를 삭제·rename하지 않고 그대로 보존 |
 
 ## 3. Alpaca Historical Stock REST
 

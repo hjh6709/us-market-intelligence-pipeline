@@ -176,7 +176,7 @@ Kafka producer idempotence
 + PostgreSQL business unique key / upsert
 ```
 
-기본 single broker에서 `acks=all`은 현재 ISR의 확인 정책일 뿐 broker 복제나 failover를 만들지 않는다. 기본 failure drill은 Kafka restart recovery이며, broker 장애 중 지속 쓰기는 선택 3-broker `resilience` profile에서만 검증·주장한다.
+기본 single broker에서 `acks=all`은 현재 ISR의 확인 정책일 뿐 broker 복제나 failover를 만들지 않는다. 기본 failure drill은 Kafka restart recovery다. broker 장애 중 지속 쓰기는 P0 이후 별도 multi-broker 실험을 실제로 수행하고 leader/ISR 증거를 남겼을 때만 주장한다.
 
 ## 4. Spark 결정
 

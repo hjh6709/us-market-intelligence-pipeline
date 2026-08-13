@@ -250,6 +250,16 @@ recorded/replay dataset
 → 요구 성능을 벗어날 때까지 단계 증가
 ```
 
+같은 replay dataset과 목표 배속에서 Producer 설정도 별도로 비교한다. `enable.idempotence=true`와 `acks=all`은 신뢰성 경계로 고정하고, 한 번에 한 축을 바꾼 baseline 포함 최소 3개 후보를 각 3회 실행한다.
+
+| 후보 | 변경 축 | 비교 목적 |
+| --- | --- | --- |
+| Reliability baseline | 보수적인 `batch.size`, `linger.ms`, `compression.type=none` | 지연·처리량 기준선 |
+| Batching candidate | `batch.size` 또는 `linger.ms` 한 축 | 호출/압축 비용과 delivery latency trade-off |
+| Compression candidate | `compression.type=lz4` | bytes/event·CPU·처리량 trade-off |
+
+설정별 producer events/sec, delivery latency p95, 실패율, bytes/event와 CPU를 같은 실행 ID로 기록한다. 신뢰성 조건이 다른 `acks=1`과 `acks=all`을 단순 성능 최적화 후보처럼 비교하지 않는다.
+
 측정 항목:
 
 ```text
@@ -274,18 +284,20 @@ duplicate / invalid / too-late counts
 
 검증 환경:
 
-- `monitoring` profile: Prometheus, Grafana, Kafka/JVM exporter와 app metric
+- 필수: structured log, Spark query progress, Kafka lag와 system metric을 실행 ID별 CSV/JSON report로 export
+- 선택: 로컬 자원 여유가 있을 때 `monitoring` profile의 Prometheus/Grafana와 exporter로 같은 metric을 시각화
 - 기본 single broker: Kafka 프로세스 재시작 후 Spark 소비 재개 검증
-- 선택 `resilience` profile: 로컬 자원이 허용될 때만 3-broker KRaft, replication factor 2 이상, leader/ISR 변화 검증
+- 조건부 multi-broker 실험: P0 load/failure gate를 통과하고 자원 여유가 확인될 때만 3-broker KRaft와 replication factor 2 이상을 후보로 검토하며 profile 이름·설정은 구현 시 확정
 
 Exit gate:
 
 - 각 배속의 결과가 표나 차트로 남는다.
-- Grafana dashboard 또는 동일 metric의 시계열 export가 실행 ID와 함께 남는다.
+- Producer 설정별 3회 측정값과 선택 근거가 표로 남는다.
+- 필수 metric report가 실행 ID와 함께 남고, Prometheus/Grafana를 사용했다면 같은 실행의 dashboard를 함께 남긴다.
 - 처음 병목이 발생한 지점과 근거 metric을 설명한다.
 - 장애 후 데이터 유실·중복 여부와 복구 시간을 기록한다.
 - 무제한 retry가 없고 DLQ/실패 상태가 관찰된다.
-- single-broker 재시작 복구와 multi-broker failover를 구분해 설명한다.
+- single-broker 재시작 복구와, 조건부로 수행했을 때만 multi-broker failover를 구분해 설명한다.
 
 ### 7회차 — API/inference 선택 구현 및 통합
 
@@ -431,7 +443,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 | IEX/SIP baseline 혼합 | 통계 왜곡과 잘못된 판정 | feed를 business key에 포함하고 feed별 feature/baseline contract test |
 | API 가입·quota 변경 | live demo 중단 | 동일 schema replay를 기본 데모로 준비 |
 | Airflow+Spark+Kafka local 자원 | stack 불안정 | Compose profile, 순차 실행 가능, CPU/memory 측정 |
-| single broker를 HA처럼 설명 | 잘못된 장애 대응 주장 | 기본 환경은 restart recovery만 검증하고 선택 3-broker 실험을 분리 |
+| single broker를 HA처럼 설명 | 잘못된 장애 대응 주장 | 기본 환경은 restart recovery만 검증하고 multi-broker는 P0 이후 조건부 실험으로 분리 |
 | monitoring stack의 메모리 부하 | core pipeline 불안정 | `monitoring` profile로 분리하고 측정 시간에만 실행 |
 | OCI 공개 포트·secret 노출 | 계정·데이터 보안 위험 | NSG 최소 개방, 내부 서비스 비공개 binding, secret 주입, volume backup |
 | UI/LLM 범위 확장 | 필수 코드 미완성 | P0 gate 이후에만 선택 구현 시작 |
@@ -442,12 +454,13 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - [ ] 파이프라인 구조도와 데이터 흐름
 - [ ] 데이터 모델과 sample rows
 - [ ] Kafka market/replay producer
-- [ ] Spark Structured Streaming `preprocess.py`
+- [ ] Kafka Consumer 역할의 Spark Structured Streaming `preprocess.py`와 checkpoint·offset·lag 증거
 - [ ] PostgreSQL schema, migration, load/upsert logic
 - [ ] Airflow historical SIP reconciliation DAG와 FRED DAG
 - [ ] IEX/SIP reconciliation 결과와 alert 상태 전이 이력
 - [ ] load-test dataset, runner, metric report
-- [ ] Prometheus/Grafana `monitoring` profile과 dashboard/export
+- [ ] 실행 ID별 structured log·CSV/JSON metric report
+- [ ] 선택: Prometheus/Grafana dashboard와 조건부 multi-broker 실험 결과
 - [ ] 장애 시나리오와 복구 결과
 - [ ] unit/integration/contract tests
 - [ ] Docker Compose local 실행 환경

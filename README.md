@@ -5,7 +5,7 @@
 - 프로젝트 기간: 2026-08-13 ~ 2026-09-12
 - 현재 단계: 프로젝트 주제·데이터셋 선정 및 아키텍처 설계
 - 핵심 기술: Kafka, Spark Structured Streaming, Airflow, PostgreSQL
-- 검증 기술: Docker Compose, Prometheus/Grafana (`monitoring` profile)
+- 검증 기술: Docker Compose, structured log·CSV metric report, 선택 Prometheus/Grafana
 - MVP 범위: 데이터 수집·가공·저장, 이상 징후 탐지, 정합성 검증, 부하·장애 테스트
 
 ## 한눈에 보는 핵심 흐름
@@ -128,7 +128,7 @@ flowchart LR
 | AI | 외부 LLM API | 비정형 뉴스를 구조화된 시장 이벤트로 변환 |
 | Backend/UI | FastAPI, Streamlit | 분석 결과 조회와 프로젝트 시연 |
 | Environment | Docker Compose | 로컬 실행 환경 재현과 profile별 자원 분리 |
-| Observability | Prometheus, Grafana | 6회차 부하·장애 지표 수집과 시계열 증거 |
+| Observability | structured log·CSV, 선택 Prometheus/Grafana | 6회차 부하·장애 지표를 실행 ID별로 수집하고 비교 |
 
 Kafka, Spark, Airflow는 과정 필수 기술로 확정한다. 나머지 후보는 실제 문제를 해결하고 필수 파이프라인 이후 직접 검증할 시간이 있을 때만 채택한다.
 
@@ -147,7 +147,7 @@ Kafka, Spark, Airflow는 과정 필수 기술로 확정한다. 나머지 후보�
 → Load test·장애 복구 검증
 ```
 
-Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG가 필수 산출물이다. FastAPI·Streamlit과 뉴스·LLM은 시간이 허락할 때 추가한다. Agent, MCP, RAG, 실계좌 거래는 핵심 파이프라인 이후 **read-only MCP → 제한된 Agent Loop → RAG → 평가·보안 강화** 순서로 확장한다.
+Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG가 필수 산출물이다. 이 프로젝트에서는 Spark Structured Streaming의 `preprocess.py`가 Kafka Consumer이며 checkpoint·offset·lag를 함께 증명하므로, 같은 데이터를 다시 처리하는 별도 `consumer.py`는 만들지 않는다. FastAPI·Streamlit과 뉴스·LLM은 시간이 허락할 때 추가한다. Agent, MCP, RAG, 실계좌 거래는 핵심 파이프라인 이후 **read-only MCP → 제한된 Agent Loop → RAG → 평가·보안 강화** 순서로 확장한다.
 
 | 구분 | 범위 |
 | --- | --- |
@@ -155,7 +155,7 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 | 선택 | FastAPI, Streamlit, 뉴스·LLM 구조화 |
 | MVP 이후 | Agent, MCP, RAG, 예측 모델, paper/live trading |
 
-개발과 기본 검증은 Docker Compose local 환경에서 수행한다. 기본 `core` profile의 Kafka는 single broker이므로 broker 고가용성을 주장하지 않고 프로세스 재시작과 소비 재개만 검증한다. 6회차에는 `monitoring` profile로 Prometheus/Grafana를 실행하고, 로컬 자원이 허용될 때만 선택 `resilience` profile의 3-broker 환경에서 leader/ISR 변화를 검증한다.
+개발과 기본 검증은 Docker Compose local 환경에서 수행한다. 기본 `core` profile의 Kafka는 single broker이므로 broker 고가용성을 주장하지 않고 프로세스 재시작과 소비 재개만 검증한다. 6회차 필수 증거는 structured log·Spark query progress·Kafka lag를 실행 ID별 CSV/JSON report로 남긴다. Prometheus/Grafana 시각화와 3-broker KRaft 후보 실험은 P0 부하·복구 검증을 끝내고 로컬 자원 여유가 확인될 때만 추가하며, 구현 profile 이름과 설정은 그때 확정한다.
 
 클라우드는 OCI Ampere A1 무료 ARM 인스턴스 2대를 확보할 수 있을 때 Streaming Node와 Data/Batch Node로 분리하는 안을 검증한다. ARM64 이미지 호환성, 실제 CPU·메모리 사용량, NSG/방화벽과 volume backup을 확인하기 전에는 확정 인프라로 간주하지 않는다.
 
@@ -173,6 +173,8 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 6. OCI A1 `1 OCPU·6GB` 두 대에 Streaming Node와 Data/Batch Node를 분리하는 안이 현실적인가?
 
 ## 프로젝트 문서
+
+문서가 겹칠 때는 이벤트·테이블 계약은 `docs/data-model.md`, API 원천 field는 `docs/data-source-catalog.md`, 실행 구성과 장애 보장은 `docs/architecture.md`, 선택 근거는 `docs/design-decisions.md`, 4주 범위와 완료 조건은 `PROJECT_PLAN.md`를 정본으로 사용한다. README와 과정 연결표는 이 내용을 발표용으로 요약한다.
 
 - [최종 프로젝트 비전](docs/final-vision.md): 데이터 파이프라인부터 Agent·MCP·RAG·평가까지의 전체 목표
 - [4주·8회차 실행 계획](PROJECT_PLAN.md): 필수 산출물, 회차별 Exit Gate, 부하·장애 검증

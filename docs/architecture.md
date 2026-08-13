@@ -291,20 +291,21 @@ host
 ├── airflow services (batch profile)
 ├── market/replay producer
 ├── feature worker (필요 시)
-├── prometheus + grafana + exporters (monitoring profile)
+├── structured logs / metric report files (core)
+├── prometheus + grafana + exporters (optional monitoring profile)
 ├── fastapi
 └── streamlit
 ```
 
-Airflow와 monitoring/선택 app stack을 항상 모두 켤 필요는 없다. Compose profile을 `core`, `batch`, `monitoring`, `optional-app`, 선택 `resilience`로 나누어 노트북 자원을 보호한다. Spark는 cluster가 아니라 local mode로 실행한다. CPU, memory, disk, Kafka lag, Spark batch duration, DB size를 측정한 뒤에만 인프라 확장을 검토한다.
+Airflow와 monitoring/선택 app stack을 항상 모두 켤 필요는 없다. Compose profile은 `core`, `batch`, 선택 `monitoring`, `optional-app`으로 나누어 노트북 자원을 보호한다. Spark는 cluster가 아니라 local mode로 실행한다. CPU, memory, disk, Kafka lag, Spark batch duration, DB size를 측정한 뒤에만 인프라 확장을 검토한다.
 
-기본 `core`의 single broker는 broker 고가용성을 제공하지 않는다. 이 환경의 Kafka 장애 실험은 프로세스 재시작 후 checkpoint/offset 기반으로 소비가 재개되는지만 검증한다. 로컬 자원이 허용될 때 선택 `resilience` profile로 3-broker KRaft와 replication factor 2 이상을 구성해 leader election, ISR 축소·회복을 별도 실험한다. 이 profile을 OCI A1 `1 OCPU·6GB` 노드에서 실행할 수 있다고 가정하지 않는다.
+기본 `core`의 single broker는 broker 고가용성을 제공하지 않는다. 이 환경의 Kafka 장애 실험은 프로세스 재시작 후 checkpoint/offset 기반으로 소비가 재개되는지만 검증한다. P0 load/failure gate 이후 로컬 자원 여유와 학습상 필요가 모두 확인되면 3-broker KRaft와 replication factor 2 이상을 후보로 leader election, ISR 축소·회복 실험을 별도 설계한다. 실제 profile 이름과 설정은 그때 확정하며, OCI A1 `1 OCPU·6GB` 노드에서 실행할 수 있다고 미리 가정하지 않는다.
 
 S3/Parquet와 EC2는 stretch architecture다. 도입 시에도 raw archive는 Kafka consumer로 추가하여 기존 producer를 바꾸지 않는다. EC2는 static access key 대신 IAM role을 사용한다.
 
 ## 13. Observability minimum
 
-Structured log, health endpoint와 PostgreSQL `pipeline_status`는 항상 켜는 최소 관측 경계다. 6회차 부하·장애 검증에서는 별도 `monitoring` profile의 Prometheus/Grafana와 exporter를 실행해 같은 지표를 시계열로 남긴다.
+Structured log, health endpoint와 PostgreSQL `pipeline_status`는 항상 켜는 최소 관측 경계다. 6회차 부하·장애 검증의 필수 증거는 Spark query progress, Kafka lag와 system metric을 동일 실행 ID의 CSV/JSON report로 남기는 것이다. 자원 여유가 있으면 선택 `monitoring` profile의 Prometheus/Grafana와 exporter로 같은 지표를 시각화한다.
 
 - last event/ingestion/processed timestamp by source and symbol
 - processing lag and Kafka consumer lag
@@ -318,9 +319,9 @@ Structured log, health endpoint와 PostgreSQL `pipeline_status`는 항상 켜는
 - reconciliation pending/confirmed/rejected count와 confirmation latency
 - IEX/SIP close difference, volume coverage ratio, missing bar count
 
-Dashboard는 단순 green/red 대신 값과 `as_of`를 보여준다.
+선택 dashboard를 구현하면 단순 green/red 대신 값과 `as_of`를 보여준다.
 
-초기 dashboard는 Kafka 유입량/consumer lag, Spark input·processed rows와 batch duration, PostgreSQL batch latency, process CPU/RAM을 포함한다. 선택 3-broker 실험을 실행할 때만 `UnderReplicatedPartitions`, ISR shrink/expand, active controller를 추가한다. single broker에서 이 지표를 HA 증거로 해석하지 않는다.
+필수 metric report와 선택 dashboard는 Kafka 유입량/consumer lag, Spark input·processed rows와 batch duration, PostgreSQL batch latency, process CPU/RAM을 포함한다. 조건부 multi-broker 실험을 실행할 때만 `UnderReplicatedPartitions`, ISR shrink/expand, active controller를 추가한다. single broker에서 이 지표를 HA 증거로 해석하지 않는다.
 
 ## 14. Load and failure validation
 

@@ -2,11 +2,13 @@
 
 이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 현재 프로젝트에서 **어떤 문제를 해결하는 데 다시 사용하는지**, 반대로 **왜 사용하지 않는 기술이 있는지**를 설명한다. 목표는 기술 이름을 많이 나열하는 것이 아니라, 배운 내용을 하나의 재현 가능한 주식 데이터 파이프라인에서 구현하고 검증하는 것이다.
 
+이 문서는 학습 내용과 증거의 **연결표**이며 구현 계약을 중복 정의하지 않는다. event/schema는 [데이터 모델](data-model.md), API raw field는 [데이터 소스 카탈로그](data-source-catalog.md), 실행·장애 보장은 [아키텍처](architecture.md), 선택 근거는 [설계 결정](design-decisions.md)을 정본으로 따른다.
+
 ## 1. 적용 원칙
 
 1. Kafka, Spark Structured Streaming, Airflow는 과정 필수 기술이므로 Stage A MVP에서 직접 구현한다.
 2. PostgreSQL, Docker Compose, load/failure test는 파이프라인을 실행하고 결과를 검증하는 필수 경계로 사용한다.
-3. Prometheus/Grafana는 항상 실행하는 서비스가 아니라 6회차 부하·장애 검증용 `monitoring` profile로 사용한다.
+3. 6회차 필수 관측 증거는 structured log·CSV/JSON metric report이며, Prometheus/Grafana는 자원이 허용될 때 같은 지표를 시각화하는 선택 profile이다.
 4. Kafka Connect, AWS 관리형 서비스, Kubernetes는 현재 데이터 흐름에 필요할 때만 도입한다.
 5. 이미 별도 과제로 구현한 기능을 그대로 복제하기보다, 이번 프로젝트의 데이터·장애 시나리오에 맞게 재검증한다.
 
@@ -26,9 +28,9 @@
 | Dynamic Task Mapping | 9개 FRED series를 독립 호출할 실익이 확인될 때만 적용 | 적용 시 mapped task별 성공·실패, 미적용 시 결정 근거 |
 | Dataset 기반 DAG | 별도 데이터 준비 완료 이벤트로 DAG를 분리할 때만 적용 | 단일 DAG보다 명확한 의존성이 생길 때 ADR 작성 |
 | PostgreSQL·SQL | feed별 bar/feature, alert 상태, reconciliation, macro 저장 | schema, unique key, index와 주요 SQL query |
-| Prometheus/Grafana | 6회차 `monitoring` profile에서 Kafka/Spark/app metric 수집 | 처리량·lag·batch duration·장애 시계열 dashboard |
-| Kafka broker 장애·ISR | 기본 single broker는 재시작 복구만 검증. 선택 `resilience` profile에서 3-broker ISR 실험 | 기본 환경의 HA 비보장 명시, 선택 실험의 leader/ISR 변화 |
-| Docker Compose | `core`, `batch`, `monitoring`, `optional-app`, 선택 `resilience` profile | clean checkout 실행 명령과 container health |
+| Observability·Prometheus/Grafana | 실행 ID별 structured log·CSV/JSON report 필수, 자원 여유 시 `monitoring` profile | 처리량·lag·batch duration·장애 metric report, 선택 dashboard |
+| Kafka broker 장애·ISR | 기본 single broker는 재시작 복구만 검증. P0 이후 필요·자원이 확인될 때만 별도 multi-broker 실험 설계 | 기본 환경의 HA 비보장 명시, 수행했을 때만 leader/ISR 변화 |
+| Docker Compose | `core`, `batch`, 선택 `monitoring`, `optional-app` profile | clean checkout 실행 명령과 container health |
 | AWS IAM·S3·Redshift·Glue | AWS를 억지로 재사용하지 않고 최소 권한·비밀 관리·columnar/partition 원칙만 계승 | OCI/local 선택 근거와 보안 경계 |
 | Docker/Kubernetes | Docker Compose까지만 P0. Kubernetes는 현재 처리량과 기간에서 제외 | 제외 이유와 도입 조건 |
 
@@ -41,7 +43,7 @@
 → 시장 trade schema·1분 OHLCV·가격/거래량 이상 징후
 
 기존의 batch/linger/compression 튜닝
-→ 실제 replay 배속별 throughput·latency·lag 측정
+→ 신뢰성 설정은 고정하고 batch·linger·compression 후보를 동일 replay로 각 3회 비교
 
 기존의 broker 장애와 Grafana 관찰
 → Spark/DB/Kafka 장애 후 checkpoint·upsert 복구 검증
@@ -76,21 +78,24 @@ Dynamic Task Mapping과 Dataset scheduling은 문제를 단순하게 만들 때�
 | --- | --- | --- | --- |
 | 로컬 `core` | 첫 수직 슬라이스와 회귀 테스트 | Kafka single broker, Spark local, PostgreSQL, replay | broker HA |
 | 로컬 `batch` | SIP/FRED workflow | Airflow, PostgreSQL | 초 단위 실시간 처리 |
-| 로컬 `monitoring` | 6회차 측정·발표 | Prometheus, Grafana, exporters | 상시 운영 |
-| 로컬 `resilience` — 선택 | Kafka 복제·ISR 장애 실험 | 3 KRaft brokers, replication factor ≥ 2 | OCI 6GB 실행 가능성 |
+| 로컬 metric report — 필수 | 6회차 측정·발표 | structured log, query progress, lag, CSV/JSON export | 상시 dashboard |
+| 로컬 `monitoring` — 선택 | 필수 report 시각화 | Prometheus, Grafana, exporters | P0 완료 전 동시 실행 |
+| 별도 multi-broker 실험 — 조건부 | P0 이후 Kafka 복제·ISR 학습 | 3 KRaft brokers 후보, 실제 설정은 실험 시 확정 | OCI 6GB 실행 가능성 |
 | OCI A1 — 제안 | 무료 원격 배포 smoke test | 측정 후 선택한 최소 profile | local과 같은 동시 실행 규모, managed HA |
 
 ## 6. 과정 성과를 증명하는 최종 산출물
 
 - Kafka producer 설정과 delivery 결과
+- batch·linger·compression 후보별 3회 비교 결과와 선택 근거
 - topic/partition/key/retention 결정 및 측정값
 - Spark schema, window, watermark, checkpoint 코드
 - PostgreSQL unique key와 재실행 결과
 - Airflow DAG, retry/backoff, backfill 결과
-- Prometheus/Grafana 부하·장애 dashboard
+- 실행 ID별 structured log·CSV/JSON 부하·장애 metric report
+- 선택: Prometheus/Grafana dashboard
 - 1x·10x·50x·100x load-test report
 - Spark·DB·Kafka failure recovery report
-- single-broker와 선택 multi-broker의 보장 범위 비교
+- 조건부 실험을 수행했다면 single-broker와 multi-broker의 보장 범위 비교
 - OCI를 사용했다면 ARM64·메모리·NSG·backup 검증 결과
 
 이 산출물에 코드, 실행 로그, 측정값이 함께 있어야 “배웠다”가 아니라 “직접 구현하고 설명할 수 있다”는 근거가 된다.

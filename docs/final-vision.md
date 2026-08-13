@@ -147,7 +147,7 @@ MCP와 Agent의 첫 버전은 읽기 전용이다. Paper Trading처럼 상태를
 
 ### Measured complexity
 
-Spark local mode는 과정의 필수 학습·산출물이므로 Kafka event-time 집계에 제한해 사용한다. 별도 Spark cluster, Vector DB, S3 같은 추가 복잡도는 이름을 넣기 위해 도입하지 않는다. Prometheus/Grafana도 상시 운영 스택이 아니라 6회차 측정용 profile로만 사용한다. 데이터 크기, 검색 품질, 운영 문제를 측정하고 현재 구성으로 해결하기 어렵다는 증거가 있을 때만 확장한다.
+Spark local mode는 과정의 필수 학습·산출물이므로 Kafka event-time 집계에 제한해 사용한다. 별도 Spark cluster, Vector DB, S3 같은 추가 복잡도는 이름을 넣기 위해 도입하지 않는다. 6회차 관측은 structured log·CSV/JSON metric report를 필수로 하고 Prometheus/Grafana는 자원 여유가 있을 때만 선택 시각화로 사용한다. 데이터 크기, 검색 품질, 운영 문제를 측정하고 현재 구성으로 해결하기 어렵다는 증거가 있을 때만 확장한다.
 
 ## 5. Data Platform
 
@@ -424,7 +424,7 @@ duplicate, invalid, out-of-order event count
 Spark input/processed rows, batch duration, checkpoint recovery
 ```
 
-Prometheus/Grafana는 Stage A의 상시 필수 서비스가 아니라 6회차 부하·장애 검증용 `monitoring` profile로 추가한다. metric 이름과 의미를 structured log/query progress에서 먼저 확정한 뒤 Kafka lag, Spark batch duration, DB latency, CPU/RAM을 같은 실행 ID의 시계열로 남긴다. 선택 3-broker 실험에서만 ISR/under-replicated metric을 HA 증거로 사용한다.
+Stage A의 필수 관측 증거는 structured log/query progress에서 metric 이름과 의미를 먼저 확정하고 Kafka lag, Spark batch duration, DB latency, CPU/RAM을 같은 실행 ID의 CSV/JSON report로 남기는 것이다. Prometheus/Grafana는 자원이 허용될 때 선택 `monitoring` profile로 같은 지표를 시각화한다. P0 이후 별도 multi-broker 실험을 실제 수행했을 때만 ISR/under-replicated metric을 HA 증거로 사용한다.
 
 장애 데모 후보:
 
