@@ -5,6 +5,7 @@
 - 프로젝트 기간: 2026-08-13 ~ 2026-09-12
 - 현재 단계: 프로젝트 주제·데이터셋 선정 및 아키텍처 설계
 - 핵심 기술: Kafka, Spark Structured Streaming, Airflow, PostgreSQL
+- 검증 기술: Docker Compose, Prometheus/Grafana (`monitoring` profile)
 - MVP 범위: 데이터 수집·가공·저장, 이상 징후 탐지, 정합성 검증, 부하·장애 테스트
 
 ## 한눈에 보는 핵심 흐름
@@ -47,6 +48,8 @@ FRED의 금리·물가·고용 데이터는 이상 징후의 원인이라고 단
 | Replay/합성 fixture | 실제 응답 스키마 기반 자체 생성 | 배속·중복·지연·오류 event 구성 | 장외 데모, 부하 및 장애 복구 검증 |
 | 금융 뉴스 | [Alpaca News API](https://docs.alpaca.markets/us/docs/historical-news-data) | 중복 제거·관련 종목 필터·구조화 | 핵심 파이프라인 완료 후 선택 구현 |
 
+API 이름만으로 데이터셋을 정의하지 않는다. Alpaca WebSocket에서는 trade ID·거래소·가격·수량·거래 조건·event timestamp·tape를, Historical API에서는 feed가 명시된 OHLCV·VWAP·거래 횟수를 가져온다. FRED에서는 series metadata와 observation date/value/revision 기간을 가져온다. API별 제공 범위, 실제 선택 field와 제외 항목은 [API 데이터 소스 카탈로그](docs/data-source-catalog.md)에 정리했다.
+
 초기 분석 대상은 시장 ETF(`SPY`, `QQQ`), 반도체 ETF(`SMH`, `SOXX`), 주요 반도체·Nasdaq 종목을 합친 약 22개 종목이다. 정확한 종목 목록은 Alpaca 구독 smoke test와 종목별 event 비중을 확인한 뒤 2회차에 고정한다. `SOXL`과 `SOXS`는 향후 시뮬레이션 후보이며 시장 방향 판단의 핵심 입력으로 사용하지 않는다.
 
 ### 얼마나 수집하고 어디에 보관하는가
@@ -69,7 +72,7 @@ Alpaca WebSocket 원본 trade payload는 거래 ID, 거래소, 가격, 수량, �
 {"T":"t", "S":"NVDA", "i":12345, "x":"V", "p":182.10, "s":100, "c":["@"], "t":"2026-08-13T14:00:03Z", "z":"C"}
 ```
 
-수집 adapter는 provider 전용 필드를 `symbol`, `price`, `size`, `exchange`, `conditions`, `event_timestamp`라는 내부 계약으로 정규화한다. Spark는 trade condition별 집계 포함 규칙을 적용한 뒤 여러 거래를 event time 기준 1분 window로 묶는다. 아래 숫자는 처리 방식을 설명하기 위한 단순 예시다.
+Collector는 원본 payload를 common envelope에 넣어 Kafka `raw.market.v1`으로 전달한다. Spark가 provider field를 `symbol`, `price`, `size`, `exchange`, `conditions`, `event_timestamp`라는 내부 계약으로 정규화하고, trade condition별 집계 포함 규칙을 적용한 뒤 여러 거래를 event time 기준 1분 window로 묶는다. 아래 숫자는 처리 방식을 설명하기 위한 단순 예시다.
 
 ```text
 NVDA 14:00 UTC
@@ -91,9 +94,9 @@ Volume=350   TradeCount=3   VWAP=182.32
 
 ```mermaid
 flowchart LR
-    Market["Alpaca IEX 실시간 trade"] --> Normalize["수집·정규화"]
-    Normalize --> Kafka["Kafka"]
-    Kafka --> Spark["Spark Structured Streaming\n검증·1분 집계"]
+    Market["Alpaca IEX 실시간 trade"] --> Collector["수집·공통 Envelope"]
+    Collector --> Kafka["Kafka raw.market.v1"]
+    Kafka --> Spark["Spark Structured Streaming\n정규화·검증·1분 집계"]
     Spark --> Bars["IEX OHLCV·Feature\nPRELIMINARY_IEX"]
     Bars --> DB[("PostgreSQL")]
 
@@ -124,7 +127,8 @@ flowchart LR
 | Database | PostgreSQL | 정규화 데이터와 분석 결과의 멱등 저장 |
 | AI | 외부 LLM API | 비정형 뉴스를 구조화된 시장 이벤트로 변환 |
 | Backend/UI | FastAPI, Streamlit | 분석 결과 조회와 프로젝트 시연 |
-| Environment | Docker Compose | 로컬 실행 환경 재현 |
+| Environment | Docker Compose | 로컬 실행 환경 재현과 profile별 자원 분리 |
+| Observability | Prometheus, Grafana | 6회차 부하·장애 지표 수집과 시계열 증거 |
 
 Kafka, Spark, Airflow는 과정 필수 기술로 확정한다. 나머지 후보는 실제 문제를 해결하고 필수 파이프라인 이후 직접 검증할 시간이 있을 때만 채택한다.
 
@@ -151,7 +155,9 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 | 선택 | FastAPI, Streamlit, 뉴스·LLM 구조화 |
 | MVP 이후 | Agent, MCP, RAG, 예측 모델, paper/live trading |
 
-개발과 기본 검증은 Docker Compose local 환경에서 수행한다. 클라우드는 OCI Ampere A1 무료 ARM 인스턴스 2대를 확보할 수 있을 때 Streaming Node와 Data/Batch Node로 분리하는 안을 검증한다. ARM64 이미지 호환성과 실제 CPU·메모리 사용량을 확인하기 전에는 확정 인프라로 간주하지 않는다.
+개발과 기본 검증은 Docker Compose local 환경에서 수행한다. 기본 `core` profile의 Kafka는 single broker이므로 broker 고가용성을 주장하지 않고 프로세스 재시작과 소비 재개만 검증한다. 6회차에는 `monitoring` profile로 Prometheus/Grafana를 실행하고, 로컬 자원이 허용될 때만 선택 `resilience` profile의 3-broker 환경에서 leader/ISR 변화를 검증한다.
+
+클라우드는 OCI Ampere A1 무료 ARM 인스턴스 2대를 확보할 수 있을 때 Streaming Node와 Data/Batch Node로 분리하는 안을 검증한다. ARM64 이미지 호환성, 실제 CPU·메모리 사용량, NSG/방화벽과 volume backup을 확인하기 전에는 확정 인프라로 간주하지 않는다.
 
 상세 일정과 완료 조건은 [PROJECT_PLAN.md](PROJECT_PLAN.md), MVP 시스템 경계는 [아키텍처 문서](docs/architecture.md)를 참고한다.
 
@@ -175,6 +181,8 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 - [데이터 모델](docs/data-model.md): 이벤트 계약, 테이블, 멱등 키, 시간 기준
 - [데이터·플랫폼 선택](docs/api-selection.md): API와 Spark 선택 근거, 재검증 체크리스트
 - [데이터 수집·수명주기](docs/data-lifecycle.md): 수집량·기간·저장 위치·활용·삭제 정책
+- [API 데이터 소스 카탈로그](docs/data-source-catalog.md): API별 제공 데이터·raw field·선택/제외 범위
+- [과정 학습 내용과 프로젝트 구현 연결](docs/course-alignment.md): 학습·실습 기술의 재사용 범위, 발표 증거, 의도적 제외 이유
 
 ## 제약과 안전
 

@@ -4,6 +4,8 @@
 
 원칙: 구현 직전과 발표 전 다시 공식 문서를 확인한다. 정책·가격·모델·quota는 config나 문서의 숫자를 영구 진실로 취급하지 않는다.
 
+API별 제공 channel·field와 MVP 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)에 정의한다.
+
 ## 1. Decision summary
 
 | 역할 | MVP 선택 | 대체 방식 | 결정 |

@@ -34,6 +34,8 @@ FRED
 
 ## 2. Guideline 반영 결정
 
+과정에서 학습·실습한 기술과 이 프로젝트의 구현·증거·제외 사유는 [과정 연계 문서](docs/course-alignment.md)에 별도로 연결한다. 기술을 사용했다는 사실보다 어떤 문제를 해결했고 어떤 실행 증거를 남겼는지를 완료 기준으로 삼는다.
+
 ### Spark를 MVP에 포함한다
 
 22개 IEX 종목의 현재 처리량만 보면 Python consumer도 충분할 가능성이 높다. 그러나 이 과정의 목표와 최종 산출물에 Spark 전처리·집계 코드가 명시되어 있으므로 **Spark local mode를 핵심 처리 엔진으로 채택한다.**
@@ -72,7 +74,7 @@ Kafka source
 
 | ID | 필수 결과 | 검증 가능한 수용 기준 |
 | --- | --- | --- |
-| P0-1 | Kafka 수집 | Alpaca 또는 replay producer가 22개 허용 종목의 정규화 trade JSON을 `raw.market.v1`에 발행한다. |
+| P0-1 | Kafka 수집 | Alpaca 또는 replay producer가 22개 허용 종목의 provider raw trade payload와 공통 envelope를 `raw.market.v1`에 발행한다. |
 | P0-2 | Spark 전처리 | Spark가 schema, symbol, timestamp, price, volume을 검증하고 중복/지연 데이터를 정의된 정책으로 처리한다. |
 | P0-3 | Spark 집계 | event-time 1분 window로 OHLCV, VWAP, trade count를 계산한다. |
 | P0-4 | 데이터 저장 | `foreachBatch` sink가 PostgreSQL business key upsert를 수행하며 같은 input replay에도 row 수와 값이 일관된다. |
@@ -144,6 +146,7 @@ tests/
 - Dataset C: FRED macro observations
 - Dataset D: Alpaca news, 선택 구현
 - Dataset E: deterministic replay Parquet/JSON fixtures
+- 각 API의 제공 데이터, 실제 선택 field, 제외 범위와 raw→normalized mapping
 - `IEX → Kafka → Spark → PostgreSQL`, `SIP/FRED → Airflow → PostgreSQL` 구조도
 - Kafka/Spark/Airflow/PostgreSQL 선정 이유
 - 공통 event envelope와 DB logical schema
@@ -165,12 +168,14 @@ Exit gate:
 
 작업:
 
-1. `MarketDataProvider`와 normalized `MarketTrade` schema
+1. `MarketDataProvider`, raw envelope와 provider payload contract
 2. Alpaca producer의 auth, subscribe, heartbeat, reconnect/backoff
-3. deterministic `event_id`, key=`symbol`, topic=`raw.market.v1`
-4. replay producer와 속도 배율 설정
-5. 정규장 session filter와 market calendar 적용
-6. invalid publish/error logging
+3. `confluent-kafka-python` delivery callback과 graceful flush/close
+4. `enable.idempotence=true`, `acks=all`, 호환되는 in-flight/retry 설정의 smoke test
+5. 원본 payload 보존, deterministic `event_id`, key=`symbol`, topic=`raw.market.v1`
+6. replay producer와 속도 배율 설정
+7. 정규장 session filter와 market calendar 적용
+8. bounded publish retry, 실패 분류와 silent drop 없는 logging
 
 발표 증거:
 
@@ -184,13 +189,15 @@ Exit gate:
 - live credential이 있으면 22종목 subscription이 확인된다.
 - credential이 없어도 replay fixture가 Kafka에 동일 schema로 발행된다.
 - producer 재시작 후 같은 fixture의 `event_id`가 변하지 않는다.
+- publish 성공·실패가 delivery callback으로 관찰되며 종료 시 미전송 record를 확인한다.
+- single broker의 `acks=all`은 복제 고가용성을 만들지 않는다는 제한을 설명할 수 있다.
 
 ### 4회차 — Spark 전처리·집계 및 저장
 
 작업:
 
 1. Spark local Structured Streaming의 Kafka source
-2. explicit JSON schema parsing과 valid/invalid 분기
+2. Alpaca raw JSON schema parsing → normalized `MarketTrade` → valid/invalid 분기
 3. `event_timestamp` watermark와 event-id dedup
 4. Alpaca trade condition 정책을 적용한 symbol + 1-minute event-time window OHLCV/VWAP/count
 5. append output mode로 watermark 이후 final bar 출력
@@ -265,12 +272,20 @@ duplicate / invalid / too-late counts
 - duplicate/out-of-order/too-late events
 - corrupted JSON/schema version mismatch
 
+검증 환경:
+
+- `monitoring` profile: Prometheus, Grafana, Kafka/JVM exporter와 app metric
+- 기본 single broker: Kafka 프로세스 재시작 후 Spark 소비 재개 검증
+- 선택 `resilience` profile: 로컬 자원이 허용될 때만 3-broker KRaft, replication factor 2 이상, leader/ISR 변화 검증
+
 Exit gate:
 
 - 각 배속의 결과가 표나 차트로 남는다.
+- Grafana dashboard 또는 동일 metric의 시계열 export가 실행 ID와 함께 남는다.
 - 처음 병목이 발생한 지점과 근거 metric을 설명한다.
 - 장애 후 데이터 유실·중복 여부와 복구 시간을 기록한다.
 - 무제한 retry가 없고 DLQ/실패 상태가 관찰된다.
+- single-broker 재시작 복구와 multi-broker failover를 구분해 설명한다.
 
 ### 7회차 — API/inference 선택 구현 및 통합
 
@@ -350,7 +365,7 @@ P0 topic:
 
 | Topic | 역할 | Key | Consumer |
 | --- | --- | --- | --- |
-| `raw.market.v1` | normalized market trade | symbol | Spark Structured Streaming |
+| `raw.market.v1` | provider raw trade payload + common envelope | symbol | Spark Structured Streaming |
 | `dead-letter.v1` | 처리할 수 없는 event와 오류 metadata | original key | inspection/reporting |
 
 선택 구현:
@@ -416,6 +431,9 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 | IEX/SIP baseline 혼합 | 통계 왜곡과 잘못된 판정 | feed를 business key에 포함하고 feed별 feature/baseline contract test |
 | API 가입·quota 변경 | live demo 중단 | 동일 schema replay를 기본 데모로 준비 |
 | Airflow+Spark+Kafka local 자원 | stack 불안정 | Compose profile, 순차 실행 가능, CPU/memory 측정 |
+| single broker를 HA처럼 설명 | 잘못된 장애 대응 주장 | 기본 환경은 restart recovery만 검증하고 선택 3-broker 실험을 분리 |
+| monitoring stack의 메모리 부하 | core pipeline 불안정 | `monitoring` profile로 분리하고 측정 시간에만 실행 |
+| OCI 공개 포트·secret 노출 | 계정·데이터 보안 위험 | NSG 최소 개방, 내부 서비스 비공개 binding, secret 주입, volume backup |
 | UI/LLM 범위 확장 | 필수 코드 미완성 | P0 gate 이후에만 선택 구현 시작 |
 | 장외 발표 | 실시간 event 없음 | timestamped replay dataset 사용 |
 
@@ -429,10 +447,12 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - [ ] Airflow historical SIP reconciliation DAG와 FRED DAG
 - [ ] IEX/SIP reconciliation 결과와 alert 상태 전이 이력
 - [ ] load-test dataset, runner, metric report
+- [ ] Prometheus/Grafana `monitoring` profile과 dashboard/export
 - [ ] 장애 시나리오와 복구 결과
 - [ ] unit/integration/contract tests
 - [ ] Docker Compose local 실행 환경
 - [ ] README: 개요, 실행법, 구조도, 제약
+- [ ] 과정 학습 내용 → 구현 → 발표 증거 연결표
 - [ ] 발표자료와 replay 기반 데모
 - [ ] 선택: FastAPI/Streamlit 또는 news/LLM
 

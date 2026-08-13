@@ -164,6 +164,20 @@ required_disk
 
 retention 안에서 장애 복구와 당일 replay가 불가능하면 늘리고, disk pressure가 발생하면 Parquet fixture 보존을 전제로 줄인다.
 
+### Producer 신뢰성 경계
+
+MVP producer는 `confluent-kafka-python`을 사용하고 초기 후보로 `enable.idempotence=true`, `acks=all`을 적용한다. 멱등 Producer와 호환되는 retry/in-flight 설정은 client 기본값을 무작정 덮어쓰지 않고 version matrix smoke test로 확인한다. 각 record는 delivery callback에서 topic/partition/offset 또는 error class를 기록하고, 종료 시 bounded flush 결과를 확인한다.
+
+이 설정만으로 end-to-end exactly-once를 주장하지 않는다. WebSocket reconnect가 같은 trade를 다시 전달할 수 있고 Spark `foreachBatch`의 PostgreSQL write는 at-least-once이므로 다음 세 경계를 함께 사용한다.
+
+```text
+Kafka producer idempotence
++ deterministic event_id / Spark deduplication
++ PostgreSQL business unique key / upsert
+```
+
+기본 single broker에서 `acks=all`은 현재 ISR의 확인 정책일 뿐 broker 복제나 failover를 만들지 않는다. 기본 failure drill은 Kafka restart recovery이며, broker 장애 중 지속 쓰기는 선택 3-broker `resilience` profile에서만 검증·주장한다.
+
 ## 4. Spark 결정
 
 ### Pandas 대신 Spark를 쓰는 이유
@@ -177,6 +191,7 @@ P0 Spark 처리:
 
 ```text
 explicit schema parsing
+provider raw field normalization
 validation / invalid split
 event-id deduplication
 event-time watermark
@@ -230,6 +245,8 @@ Airflow가 제공할 증거:
 - UI에서 확인 가능한 DAG run 상태
 
 Airflow는 실시간 trade, Spark query 시작/종료 반복, 초 단위 alert를 담당하지 않는다. 실시간 IEX 경고를 사후 검증할 뿐이다. FRED schedule은 daily로 시작하며 실제 series update 시각을 확인한 후 cron expression을 고정한다. reconciliation schedule은 Alpaca의 무료 SIP 지연 조건을 어기지 않도록 safety margin과 API quota를 측정한 뒤 고정한다.
+
+Dynamic Task Mapping은 9개 FRED series의 독립 실패 격리와 재실행이 실제로 유리할 때만 적용한다. Dataset scheduling도 raw/processed 데이터 준비 완료를 별도 DAG 사이에서 전달해야 할 때만 사용한다. 과정에서 학습했다는 이유만으로 task와 DAG를 분할하지 않는다.
 
 ## 6. 저장소 결정
 

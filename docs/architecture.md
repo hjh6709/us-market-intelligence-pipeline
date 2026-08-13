@@ -74,9 +74,9 @@ flowchart TB
 
 | Component | 책임 | 하지 않는 일 |
 | --- | --- | --- |
-| Provider adapter | 인증, 원천 payload 수신, normalized model 변환 | score 계산, DB schema 노출 |
-| Market collector | subscribe, heartbeat, reconnect, raw event publish | bar 계산, 장기 저장 |
-| Spark market processor | Kafka consume, schema validation, event-time watermark/dedup, 1분 OHLCV, PostgreSQL micro-batch upsert | 외부 API 호출, LLM 분석, signal 계산 |
+| Provider adapter | 인증, 원천 payload 수신, provider schema와 최소 envelope 계약 | score 계산, bar 계산, DB schema 노출 |
+| Market collector | subscribe, heartbeat, reconnect, source/feed/ingestion metadata 추가, 원본 payload publish | field 정규화, bar 계산, 장기 저장 |
+| Spark market processor | Kafka raw consume, provider schema parsing, normalized model 변환, validation, event-time watermark/dedup, 1분 OHLCV, PostgreSQL micro-batch upsert | 외부 API 호출, LLM 분석, signal 계산 |
 | Feature/anomaly engine | 확정 IEX bar에서 IEX 전용 baseline과 feature를 계산하고 `PRELIMINARY_IEX` alert 생성 | raw trade 재집계, SIP baseline 혼합, 매수·매도 결정 |
 | Optional news collector | 지정 symbol 뉴스 수신, source id 보존 | LLM 호출 |
 | Optional news processor | dedup, relevance filter, budget, LLM schema validation | 매매 신호 직접 결정 |
@@ -93,16 +93,16 @@ flowchart TB
 최소 계약만 정의한다.
 
 ```text
-MarketDataProvider.stream_trades(symbols) -> AsyncIterator[MarketTrade]
+MarketDataProvider.stream_trades(symbols) -> AsyncIterator[RawMarketEvent]
 MarketDataProvider.fetch_bars(symbols, feed, start, end) -> list[MarketBar]
 NewsProvider.fetch_or_stream(symbols, cursor) -> Iterator[NewsArticle]
 MacroProvider.fetch_series(series_id, since) -> list[MacroObservation]
 LLMProvider.classify(article) -> MarketEvent
 ```
 
-P0 구현은 Alpaca IEX 실시간 trade, Alpaca historical SIP bar, replay, FRED다. historical SIP 요청은 `end <= now - 15m`인 닫힌 구간만 허용한다. Alpaca news와 Groq는 7회차 선택 구현이다. replay/stub은 외부 구현의 대체 test adapter이며 두 번째 상용 provider가 아니다.
+P0 구현은 Alpaca IEX 실시간 trade, Alpaca historical SIP bar, replay, FRED다. API별 raw field와 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다. historical SIP 요청은 `end <= now - 15m`인 닫힌 구간만 허용한다. Alpaca news와 Groq는 7회차 선택 구현이다. replay/stub은 외부 구현의 대체 test adapter이며 두 번째 상용 provider가 아니다.
 
-계약 밖에 provider 전용 필드를 노출하지 않는다. 추적이 필요한 원문 식별자는 `source_event_id`, 제한 정보는 `metadata`의 allowlisted field로 보존한다.
+provider 전용 필드는 24시간 보존되는 raw envelope의 `payload` 안에서만 유지한다. Spark 이후 계약에는 provider 전용 이름을 노출하지 않으며, 추적이 필요한 원문 식별자는 `source_event_id`, 제한 정보는 `metadata`의 allowlisted field로 보존한다.
 
 ## 5. Realtime market flow
 
@@ -115,10 +115,11 @@ sequenceDiagram
     participant D as PostgreSQL
 
     A->>C: trade payload
-    C->>C: validate + normalize + event_id
+    C->>C: envelope + source/feed + event_id
     C->>K: raw.market.v1 (key=symbol)
     K-->>S: Kafka source
-    S->>S: parse + validate + watermark/dedup
+    S->>S: parse raw + normalize + validate
+    S->>S: watermark/dedup
     S->>S: symbol + event-time 1m OHLCV
     S->>D: foreachBatch UPSERT market_bars
     S->>D: update pipeline_status
@@ -290,17 +291,20 @@ host
 ├── airflow services (batch profile)
 ├── market/replay producer
 ├── feature worker (필요 시)
+├── prometheus + grafana + exporters (monitoring profile)
 ├── fastapi
 └── streamlit
 ```
 
-Airflow와 선택 app stack을 항상 모두 켤 필요는 없다. Compose profile로 core/realtime, batch, optional-app을 나누어 노트북 자원을 보호한다. Spark는 cluster가 아니라 local mode로 실행한다. CPU, memory, disk, Kafka lag, Spark batch duration, DB size를 측정한 뒤에만 인프라 확장을 검토한다.
+Airflow와 monitoring/선택 app stack을 항상 모두 켤 필요는 없다. Compose profile을 `core`, `batch`, `monitoring`, `optional-app`, 선택 `resilience`로 나누어 노트북 자원을 보호한다. Spark는 cluster가 아니라 local mode로 실행한다. CPU, memory, disk, Kafka lag, Spark batch duration, DB size를 측정한 뒤에만 인프라 확장을 검토한다.
+
+기본 `core`의 single broker는 broker 고가용성을 제공하지 않는다. 이 환경의 Kafka 장애 실험은 프로세스 재시작 후 checkpoint/offset 기반으로 소비가 재개되는지만 검증한다. 로컬 자원이 허용될 때 선택 `resilience` profile로 3-broker KRaft와 replication factor 2 이상을 구성해 leader election, ISR 축소·회복을 별도 실험한다. 이 profile을 OCI A1 `1 OCPU·6GB` 노드에서 실행할 수 있다고 가정하지 않는다.
 
 S3/Parquet와 EC2는 stretch architecture다. 도입 시에도 raw archive는 Kafka consumer로 추가하여 기존 producer를 바꾸지 않는다. EC2는 static access key 대신 IAM role을 사용한다.
 
 ## 13. Observability minimum
 
-전용 monitoring stack 없이 structured log와 health endpoint로 시작한다.
+Structured log, health endpoint와 PostgreSQL `pipeline_status`는 항상 켜는 최소 관측 경계다. 6회차 부하·장애 검증에서는 별도 `monitoring` profile의 Prometheus/Grafana와 exporter를 실행해 같은 지표를 시계열로 남긴다.
 
 - last event/ingestion/processed timestamp by source and symbol
 - processing lag and Kafka consumer lag
@@ -316,6 +320,8 @@ S3/Parquet와 EC2는 stretch architecture다. 도입 시에도 raw archive는 Ka
 
 Dashboard는 단순 green/red 대신 값과 `as_of`를 보여준다.
 
+초기 dashboard는 Kafka 유입량/consumer lag, Spark input·processed rows와 batch duration, PostgreSQL batch latency, process CPU/RAM을 포함한다. 선택 3-broker 실험을 실행할 때만 `UnderReplicatedPartitions`, ISR shrink/expand, active controller를 추가한다. single broker에서 이 지표를 HA 증거로 해석하지 않는다.
+
 ## 14. Load and failure validation
 
 Replay producer는 동일 dataset을 `1x`, `10x`, `50x`, `100x` 순서로 전송하고 병목이 확인될 때까지 배율을 높인다. producer events/sec, Kafka lag, Spark input/processed rows per second, micro-batch duration, event-to-DB p50/p95, JDBC batch latency, CPU/memory를 같은 실행 ID로 기록한다.
@@ -326,6 +332,10 @@ Replay producer는 동일 dataset을 `1x`, `10x`, `50x`, `100x` 순서로 전송
 
 - secret은 environment/secret store에서 주입하고 event/log에 포함하지 않는다.
 - `.env.example`에는 이름만 제공한다.
+- OCI NSG/host firewall은 SSH를 관리 IP로 제한하고 Kafka, PostgreSQL, Airflow, Grafana 포트를 공용 인터넷에 직접 노출하지 않는다.
+- node 간 통신은 private IP를 우선하며 서비스는 필요한 interface에만 bind한다.
+- secret 파일과 backup은 최소 권한으로 읽고 Git·container image에 포함하지 않는다.
+- PostgreSQL volume과 Spark checkpoint는 서로 다른 복구 목적을 가지며 발표 전 database dump와 restore smoke test를 수행한다.
 - 모든 provider는 explicit free-plan configuration으로 시작한다.
 - paid fallback과 자동 plan upgrade는 없다.
 - 뉴스 원문 보존·표시는 provider license/terms를 따르며 발표에는 필요한 요약과 source URL만 사용한다.
@@ -339,6 +349,7 @@ Replay producer는 동일 dataset을 `1x`, `10x`, `50x`, `100x` 순서로 전송
 | TimescaleDB | 실제 query/size 문제 발생 시 | PostgreSQL benchmark |
 | S3 archive | raw replay 보존 요구가 확인될 때 | daily volume/cost |
 | EC2 instance size | local 통합 후 | measured CPU/RAM/disk/network |
+| OCI 2-node 배포 | ARM64와 network/security smoke test 후 | image 호환, node별 memory, private connectivity, backup restore |
 | 별도 Spark cluster/scale-out | local Spark가 load-test 목표를 충족하지 못할 때 | lag/throughput/CPU-memory benchmark |
 | SIP confirmation tolerance | fixture와 실제 IEX/SIP 쌍을 수집한 뒤 | close difference와 volume coverage distribution |
 | paper/live execution | backtest와 risk engine 후 | out-of-sample evidence, safety review |

@@ -35,7 +35,7 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 }
 ```
 
-`event_id`는 provider가 안정적 id를 제공하면 그것을 포함한다. 그렇지 않으면 source, event type, identity fields의 canonical serialization을 hash한다. 무작위 UUID만으로 중복 제거하지 않는다.
+`event_id`는 provider가 안정적 id를 제공하면 그것을 포함한다. 그렇지 않으면 source, event type, identity fields의 canonical serialization을 hash한다. 무작위 UUID만으로 중복 제거하지 않는다. Kafka의 `raw.market.v1`에서는 `payload`에 provider 원본 JSON을 유지하며, 아래 `MarketTrade`는 Spark parsing 이후의 normalized contract다. API별 raw mapping은 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
 
 ## 3. Market trade
 

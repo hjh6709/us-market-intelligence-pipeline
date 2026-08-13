@@ -33,7 +33,7 @@ P0 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 
 
 | 데이터 | 수집량·주기 | 저장 위치 | 활용 | 보존·삭제 |
 | --- | --- | --- | --- | --- |
-| Alpaca IEX raw trade | 22종목 정규장 동안 수신되는 유효 trade 전체 | Streaming Node Kafka `raw.market.v1` | Spark 1분 OHLCV 집계, 지연·중복·처리량 측정 | Kafka time retention 24시간 후 자동 삭제. PostgreSQL에 raw tick 장기 저장 안 함 |
+| Alpaca IEX raw trade | 22종목 정규장 동안 수신되는 raw trade 전체 | Streaming Node Kafka `raw.market.v1` | Spark parsing·검증·1분 OHLCV 집계, 지연·중복·처리량 측정 | Kafka time retention 24시간 후 자동 삭제. PostgreSQL에 raw tick 장기 저장 안 함 |
 | IEX 1분 bar | 최대 `22 × 390 = 8,580 rows/정규 거래일` | Data/Batch Node PostgreSQL `market_bars`, `feed=iex` | 실시간 feature와 `PRELIMINARY_IEX` alert | 90일 rolling retention. 프로젝트 중에는 90일 미만이므로 유지 |
 | SIP 1분 bar | Airflow가 15분마다 `window_end <= now-20m`인 미수집 구간을 batch 조회. 최대 8,580 rows/거래일 | PostgreSQL `market_bars`, `feed=sip` | IEX/SIP bar 비교, SIP 전용 feature, alert 확정·기각 | 90일 rolling retention. IEX bar를 덮어쓰지 않음 |
 | Technical feature | feed별 1분 snapshot. 최대 bar 수와 같은 차수 | PostgreSQL `technical_features` | `return_5m`, volume Z-score, ATR-normalized move와 alert 근거 | 90일 rolling retention |
@@ -122,6 +122,10 @@ GitHub repository
 ```
 
 API key, 전체 raw capture, PostgreSQL volume과 database dump는 Git에 올리지 않는다. PostgreSQL dump는 발표 전과 schema 변경 전 생성해 개발 PC 또는 별도 허용된 backup 위치에 보관한다. OCI 2노드 구조는 ARM64와 자원 smoke test가 통과하기 전까지 proposed 상태다.
+
+OCI를 사용할 경우 Kafka/PostgreSQL/Airflow/Grafana는 공용 인터넷에 직접 노출하지 않고 private IP 또는 SSH tunnel을 사용한다. NSG와 host firewall은 필요한 node 간 통신과 관리 IP의 SSH만 허용한다. 배포 완료의 기준에는 PostgreSQL dump 생성뿐 아니라 빈 instance/volume에서의 restore smoke test가 포함된다.
+
+각 외부 API가 제공하는 raw field와 실제 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
 
 ## 6. 측정 후 바꿀 수 있는 항목
 
