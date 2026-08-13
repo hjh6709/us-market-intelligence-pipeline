@@ -33,6 +33,7 @@ MVP 결정:
 - 한 계정의 active stream connection 제한을 고려해 collector 하나가 구독을 소유한다.
 - SIP 수준 coverage나 전체시장 VWAP이라고 표현하지 않는다.
 - historical SIP 수집은 latest endpoint를 사용하지 않고 `end <= now - 15m`인 닫힌 1분 window만 요청한다.
+- 실제 Airflow DAG는 5분 safety margin을 더해 초기에는 `window_end <= now - 20m`인 미수집 구간을 15분마다 조회한다.
 
 공식 출처:
 

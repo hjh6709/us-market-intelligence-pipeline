@@ -150,6 +150,7 @@ tests/
 - 1차/2차 사용자와 P0 query pattern
 - 초기 Kafka partition/retention과 재검토 조건
 - PostgreSQL business key와 최소 index 후보
+- 데이터별 수집 시간·warm-up·저장 위치·보존 기간·삭제 기준
 
 Exit gate:
 
@@ -158,6 +159,7 @@ Exit gate:
 - IEX/SIP baseline 분리와 alert 상태 전이가 데이터 모델에 정의되어 있다.
 - local runtime/Java/Spark/Kafka 호환 버전 검증 계획이 있다.
 - 실제 EPS는 미측정으로 표시되고 측정 방법과 partition 재결정 조건이 문서화되어 있다.
+- 정규장 10거래일 수집 목표, 과거 20거래일 feed별 warm-up, raw 24시간/분석 결과 90일 보존 정책을 설명할 수 있다.
 
 ### 3회차 — Kafka 수집 설계 및 구현
 
@@ -167,7 +169,8 @@ Exit gate:
 2. Alpaca producer의 auth, subscribe, heartbeat, reconnect/backoff
 3. deterministic `event_id`, key=`symbol`, topic=`raw.market.v1`
 4. replay producer와 속도 배율 설정
-5. invalid publish/error logging
+5. 정규장 session filter와 market calendar 적용
+6. invalid publish/error logging
 
 발표 증거:
 
@@ -212,9 +215,9 @@ Exit gate:
 
 작업:
 
-1. 15분 이상 지난 닫힌 window를 고르는 SIP reconciliation provider/task
+1. 15분 schedule에서 `window_end <= now-20m`인 닫힌 window를 고르는 SIP reconciliation provider/task
 2. SIP bar validate/upsert → IEX/SIP 비교 → alert 상태 전이
-3. FRED series 설정과 extract → validate → upsert → quality check task
+3. FRED 9개 series를 일 1회 수집하고 최근 7일을 overlap하는 extract → validate → upsert → quality check task
 4. logical date/window 기반 증분·백필 범위와 idempotency
 5. retry, exponential backoff, timeout, pipeline status 기록
 
@@ -321,7 +324,7 @@ Finalized 1m bar
 ### Airflow Market Reconciliation
 
 ```text
-IEX finalized window ending <= now - 15m
+IEX finalized window ending <= now - 20m
 + matching historical SIP bar and SIP baseline
 → reconciliation evidence
 → CONFIRMED_SIP or REJECTED_AFTER_RECONCILIATION

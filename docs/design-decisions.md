@@ -57,6 +57,8 @@
 | FRED macro | JSON observation | Airflow daily batch | 관측일·발표시각·수집시각 분리 | 필수 | PostgreSQL |
 | Alpaca news | JSON/document metadata | REST/WebSocket | publish/update time | 선택 | PostgreSQL metadata/event |
 
+정확한 수집 시간, warm-up 기간, 저장 위치와 삭제 정책은 [데이터 수집·수명주기](data-lifecycle.md)에 정의한다. P0 실시간 탐지 범위는 정규장이고 live/recorded 최소 10거래일을 목표로 하며, feed별 과거 20거래일 1분 bar를 baseline warm-up으로 사용한다.
+
 ### 현재 확정된 규모
 
 - 분석 universe: 22 symbols
@@ -211,7 +213,7 @@ configuration check
 별도 market reconciliation DAG는 다음 흐름을 실행한다.
 
 ```text
-select finalized IEX windows ending <= now - 15m
+select finalized IEX windows ending <= now - 20m
 → fetch matching historical SIP bars
 → validate/upsert feed=sip
 → compare IEX and SIP without mixing baselines

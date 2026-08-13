@@ -369,12 +369,15 @@ validation 실패는 exception 문자열만 저장하지 않고 위 code, source
 
 ## 14. Retention
 
-MVP 기본값:
+MVP 기본값은 [데이터 수집·수명주기](data-lifecycle.md)를 따른다.
 
 - raw market Kafka: 24h
-- aggregated bars/features/signals: PostgreSQL, 프로젝트 기간 보존
-- raw news Kafka (선택 구현 시): 72h
-- market events (선택 구현 시): PostgreSQL, 프로젝트 기간 보존
-- DLQ: 7d 또는 수동 정리
+- IEX/SIP bars, features, alerts, reconciliation/history: PostgreSQL 90일 rolling
+- FRED observations/vintage: MVP 자동 삭제 없음
+- optional news metadata: 30일, 기사 전체 본문 저장 안 함
+- DLQ: 7일
+- structured raw log: 14일
+- 작은 deterministic fixture와 aggregate report: repository 보존
+- 임시 live raw capture: 최종 발표 30일 후 삭제
 
-보존 기간은 실제 일일 byte 수를 측정한 뒤에만 늘린다. S3/Parquet archive는 stretch goal이다.
+90일 cleanup은 feed와 business key를 보존한 batch delete로 수행하고, 실행 전 row/date 범위와 backup 상태를 기록한다. 보존 기간은 실제 byte 수를 측정한 뒤 변경할 수 있지만 변경 근거를 남긴다. S3/Parquet 장기 archive는 stretch goal이다.

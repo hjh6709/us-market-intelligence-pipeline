@@ -49,6 +49,18 @@ FRED의 금리·물가·고용 데이터는 이상 징후의 원인이라고 단
 
 초기 분석 대상은 시장 ETF(`SPY`, `QQQ`), 반도체 ETF(`SMH`, `SOXX`), 주요 반도체·Nasdaq 종목을 합친 약 22개 종목이다. 정확한 종목 목록은 Alpaca 구독 smoke test와 종목별 event 비중을 확인한 뒤 2회차에 고정한다. `SOXL`과 `SOXS`는 향후 시뮬레이션 후보이며 시장 방향 판단의 핵심 입력으로 사용하지 않는다.
 
+### 얼마나 수집하고 어디에 보관하는가
+
+| 데이터 | 수집 범위 | 저장 | 보존 | 최종 활용 |
+| --- | --- | --- | --- | --- |
+| IEX raw trade | 22종목, 미국 정규장, 최소 10거래일 live/recorded 목표 | Kafka | 24시간 후 자동 삭제 | 1분 OHLCV 생성과 처리량 측정 |
+| IEX/SIP 1분 bar | 과거 20거래일 warm-up + 프로젝트 기간, feed별 최대 8,580 rows/거래일 | PostgreSQL | 90일 | feed별 feature, 예비 경고와 SIP 검증 |
+| FRED | 9개 series, 매일 수집하며 최근 7일을 겹쳐 재조회 | PostgreSQL | MVP에서는 삭제하지 않음 | 경고 당시 금리·물가·고용·VIX 환경 조회 |
+| Replay/DLQ/log | 정상·급등·중복·지연·오류 시나리오 | Git의 작은 fixture와 node volume | fixture 유지, DLQ 7일, log 14일 | 부하·장애·재처리 검증 |
+| 뉴스 — 선택 | 22종목 관련 metadata | PostgreSQL | 30일 | 관련 기사 후보 조회, 본문은 저장하지 않음 |
+
+P0 alert는 정규장 `09:30–16:00 America/New_York`만 계산한다. IEX와 SIP는 각각 과거 20거래일의 feed별 baseline을 만들고 서로 섞지 않는다. 세부 수집 주기, 삭제 조건과 저장 경계는 [데이터 수집·수명주기](docs/data-lifecycle.md)에 정의한다.
+
 ### 원본 데이터를 어떻게 분석하는가
 
 Alpaca WebSocket 원본 trade payload는 거래 ID, 거래소, 가격, 수량, 거래 조건과 시각을 포함한다.
@@ -162,6 +174,7 @@ Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG
 - [설계 결정](docs/design-decisions.md): 사용자, 처리량 측정, Kafka 파티션, 저장·조회·인덱스 전략
 - [데이터 모델](docs/data-model.md): 이벤트 계약, 테이블, 멱등 키, 시간 기준
 - [데이터·플랫폼 선택](docs/api-selection.md): API와 Spark 선택 근거, 재검증 체크리스트
+- [데이터 수집·수명주기](docs/data-lifecycle.md): 수집량·기간·저장 위치·활용·삭제 정책
 
 ## 제약과 안전
 

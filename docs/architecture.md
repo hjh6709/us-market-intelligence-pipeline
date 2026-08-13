@@ -144,7 +144,7 @@ Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. 
 
 ### 7.1 Macro
 
-Airflow daily DAG:
+Airflow daily DAG는 초기 `14:00 UTC`에 실행하며 최근 7일을 겹쳐 조회해 늦은 갱신과 결측을 idempotent upsert한다.
 
 ```text
 check configuration
@@ -162,10 +162,10 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ### 7.2 Delayed market reconciliation
 
-Airflow reconciliation DAG:
+Airflow reconciliation DAG는 초기 15분 간격으로 실행하고, 무료 제한에 5분 safety margin을 둬 `window_end <= now - 20m`인 미수집 window를 선택한다.
 
 ```text
-select finalized IEX windows whose end <= now - 15m
+select finalized IEX windows whose end <= now - 20m
 → fetch matching Alpaca historical SIP 1m bars
 → validate and upsert as source=alpaca, feed=sip
 → compare each SIP bar with the matching IEX bar
@@ -175,7 +175,7 @@ select finalized IEX windows whose end <= now - 15m
 → update pipeline_status
 ```
 
-SIP는 무료 실시간 전체 시장 feed가 아니라 지연 검증 source다. `symbol + bar_start + timeframe + source + feed`로 IEX와 SIP 원천 bar를 별도 저장하며 어느 한쪽으로 다른 쪽을 덮어쓰지 않는다. Bar 비교는 `symbol + bar_start + timeframe + rule_version`, alert 재평가는 `alert_id + rule_version`을 idempotency key로 사용한다. API 실패나 SIP bar 누락 시 alert를 성급히 확정하거나 기각하지 않고 `PRELIMINARY_IEX`와 pending 사유를 유지한다.
+SIP는 무료 실시간 전체 시장 feed가 아니라 지연 검증 source다. `symbol + bar_start + timeframe + source + feed`로 IEX와 SIP 원천 bar를 별도 저장하며 어느 한쪽으로 다른 쪽을 덮어쓰지 않는다. Bar 비교는 `symbol + bar_start + timeframe + rule_version`, alert 재평가는 `alert_id + rule_version`을 idempotency key로 사용한다. API 실패나 SIP bar 누락 시 alert를 성급히 확정하거나 기각하지 않고 `PRELIMINARY_IEX`와 pending 사유를 유지한다. 수집 범위와 retention은 [데이터 수집·수명주기](data-lifecycle.md)를 따른다.
 
 ## 8. Optional news and LLM flow
 
