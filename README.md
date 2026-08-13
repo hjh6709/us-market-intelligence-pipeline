@@ -1,38 +1,79 @@
-# Multi-Source U.S. Market Intelligence Pipeline
+# U.S. Market Anomaly Data Pipeline
 
-> 미국 나스닥·반도체 시장의 시세, 거시경제 지표, 금융 뉴스를 하나의 파이프라인으로 통합하여 **이상 징후와 시장 상태를 근거와 함께 설명하는 시스템**을 만든다.
+> 미국 주식의 실시간 개별 거래를 1분 OHLCV로 가공해 가격·거래량 이상 징후를 탐지하고, 지연된 전체시장 데이터로 결과를 검증하는 재현 가능한 데이터 파이프라인을 만든다.
 
 - 프로젝트 기간: 2026-08-13 ~ 2026-09-12
 - 현재 단계: 프로젝트 주제·데이터셋 선정 및 아키텍처 설계
-- 성격: Kafka·Spark·Airflow local 기반 데이터 엔지니어링 프로젝트, AI 설명 기능으로 단계적 확장
+- 핵심 기술: Kafka, Spark Structured Streaming, Airflow, PostgreSQL
+- MVP 범위: 데이터 수집·가공·저장, 이상 징후 탐지, 정합성 검증, 부하·장애 테스트
+
+## 한눈에 보는 핵심 흐름
+
+```text
+Alpaca IEX 개별 거래
+→ Kafka로 수집
+→ Spark로 종목별 1분 OHLCV 집계
+→ 가격 변동률·거래량 Z-score 계산
+→ PRELIMINARY_IEX 예비 이상 징후 생성
+→ 15분 이상 지난 SIP 데이터로 재검증
+→ PostgreSQL에 근거와 상태 저장
+
+FRED 거시경제 데이터
+→ Airflow 정기 수집
+→ 이상 징후 발생 당시의 시장 환경과 함께 조회
+```
 
 ## 1차시 프로젝트 초안
 
 ### 무엇을, 왜 만드는가
 
-미국 주식시장은 가격과 거래량뿐 아니라 금리·물가·뉴스 같은 서로 다른 데이터의 영향을 동시에 받는다. 하지만 이 데이터들은 형식과 갱신 주기가 달라 한 번에 분석하기 어렵다.
+미국 주식 실시간 API는 개별 거래를 계속 전달하지만, 원본 거래만으로는 특정 종목의 가격과 거래량이 평소보다 얼마나 급격하게 변했는지 바로 판단하기 어렵다. 또한 무료 IEX 데이터는 미국 전체 거래소를 대표하지 않으므로 탐지 결과의 범위를 그대로 신뢰해서도 안 된다.
 
-이 프로젝트는 실시간 시세, 거시경제 지표, 금융 뉴스를 공통 시간축과 데이터 모델로 통합하고 다음 결과를 만든다.
+이 프로젝트는 원본 거래를 종목별 1분 OHLCV로 가공하고, 최근 가격 변동률과 거래량 증가 정도를 계산해 설명 가능한 이상 징후를 만든다. 실시간 IEX 결과는 예비 경고로 저장하고, 15분 이상 지난 SIP 전체시장 bar로 같은 움직임이 확인되는지 재검증한다.
 
-- 가격·거래량 급변과 같은 시장 이상 징후
-- 기술적·거시경제·이벤트 정보를 조합한 시장 상태
-- 어떤 데이터 때문에 결과가 발생했는지 보여주는 설명과 출처
+FRED의 금리·물가·고용 데이터는 이상 징후의 원인이라고 단정하는 데 사용하지 않는다. 경고가 발생한 시점에 어떤 거시경제 환경이 관측되고 있었는지 함께 조회하고 설명하기 위한 보조 데이터다.
 
-목표는 미래 가격을 확정적으로 예측하는 것이 아니라, 흩어진 시장 데이터를 **수집 → 구조화 → 분석 → 설명**할 수 있는 재현 가능한 데이터 파이프라인을 구축하는 것이다.
+목표는 미래 가격을 예측하거나 투자 신호를 만드는 것이 아니라, 원본 데이터를 **수집 → 가공 → 탐지 → 검증**하는 과정을 재현하고 장애 이후에도 같은 결과를 만들 수 있는 데이터 파이프라인을 구축하는 것이다.
 
 1차 사용자는 파이프라인 상태와 데이터 일관성을 확인하는 프로젝트 운영자/데이터 엔지니어이며, 2차 사용자는 PostgreSQL에서 bar·feature·alert를 조회하는 데이터 분석가다. FastAPI/Streamlit 사용자는 선택 구현 범위다.
 
 ### 사용할 데이터와 출처
 
-| 데이터 | 출처 | 사용 목적 |
-| --- | --- | --- |
-| 미국 주식·ETF IEX trade | [Alpaca Market Data API](https://docs.alpaca.markets/us/docs/about-market-data-api) | 무료 실시간 수집, IEX 1분 bar, 예비 이상 징후 |
-| 15분 이상 지난 미국 전체시장 bar | [Alpaca historical SIP](https://docs.alpaca.markets/us/docs/market-data-faq) | IEX alert 정합성 검증과 확정/기각 |
-| CPI·PCE·고용·금리·국채금리·VIX | [FRED API](https://fred.stlouisfed.org/docs/api/fred/overview.html) | 거시경제 환경과 변화 방향 분석 |
-| 기업·산업·거시경제 뉴스 | [Alpaca News API](https://docs.alpaca.markets/us/docs/historical-news-data) | 뉴스 중복 제거, 중요 이벤트 구조화 |
-| Replay/합성 fixture | 실제 응답 스키마 기반 자체 생성 | 장외 시간, 장애, 중복·지연 시나리오 재현 |
+| 데이터 | 출처 | 가공 | 프로젝트에서의 역할 |
+| --- | --- | --- | --- |
+| 미국 주식·ETF IEX trade | [Alpaca Market Data API](https://docs.alpaca.markets/us/docs/about-market-data-api) | 종목별 1분 OHLCV·VWAP·거래 횟수 | 무료 실시간 예비 이상 징후 탐지 |
+| 15분 이상 지난 미국 전체시장 bar | [Alpaca historical SIP](https://docs.alpaca.markets/us/docs/market-data-faq) | 같은 구간의 SIP feature 재계산 및 IEX와 비교 | 예비 경고 확정·기각 |
+| CPI·PCE·고용·금리·국채금리·VIX | [FRED API](https://fred.stlouisfed.org/docs/api/fred/overview.html) | 관측값·변화 방향·발표/수집 시각 정규화 | 경고 당시 거시경제 환경 설명 |
+| Replay/합성 fixture | 실제 응답 스키마 기반 자체 생성 | 배속·중복·지연·오류 event 구성 | 장외 데모, 부하 및 장애 복구 검증 |
+| 금융 뉴스 | [Alpaca News API](https://docs.alpaca.markets/us/docs/historical-news-data) | 중복 제거·관련 종목 필터·구조화 | 핵심 파이프라인 완료 후 선택 구현 |
 
-초기 분석 대상은 시장 ETF, 반도체 ETF, 주요 반도체 및 Nasdaq 종목, 실행 관찰용 ETF를 합친 약 22개 종목이다. `SOXL`과 `SOXS`는 향후 시뮬레이션 후보이며 시장 방향 판단의 핵심 입력으로 사용하지 않는다.
+초기 분석 대상은 시장 ETF(`SPY`, `QQQ`), 반도체 ETF(`SMH`, `SOXX`), 주요 반도체·Nasdaq 종목을 합친 약 22개 종목이다. 정확한 종목 목록은 Alpaca 구독 smoke test와 종목별 event 비중을 확인한 뒤 2회차에 고정한다. `SOXL`과 `SOXS`는 향후 시뮬레이션 후보이며 시장 방향 판단의 핵심 입력으로 사용하지 않는다.
+
+### 원본 데이터를 어떻게 분석하는가
+
+Alpaca WebSocket 원본 trade payload는 거래 ID, 거래소, 가격, 수량, 거래 조건과 시각을 포함한다.
+
+```json
+{"T":"t", "S":"NVDA", "i":12345, "x":"V", "p":182.10, "s":100, "c":["@"], "t":"2026-08-13T14:00:03Z", "z":"C"}
+```
+
+수집 adapter는 provider 전용 필드를 `symbol`, `price`, `size`, `exchange`, `conditions`, `event_timestamp`라는 내부 계약으로 정규화한다. Spark는 trade condition별 집계 포함 규칙을 적용한 뒤 여러 거래를 event time 기준 1분 window로 묶는다. 아래 숫자는 처리 방식을 설명하기 위한 단순 예시다.
+
+```text
+NVDA 14:00 UTC
+Open=182.10  High=182.42  Low=182.10  Close=182.42
+Volume=350   TradeCount=3   VWAP=182.32
+```
+
+확정된 1분 bar에서 다음과 같은 설명 가능한 feature를 계산한다.
+
+| Feature | 의미 | 초기 탐지 방식 |
+| --- | --- | --- |
+| `return_5m` | 최근 5분 가격 변동률 | 설정한 상승·하락 임계값과 비교 |
+| `volume_zscore` | 최근 기준 구간 대비 거래량 증가 정도 | 평소 분포에서 얼마나 벗어났는지 비교 |
+| `atr_normalized_move` | 최근 변동성 대비 현재 움직임 | 평소 변동 폭의 몇 배인지 비교 |
+
+예를 들어 `return_5m=+3.2%`, `volume_zscore=4.1`처럼 가격과 거래량 조건을 함께 충족하면 실제 관측값, 임계값 버전, `feed=iex`를 포함한 `PRELIMINARY_IEX` 경고를 저장한다. 이후 같은 구간의 SIP bar와 **SIP 전용 기준선**으로 규칙을 다시 계산해 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 전이한다. IEX와 SIP 기준선은 섞지 않는다.
 
 ### 수집 → 처리 → 저장 흐름
 
@@ -54,9 +95,8 @@ flowchart LR
     Filter --> Event["LLM 구조화 이벤트 (선택)"]
     Event --> DB
 
-    DB --> Signal["Anomaly Engine"]
-    Signal --> API["FastAPI (선택)"]
-    API --> Dashboard["Streamlit (선택)"]
+    DB --> Query["SQL 조회·결과 검증"]
+    Query -. 선택 .-> API["FastAPI·Streamlit"]
 ```
 
 실시간 IEX 데이터는 Kafka로 생산자와 소비자를 분리하고, 15분 이상 지난 SIP bar와 FRED 데이터는 Airflow로 수집한다. IEX alert는 `PRELIMINARY_IEX`로만 생성하고 SIP 검증 후 `CONFIRMED_SIP` 또는 `REJECTED_AFTER_RECONCILIATION`으로 전이한다. PostgreSQL에는 raw tick 전체가 아니라 애플리케이션과 분석에 필요한 1분 bar, feature, 정합성 결과, alert를 저장한다.
@@ -76,29 +116,6 @@ flowchart LR
 
 Kafka, Spark, Airflow는 과정 필수 기술로 확정한다. 나머지 후보는 실제 문제를 해결하고 필수 파이프라인 이후 직접 검증할 시간이 있을 때만 채택한다.
 
-## 아키텍처 방향
-
-프로젝트는 세 계층을 명확히 분리한다.
-
-```mermaid
-flowchart TB
-    Data["Data Platform\nKafka·Spark·Airflow·PostgreSQL"] --> Intelligence["Market Intelligence\nFeature·이상 징후·시장 신호"]
-    Intelligence --> Product["Product Layer\nAPI·Dashboard·설명"]
-    Intelligence -. 확장 .-> Agent["Evidence Agent\nMCP Tools·RAG·평가"]
-    Agent --> Product
-```
-
-핵심 원칙:
-
-- 데이터 파이프라인과 규칙 기반 엔진이 사실과 신호의 원천이다.
-- LLM은 뉴스를 구조화하거나 이미 생성된 결과의 근거를 설명한다.
-- Agent가 임의로 매수·매도 신호를 만들거나 주문하지 않는다.
-- 외부 API는 adapter 뒤에 두고 provider 변경이 내부 계약을 바꾸지 않게 한다.
-- 모든 결과에 데이터 시각, 출처, 신선도, 판단 근거를 남긴다.
-- 시장이 닫히거나 API가 실패해도 동일 schema의 replay로 재현한다.
-
-최종적으로는 이상 징후가 발생했을 때 Agent가 read-only MCP 도구로 시장 데이터와 파이프라인 상태를 조회하고, RAG로 관련 공시·뉴스를 찾아 출처와 함께 원인을 설명하는 시스템으로 확장한다. 전체 목표와 단계별 범위는 [최종 프로젝트 비전](docs/final-vision.md)에 정리했다.
-
 ## 4주·8회차 MVP
 
 발표일까지의 우선순위는 다음 수직 흐름이다.
@@ -116,7 +133,26 @@ flowchart TB
 
 Kafka Producer/Consumer, Spark 전처리·집계, PostgreSQL 저장, Airflow DAG가 필수 산출물이다. FastAPI·Streamlit과 뉴스·LLM은 시간이 허락할 때 추가한다. Agent, MCP, RAG, 실계좌 거래는 핵심 파이프라인 이후 **read-only MCP → 제한된 Agent Loop → RAG → 평가·보안 강화** 순서로 확장한다.
 
+| 구분 | 범위 |
+| --- | --- |
+| 필수 | Kafka producer/replay, Spark 1분 집계, PostgreSQL 멱등 저장, 이상 징후 규칙, Airflow SIP/FRED DAG, 부하·장애 테스트 |
+| 선택 | FastAPI, Streamlit, 뉴스·LLM 구조화 |
+| MVP 이후 | Agent, MCP, RAG, 예측 모델, paper/live trading |
+
+개발과 기본 검증은 Docker Compose local 환경에서 수행한다. 클라우드는 OCI Ampere A1 무료 ARM 인스턴스 2대를 확보할 수 있을 때 Streaming Node와 Data/Batch Node로 분리하는 안을 검증한다. ARM64 이미지 호환성과 실제 CPU·메모리 사용량을 확인하기 전에는 확정 인프라로 간주하지 않는다.
+
 상세 일정과 완료 조건은 [PROJECT_PLAN.md](PROJECT_PLAN.md), MVP 시스템 경계는 [아키텍처 문서](docs/architecture.md)를 참고한다.
+
+## 멘토 피드백 요청
+
+현재 초안에서 특히 다음 내용을 검토받고 싶다.
+
+1. 22개 IEX 종목 규모에서 Kafka와 Spark의 역할을 위와 같이 한정한 것이 적절한가?
+2. raw trade를 직접 1분 OHLCV로 집계할 때 반드시 반영해야 할 trade condition과 late-event 정책은 무엇인가?
+3. IEX 예비 경고를 15분 이상 지난 SIP bar로 재검증하는 범위가 4주 MVP에 적절한가?
+4. Airflow가 SIP reconciliation과 FRED 정기 수집을 담당하도록 나누는 구조가 자연스러운가?
+5. 부하·장애 테스트에서 필수로 측정해야 할 지표와 현실적인 성공 기준은 무엇인가?
+6. OCI A1 `1 OCPU·6GB` 두 대에 Streaming Node와 Data/Batch Node를 분리하는 안이 현실적인가?
 
 ## 프로젝트 문서
 
