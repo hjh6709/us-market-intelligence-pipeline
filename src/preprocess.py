@@ -82,6 +82,23 @@ def validate_market_trades(
     blank_source_id = F.col("source_event_id").isNull() | (
         F.trim("source_event_id") == ""
     )
+    blank_source = F.col("source").isNull() | (F.trim("source") == "")
+    blank_feed = F.col("feed").isNull() | (F.trim("feed") == "")
+    source_id_mismatch = (
+        F.col("source_event_id").isNotNull()
+        & F.col("provider_trade_id").isNotNull()
+        & (
+            F.trim("source_event_id")
+            != F.col("provider_trade_id").cast("string")
+        )
+    )
+    timezone_suffix = r"(?i)(Z|[+-][0-9]{2}:[0-9]{2})$"
+    invalid_timestamp = (
+        F.col("envelope_timestamp").isNull()
+        | F.col("event_timestamp").isNull()
+        | ~F.col("envelope_timestamp_raw").rlike(timezone_suffix)
+        | ~F.col("payload_timestamp_raw").rlike(timezone_suffix)
+    )
     timestamp_mismatch = (
         F.col("envelope_timestamp").isNotNull()
         & F.col("event_timestamp").isNotNull()
@@ -103,17 +120,29 @@ def validate_market_trades(
             ),
             (blank_event_id, "MISSING_EVENT_ID"),
             (blank_source_id, "MISSING_SOURCE_EVENT_ID"),
+            (blank_source, "MISSING_SOURCE"),
+            (blank_feed, "MISSING_FEED"),
+            (source_id_mismatch, "SOURCE_EVENT_ID_MISMATCH"),
             (
                 F.col("symbol").isNull() | ~F.col("symbol").isin(allowlist),
                 "SYMBOL_NOT_ALLOWED",
             ),
+            (
+                F.col("provider_trade_id").isNull(),
+                "INVALID_PROVIDER_TRADE_ID",
+            ),
+            (
+                F.col("exchange").isNull() | (F.trim("exchange") == ""),
+                "INVALID_EXCHANGE",
+            ),
+            (F.col("conditions").isNull(), "INVALID_CONDITIONS"),
+            (
+                F.col("tape").isNull() | (F.trim("tape") == ""),
+                "INVALID_TAPE",
+            ),
             (F.col("price").isNull() | (F.col("price") <= 0), "INVALID_PRICE"),
             (F.col("size").isNull() | (F.col("size") < 0), "INVALID_SIZE"),
-            (
-                F.col("envelope_timestamp").isNull()
-                | F.col("event_timestamp").isNull(),
-                "INVALID_TIMESTAMP",
-            ),
+            (invalid_timestamp, "INVALID_TIMESTAMP"),
             (timestamp_mismatch, "TIMESTAMP_MISMATCH"),
         ]
     )

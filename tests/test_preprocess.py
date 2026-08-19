@@ -76,10 +76,30 @@ class PreprocessTest(unittest.TestCase):
             ("UNSUPPORTED_SCHEMA_VERSION", lambda event: event.update(schema_version=2)),
             ("MISSING_EVENT_ID", lambda event: event.update(event_id=None)),
             ("MISSING_SOURCE_EVENT_ID", lambda event: event.update(source_event_id=None)),
+            ("MISSING_SOURCE", lambda event: event.update(source="")),
+            ("MISSING_FEED", lambda event: event.update(feed=None)),
+            (
+                "SOURCE_EVENT_ID_MISMATCH",
+                lambda event: event.update(source_event_id="999"),
+            ),
             ("SYMBOL_NOT_ALLOWED", lambda event: event["payload"].update(S="TSLA")),
+            (
+                "INVALID_PROVIDER_TRADE_ID",
+                lambda event: event["payload"].update(i=None),
+            ),
+            ("INVALID_EXCHANGE", lambda event: event["payload"].update(x="")),
+            ("INVALID_CONDITIONS", lambda event: event["payload"].update(c=None)),
+            ("INVALID_TAPE", lambda event: event["payload"].update(z=None)),
             ("INVALID_PRICE", lambda event: event["payload"].update(p=0)),
             ("INVALID_SIZE", lambda event: event["payload"].update(s=-1)),
             ("INVALID_TIMESTAMP", lambda event: event["payload"].update(t="bad-time")),
+            (
+                "INVALID_TIMESTAMP",
+                lambda event: (
+                    event.update(event_timestamp="2026-08-19T13:30:00"),
+                    event["payload"].update(t="2026-08-19T13:30:00"),
+                ),
+            ),
             (
                 "TIMESTAMP_MISMATCH",
                 lambda event: event["payload"].update(t="2026-08-19T13:31:00Z"),
@@ -96,13 +116,17 @@ class PreprocessTest(unittest.TestCase):
             ["NVDA"],
         )
         valid, invalid = split_valid_invalid(validated)
-        reason_sets = [set(row.reason_codes) for row in invalid.collect()]
+        reasons_by_raw = {
+            row.raw_value: set(row.reason_codes)
+            for row in invalid.select("raw_value", "reason_codes").collect()
+        }
 
         self.assertEqual(valid.count(), 0)
-        for _, expected_reason in cases:
-            self.assertTrue(
-                any(expected_reason in reasons for reasons in reason_sets),
+        for raw_value, expected_reason in cases:
+            self.assertIn(
                 expected_reason,
+                reasons_by_raw.get(raw_value, set()),
+                raw_value,
             )
 
     def valid_trades(self, events: list[dict]):
@@ -122,7 +146,7 @@ class PreprocessTest(unittest.TestCase):
         for event_id, timestamp, price, size in event_specs:
             event = canonical_event()
             event["event_id"] = event_id
-            event["source_event_id"] = event_id
+            event["source_event_id"] = str(len(events) + 1)
             event["event_timestamp"] = timestamp
             event["payload"].update(i=len(events) + 1, p=price, s=size, t=timestamp)
             events.append(event)
