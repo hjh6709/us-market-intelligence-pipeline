@@ -2,7 +2,7 @@
 
 검증일: **2026-08-13**
 
-원칙: 구현 직전과 발표 전 다시 공식 문서를 확인한다. 정책·가격·모델·quota는 config나 문서의 숫자를 영구 진실로 취급하지 않는다.
+원칙: 장기적으로 자동매매까지 확장하더라도 Stage A는 시장·경제 데이터 API만 사용하며 주문 API를 호출하지 않는다. 경제지표 분석은 공식 발표 시각과 당시 공개된 vintage가 확인될 때만 수행한다.
 
 API별 제공 channel·field와 MVP 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)에 정의한다.
 
@@ -13,11 +13,14 @@ API별 제공 channel·field와 MVP 선택 범위는 [API 데이터 소스 카�
 | Realtime market data | Alpaca Trading API Basic / IEX | replay fixture | 채택 |
 | Market reconciliation | Alpaca historical SIP, `end <= now - 15m` | stored SIP fixture | 채택 |
 | News | Alpaca News | stored fixture | 선택 구현, account entitlement smoke test 필요 |
-| Macro | FRED API | stored response fixture | 채택 |
+| Macro values/vintage | FRED/ALFRED API | stored response fixture | 채택 |
+| Official release time | BLS·BEA·Federal Reserve 공식 일정 | stored schedule fixture | 채택 |
 | LLM | Groq API | deterministic stub/cache | 선택 구현 1차 후보, account quota smoke test 필요 |
 | Market calendar | Alpaca Calendar/Clock | calendar fixture | 채택 |
 
 한 기능에 상용 provider 여러 개를 동시에 구현하지 않는다. adapter 계약과 fixture가 교체 가능성을 제공하며, 실제 대체 공급자는 필요가 생겼을 때 추가한다. 무료 조건에서 22개 종목의 전체 미국시장 SIP raw trade를 실시간 제공하는 검증된 공급자는 없으므로, 전체시장 실시간 경고를 MVP 요구사항으로 두지 않는다.
+
+Alpaca의 주문·계좌 API는 장기 자동매매 단계의 별도 결정 대상이다. 이번 문서의 Alpaca 채택은 실시간·과거 **시장 데이터 공급자**로서의 선택이며, 향후 broker·execution provider까지 자동으로 확정한 것이 아니다.
 
 ## 2. Alpaca Market Data
 
@@ -36,6 +39,7 @@ MVP 결정:
 - SIP 수준 coverage나 전체시장 VWAP이라고 표현하지 않는다.
 - historical SIP 수집은 latest endpoint를 사용하지 않고 `end <= now - 15m`인 닫힌 1분 window만 요청한다.
 - 실제 Airflow DAG는 5분 safety margin을 더해 초기에는 `window_end <= now - 20m`인 미수집 구간을 15분마다 조회한다.
+- 주문 제출, 계좌 잔고, position endpoint는 Stage A credential과 실행 경계에서 제외한다.
 
 공식 출처:
 
@@ -102,23 +106,45 @@ MVP 결정:
 3. 원문 저장·표시·캐시 관련 terms
 4. rate/connection limit과 재연결
 
-## 4. FRED
+## 4. Official macro release schedules
+
+첫 분석 대상은 CPI, Employment Situation, FOMC이며 PCE는 후속 후보로 둔다. 정확한 발표 시각과 reference period는 BLS·BEA·Federal Reserve 공식 일정 또는 release page에서 가져오고 URL을 함께 저장한다. 페이지 형식이 바뀔 수 있으므로 fixture contract test와 수동 검증 절차를 둔다.
+
+MVP 결정:
+
+- 공식 시각을 UTC로 정규화하되 원래 `America/New_York` 시각과 timezone을 보존한다.
+- FRED의 observation date나 release date를 임의의 장중 발표 시각으로 변환하지 않는다.
+- 공식 시각을 확인하지 못한 event는 영향 분석에서 제외한다.
+- forecast consensus는 별도 검증된 provider가 생길 때까지 nullable이다.
+
+공식 출처:
+
+- [BLS release calendar](https://www.bls.gov/schedule/)
+- [BEA news release schedule](https://www.bea.gov/news/schedule)
+- [Federal Reserve FOMC calendars](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
+
+## 5. FRED / ALFRED
 
 FRED API는 HTTPS REST로 FRED/ALFRED series와 observations를 JSON/XML 등으로 조회할 수 있다. 모든 web service request에는 계정에서 발급받은 API key가 필요하다. 공식 오류 문서는 rate limit 초과 시 429를 반환할 수 있다고 안내하지만 고정 숫자를 보장하지 않는다.
 
 MVP 결정:
 
-- daily Airflow DAG로 필요한 series만 증분 조회한다.
-- response의 observation/vintage 정보를 보존한다.
+- daily Airflow DAG와 historical backfill로 필요한 series만 조회한다.
+- response의 observation/vintage와 `realtime_start/realtime_end`를 보존한다.
 - 429에서는 bounded retry하며 호출량을 보수적으로 유지한다.
 - 앱에는 FRED required notice를 표시한다.
 - forecast consensus provider로 간주하지 않는다.
+- CPI·고용 등 event에는 발표 당시 이용 가능했던 observation/vintage를 연결한다.
+- `DGS2`, `DGS10`, `DFF`, `VIXCLS`는 발표 전 시장 환경과 후속 시장 국면 feature 후보로 사용한다.
+- FRED release date는 source가 제공한 날짜이며 FRED에서 실제 이용 가능해진 정확한 시각을 뜻한다고 가정하지 않는다.
 
 공식 출처:
 
 - [FRED API overview](https://fred.stlouisfed.org/docs/api/fred/overview.html)
 - [FRED API key requirements](https://fred.stlouisfed.org/docs/api/api_key.html)
 - [Series observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
+- [Release dates](https://fred.stlouisfed.org/docs/api/fred/release_dates.html)
+- [Series vintage dates](https://fred.stlouisfed.org/docs/api/fred/series_vintagedates.html)
 - [API errors and 429 behavior](https://fred.stlouisfed.org/docs/api/fred/errors.html)
 - [FRED API Terms of Use](https://fred.stlouisfed.org/docs/api/terms_of_use.html)
 
@@ -126,7 +152,7 @@ MVP 결정:
 
 > This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
 
-## 5. Groq LLM — Optional
+## 6. Groq LLM — Optional
 
 Groq 공식 문서는 Free Plan limits를 모델별 RPM/RPD/TPM/TPD로 공개하며, 정확한 조직 한도는 account limits page에서 확인하라고 안내한다. Structured Outputs는 지원 모델에서 JSON Schema를 사용할 수 있고 strict mode는 현재 일부 모델로 제한된다.
 
@@ -155,7 +181,7 @@ MVP 결정:
 4. 한국에서 사용 가능 여부와 data retention/privacy 조건
 5. 429 headers와 bounded retry
 
-## 6. Market Calendar and Clock
+## 7. Market Calendar and Clock
 
 Alpaca Calendar는 거래일과 조기 종료를 포함한 open/close 정보를, Clock은 현재 시장 상태와 다음 open/close 정보를 제공한다. 2026년에는 market code 범위가 확장되고 endpoint version 문서도 변경되었으므로 SDK가 사용하는 Trading API 버전을 smoke test로 확인한다.
 
@@ -171,7 +197,7 @@ MVP 결정:
 - [Trading API market clock](https://docs.alpaca.markets/us/reference/clock-1)
 - [2026 calendar/clock market code update](https://docs.alpaca.markets/us/changelog/2026-06-04-market-codes-e8e76b9)
 
-## 7. Spark Structured Streaming — Required Processing Engine
+## 8. Spark Structured Streaming — Required Processing Engine
 
 Spark는 외부 API가 아니지만 데이터·플랫폼 선택 근거를 한곳에서 추적하기 위해 이 문서에 포함한다.
 

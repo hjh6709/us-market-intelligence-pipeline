@@ -4,7 +4,7 @@
 
 기준일: 2026-08-13
 
-이 문서는 4주 MVP에서 **무엇을 얼마나 수집하고, 어디에 저장하며, 무엇에 사용하고, 언제 삭제하는지**를 한곳에 정의한다. 실제 event 수와 byte 크기는 live smoke test 전에는 알 수 없으므로 임의로 만들지 않고, 수집 범위와 보존 한도를 먼저 고정한 뒤 측정값을 기록한다.
+이 문서는 경제지표 영향 검증과 자동매매 데이터 기반을 만드는 4주 MVP에서 **무엇을 얼마나 수집하고, 어디에 저장하며, 무엇에 사용하고, 언제 삭제하는지**를 한곳에 정의한다. Stage A 데이터는 후속 전략·백테스트 입력으로 사용할 수 있어야 하지만 실제 주문에는 연결하지 않는다.
 
 ## 1. 수집 범위와 기간
 
@@ -18,7 +18,7 @@
 
 ### 세션 범위
 
-P0 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 사용한다. 장전·장후 event는 수신 상태를 smoke test로 관찰할 수 있지만 정규장 baseline과 섞지 않으며 P0 alert 계산에서는 제외한다. 휴장일과 조기 종료일은 Alpaca Calendar 결과를 따른다.
+실시간 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 사용한다. 경제지표 영향 분석은 공식 발표 시각을 기준으로 별도 window를 사용한다. CPI·고용처럼 장전 발표는 extended-hours SIP coverage가 충분한 경우에만 즉시 반응을 계산하고, 그렇지 않으면 첫 정규장 반응을 별도 결과로 저장한다. 장전과 정규장 baseline을 섞지 않는다.
 
 ### 프로젝트 수집 기간
 
@@ -26,6 +26,7 @@ P0 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 
 - live 수집 종료 목표: 최종 발표일 2026-09-12
 - 최소 성공 목표: 정규장 10거래일 이상의 live 또는 recorded run
 - baseline warm-up: 발표 기간만 기다리지 않고, 시작 시점에 완료된 과거 정규장 20거래일의 IEX/SIP 1분 bar를 feed별로 backfill
+- macro event-study 후보: 최근 24개월 CPI·Employment Situation·FOMC. 공식 일정과 1분 bar coverage smoke test 후 실제 분석 범위를 확정
 
 20거래일 warm-up은 초기 운영값이다. 결측률과 feature 안정성을 측정한 뒤 변경하면 version과 근거를 남긴다.
 
@@ -33,12 +34,15 @@ P0 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 
 
 | 데이터 | 수집량·주기 | 저장 위치 | 활용 | 보존·삭제 |
 | --- | --- | --- | --- | --- |
+| 공식 경제지표 발표 일정 | CPI·고용·FOMC 최근 24개월 후보, 이후 증분 확인 | PostgreSQL `economic_events` | 정확한 event time, reference period와 공식 source URL | MVP 자동 삭제 없음 |
+| FRED/ALFRED observation·vintage | 9개 series, 일 1회 + event-study backfill | PostgreSQL `macro_observations` | 당시 공개된 actual/previous 값과 revision 추적 | MVP 자동 삭제 없음 |
+| SIP macro event window | 각 event의 설정된 발표 전후 window, 약 22종목 | PostgreSQL `market_bars`, `feed=sip` | 수익률·거래량·변동성과 시장·섹터 비교 | 관련 impact와 함께 MVP 자동 삭제 없음; 범용 90일 cleanup에서 제외 |
+| Macro impact 결과 | event×symbol×window×analysis version | PostgreSQL `macro_event_impacts`, reports | 반복된 반응, 표본 수, coverage와 한계 검증 | MVP 자동 삭제 없음 |
 | Alpaca IEX raw trade | 22종목 정규장 동안 수신되는 raw trade 전체 | Streaming Node Kafka `raw.market.v1` | Spark parsing·검증·1분 OHLCV 집계, 지연·중복·처리량 측정 | Kafka time retention 24시간 후 자동 삭제. PostgreSQL에 raw tick 장기 저장 안 함 |
 | IEX 1분 bar | 최대 `22 × 390 = 8,580 rows/정규 거래일` | Data/Batch Node PostgreSQL `market_bars`, `feed=iex` | 실시간 feature와 `PRELIMINARY_IEX` alert | 90일 rolling retention. 프로젝트 중에는 90일 미만이므로 유지 |
 | SIP 1분 bar | Airflow가 15분마다 `window_end <= now-20m`인 미수집 구간을 batch 조회. 최대 8,580 rows/거래일 | PostgreSQL `market_bars`, `feed=sip` | IEX/SIP bar 비교, SIP 전용 feature, alert 확정·기각 | 90일 rolling retention. IEX bar를 덮어쓰지 않음 |
-| Technical feature | feed별 1분 snapshot. 최대 bar 수와 같은 차수 | PostgreSQL `technical_features` | `return_5m`, volume Z-score, ATR-normalized move와 alert 근거 | 90일 rolling retention |
-| Alert/reconciliation | 조건을 만족한 alert와 해당 SIP 재평가만 생성 | PostgreSQL `anomaly_alerts`, reconciliation/history tables | 경고 근거, 예비/확정/기각 상태, 감사 이력 | 90일 보존. 발표 결과 snapshot은 보고서로 별도 보존 |
-| FRED macro | 9개 series, Airflow daily `14:00 UTC`, 최근 7일 overlap 조회 | PostgreSQL `macro_observations` | alert 시각 이전에 알려진 금리·물가·고용·변동성 환경 조회 | 데이터량이 작아 MVP에서는 자동 삭제하지 않음. revision/vintage 보존 |
+| Technical feature | feed별 1분 snapshot. 최대 bar 수와 같은 차수 | PostgreSQL `technical_features` | `return_5m`, volume Z-score, ATR-normalized move와 alert 근거; 후속 point-in-time 전략 연구 입력 | 90일 rolling retention |
+| Alert/reconciliation | 조건을 만족한 alert와 해당 SIP 재평가만 생성 | PostgreSQL `anomaly_alerts`, reconciliation/history tables | 경고 근거, 예비/확정/기각 상태, 감사 이력; 후속 전략 평가 후보 | 90일 보존. 발표 결과 snapshot은 보고서로 별도 보존 |
 | Replay fixture | 정상 60분 구간 1개와 duplicate/late/invalid/spike 시나리오 | 작은 fixture는 Git, 큰 capture는 로컬/OCI volume | 장외 데모, 1x·10x·50x·100x 부하 테스트, 장애 회귀 테스트 | 작은 deterministic fixture는 계속 보존. 임시 live raw capture는 최종 발표 30일 후 삭제 |
 | DLQ | validation 실패 또는 처리 불가 event | Kafka `dead-letter.v1`; 필요 시 오류 metadata만 PostgreSQL | 오류 유형·건수 확인과 재현 | 7일 후 자동 삭제 |
 | Pipeline log/metric | 실행 중 structured log와 run별 집계 metric | 각 node log volume, 결과 요약은 report | lag, latency, CPU/RAM, recovery time 설명 | 원본 log 14일, 요약 report는 repository에 계속 보존 |
@@ -47,6 +51,20 @@ P0 이상 징후 탐지는 미국 정규장 `09:30–16:00 America/New_York`만 
 SIP DAG의 `now-20m`은 무료 historical SIP의 15분 제한에 5분 safety margin을 둔 초기값이다. 실제 account smoke test 후 schedule을 조정해도 `end <= now-15m` 계약은 위반하지 않는다.
 
 ## 3. Feature와 분석에서 실제로 사용하는 방법
+
+### 경제지표 발표 영향 분석 — 첫 번째 목표
+
+```text
+공식 발표 시각 + 당시 이용 가능했던 FRED/ALFRED vintage
+→ SIP 발표 전후 1분 bar
+→ 5분·30분·60분 수익률, 거래량, 실현 변동성
+→ 평소 같은 시간대의 비발표일 baseline과 비교
+→ SPY/QQQ와 섹터 ETF 대비 반응 비교
+→ 동일 발표 유형의 여러 날짜를 집계
+→ 관측된 연관성, 표본 수, coverage와 한계 저장
+```
+
+초기 event type은 CPI, Employment Situation, FOMC다. 하나의 날짜만으로 “이 지표 때문에 움직였다”고 결론 내리지 않는다. 장전 data coverage가 기준보다 낮으면 `PARTIAL_MARKET_COVERAGE`, 반복 표본이 부족하면 `INSUFFICIENT_EVENT_SAMPLES`로 표시한다.
 
 ### IEX 실시간 탐지
 
@@ -73,7 +91,7 @@ IEX raw trade
 
 IEX feature를 SIP baseline에 비교하거나 SIP 값으로 IEX row를 수정하지 않는다. SIP 조회 실패나 누락은 기각이 아니라 `PRELIMINARY_IEX` 유지 사유다.
 
-### FRED 환경 설명
+### FRED/ALFRED 값과 지속적인 시장 환경
 
 | Series | 사용할 값 | 해석 범위 |
 | --- | --- | --- |
@@ -84,11 +102,22 @@ IEX feature를 SIP baseline에 비교하거나 SIP 값으로 IEX row를 수정�
 | `UNRATE` | 최근 발표값과 직전 발표 대비 변화 | 고용 환경 |
 | `VIXCLS` | 최신 이용 가능한 수준과 변화 | 시장 변동성 환경 |
 
-Alert 시각보다 늦게 수집·발표된 값을 과거 설명에 사용하지 않는다. FRED 값은 “주가가 움직인 원인”으로 단정하지 않고 alert 당시 이용 가능했던 배경 정보로만 표시한다.
+경제 이벤트에는 해당 발표 시점에 이용 가능했던 값과 vintage만 연결한다. `DGS2`, `DGS10`, `DFF`, `VIXCLS` 같은 연속 환경 지표도 event 이전 최신값만 사용한다. 미래 revision을 섞지 않으며 관측된 반응을 인과관계로 단정하지 않는다.
 
 ## 4. 최종 조회 결과
 
-MVP에서 한 alert를 설명할 때 다음 묶음을 조회할 수 있어야 한다.
+첫 번째 결과는 경제지표 영향 report다.
+
+```text
+event type, reference period, official released_at와 source URL
++ 당시 공개된 actual/previous와 vintage
++ 종목별 발표 후 5분·30분·60분 수익률·거래량·변동성
++ 평소 같은 시간대와 시장·섹터 ETF 대비 차이
++ 같은 발표 유형의 과거 표본 수와 분포
++ data coverage, analysis version과 해석 한계
+```
+
+두 번째 결과는 한 실시간 alert의 설명이다.
 
 ```text
 alert id, symbol, event time, status
@@ -96,11 +125,11 @@ alert id, symbol, event time, status
 + 사용한 IEX threshold와 baseline version
 + SIP 동일 구간 feature와 reconciliation 결과
 + SPY/QQQ/SMH/SOXX 동일 구간 변화
-+ alert 시각 기준 최신 FRED 환경
++ alert 시각 기준 최신 macro 환경과 가까운 공식 경제 이벤트
 + 데이터 freshness와 pipeline 상태
 ```
 
-이 결과는 인과관계나 투자 권유가 아니라 **무엇을 관측했고, 어느 범위의 데이터로 검증했는지**를 보여준다.
+이 결과는 Stage A에서 주문 지시가 아니라 **무엇을 관측했고, 어느 범위의 데이터로 검증했는지**를 보여주는 전략 입력 기반이다. 매수·매도 결정은 후속 전략, 거래비용을 포함한 백테스트와 위험 관리 규칙의 책임이다.
 
 ## 5. 저장 위치와 백업 경계
 

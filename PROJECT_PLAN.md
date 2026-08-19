@@ -6,11 +6,11 @@
 
 과정: **4주, 총 8회**
 
-이 문서는 [최종 프로젝트 비전](docs/final-vision.md)의 **Stage A — Data Pipeline MVP** 실행 계획이다. 수업의 필수 기술과 산출물인 Kafka, Spark Structured Streaming, Airflow를 local 환경에서 직접 구현하고 설명하는 것을 가장 먼저 완료한다.
+이 문서는 [최종 프로젝트 비전](docs/final-vision.md)의 **Stage A — Macro Impact Data Foundation MVP** 실행 계획이다. 장기 목표는 안전한 자동매매 시스템이지만, 이번 4주에는 경제지표 발표와 시장 반응을 재현 가능하게 검증하는 데이터 기반을 Kafka, Spark Structured Streaming, Airflow로 구현한다.
 
 ## 1. 프로젝트 목표
 
-> Alpaca IEX의 미국 주식 실시간 trade 데이터를 Kafka로 수집하고 Spark Structured Streaming으로 1분 OHLCV와 예비 이상 징후를 계산해 PostgreSQL에 저장하며, Airflow로 15분 이상 지난 SIP 데이터의 정합성 검증과 FRED 거시경제 수집을 수행하는 재현 가능한 금융 데이터 파이프라인을 구축한다.
+> CPI·고용·FOMC 발표 전후 미국 주식·ETF의 가격·거래량·변동성 반응을 당시 공개된 데이터로 검증하고, 실시간 이상 움직임까지 재현 가능한 금융 데이터 기반으로 저장한다.
 
 핵심 데모:
 
@@ -28,9 +28,15 @@ Alpaca historical SIP (end <= now - 15m)
 FRED
 → Airflow
 → PostgreSQL
+
+BLS/BEA/Federal Reserve official release times
++ FRED/ALFRED vintage values
++ historical SIP event windows
+→ Airflow / macro impact processor
+→ PostgreSQL
 ```
 
-뉴스·LLM, FastAPI, Streamlit, Signal Engine은 핵심 파이프라인과 부하·장애 검증이 끝난 뒤 추가하는 선택 구현이다.
+이번 MVP의 대표 결과는 경제지표별 발표 전후 반응과 비교 기준을 담은 `macro_event_impact`다. 이상 징후는 반응 구간을 찾는 보조 기능이며 자동 매수·매도 신호가 아니다. 전략·백테스트·위험 관리·paper trading은 Stage A 완료 후 별도 단계에서 구현한다.
 
 ## 2. Guideline 반영 결정
 
@@ -59,13 +65,15 @@ Kafka source
 1. Kafka Producer + replay dataset
 2. Spark Structured Streaming preprocess/aggregation
 3. PostgreSQL schema + idempotent load
-4. Airflow SIP reconciliation + FRED DAG
-5. Load test + failure recovery
-6. Technical/anomaly features
+4. Airflow 공식 발표 일정 + FRED/ALFRED + SIP DAG
+5. Macro release event study
+6. Load test + failure recovery
+7. Technical/anomaly features
 --------------------------------
-7. FastAPI / Streamlit
-8. News / LLM / composite signal
-9. Agent / MCP / RAG
+8. FastAPI / Streamlit
+9. Point-in-time strategy dataset / backtest
+10. Risk engine / paper trading
+11. News / LLM / Agent / MCP / RAG
 ```
 
 선 아래 기능 때문에 필수 산출물이 지연되면 해당 기능을 제거한다.
@@ -79,11 +87,13 @@ Kafka source
 | P0-3 | Spark 집계 | event-time 1분 window로 OHLCV, VWAP, trade count를 계산한다. |
 | P0-4 | 데이터 저장 | `foreachBatch` sink가 PostgreSQL business key upsert를 수행하며 같은 input replay에도 row 수와 값이 일관된다. |
 | P0-5 | Feature/anomaly | 확정 IEX bar와 IEX 전용 baseline에서 feature를 계산하고 `PRELIMINARY_IEX` alert와 source/feed를 저장한다. |
-| P0-6 | Airflow | historical SIP reconciliation과 FRED DAG가 예약/백필 수집을 수행하며 같은 logical date/window 재실행 시 중복되지 않는다. |
-| P0-7 | Load test | replay 배속별 throughput, Spark processing rate, batch duration, Kafka lag, DB latency, CPU/memory를 기록한다. |
-| P0-8 | Failure recovery | Kafka/Spark/PostgreSQL 중단, duplicate, out-of-order, invalid event 시나리오의 복구 결과가 남는다. |
-| P0-9 | Reproducibility | clean checkout에서 Docker Compose와 문서화된 명령으로 local pipeline과 offline replay를 실행한다. |
-| P0-10 | 제출물 | 구조도, 데이터 모델, producer/consumer, Spark 코드, DAG, DB schema/sample, README, 발표/데모 자료가 준비된다. |
+| P0-6 | Airflow | 공식 발표 일정, FRED/ALFRED vintage, historical SIP reconciliation DAG가 같은 logical date/window 재실행 시 중복되지 않는다. |
+| P0-7 | 경제지표 영향 분석 | CPI·고용·FOMC의 공식 발표 시각을 기준으로 SIP 발표 전후 수익률·거래량·변동성을 계산하고 평소·시장·섹터·과거 발표와 비교한다. |
+| P0-8 | 시점 정합성 | 결과마다 공식 출처, `released_at`, 당시 이용 가능한 vintage, market window와 분석 버전을 추적하며 미래 수정값을 섞지 않는다. |
+| P0-9 | Load test | replay 배속별 throughput, Spark processing rate, batch duration, Kafka lag, DB latency, CPU/memory를 기록한다. |
+| P0-10 | Failure recovery | Kafka/Spark/PostgreSQL 중단, duplicate, out-of-order, invalid event 시나리오의 복구 결과가 남는다. |
+| P0-11 | Reproducibility | clean checkout에서 Docker Compose와 문서화된 명령으로 local pipeline과 offline replay를 실행한다. |
+| P0-12 | 제출물 | 구조도, 데이터 모델, producer/consumer, Spark 코드, DAG, DB schema/sample, README, 발표/데모 자료가 준비된다. |
 
 P0가 완료되기 전에는 프로젝트가 완료된 것으로 보지 않는다.
 
@@ -102,7 +112,10 @@ src/
 │   └── anomaly.py               # finalized bar → feature/alert
 ├── providers/
 │   ├── alpaca.py                # IEX stream + delayed SIP bars
-│   └── fred.py
+│   ├── fred.py                  # observations + vintage
+│   └── release_calendar.py      # BLS/BEA/Fed official release times
+├── analysis/
+│   └── macro_impact.py          # event windows + baseline/control comparison
 ├── reconciliation/
 │   └── market.py               # IEX/SIP compare + alert transition
 ├── repositories/
@@ -111,7 +124,8 @@ src/
 
 airflow/dags/
 ├── market_reconciliation_dag.py
-└── fred_macro_dag.py
+├── fred_macro_dag.py
+└── macro_release_dag.py
 
 tests/
 ├── fixtures/
@@ -129,13 +143,13 @@ tests/
 
 - [x] 프로젝트 한 줄 목표
 - [x] Multi-source dataset 선정
-- [x] 데이터 엔지니어링 중심 범위와 장기 비전 분리
+- [x] 4주 데이터 기반과 장기 자동매매 목표의 범위 분리
 - [x] public repository용 README 초안
 
 발표 증거:
 
-- 왜 주식·거시·뉴스 데이터를 선택했는가
-- 가격 예측보다 파이프라인 재현성과 이상 징후 설명에 집중하는 이유
+- 왜 경제지표 발표 영향 검증을 첫 목표로 선택했는가
+- 자동매매를 장기 목표로 두면서도 이번 단계에서 인과 단정이 아닌 반복 가능한 시장 반응 검증을 먼저 하는 이유
 
 ### 2회차 — 데이터 및 구조 설계
 
@@ -143,11 +157,12 @@ tests/
 
 - Dataset A: Alpaca real-time market trades
 - Dataset B: Alpaca historical SIP 1-minute bars, 15분 이상 지연 검증
-- Dataset C: FRED macro observations
-- Dataset D: Alpaca news, 선택 구현
-- Dataset E: deterministic replay Parquet/JSON fixtures
+- Dataset C: BLS/BEA/Federal Reserve official release calendar/timestamp
+- Dataset D: FRED/ALFRED macro observations and vintage
+- Dataset E: Alpaca news, 선택 구현
+- Dataset F: deterministic replay Parquet/JSON fixtures
 - 각 API의 제공 데이터, 실제 선택 field, 제외 범위와 raw→normalized mapping
-- `IEX → Kafka → Spark → PostgreSQL`, `SIP/FRED → Airflow → PostgreSQL` 구조도
+- `official release/FRED/SIP → Airflow → macro impact → PostgreSQL`과 `IEX → Kafka → Spark → PostgreSQL` 구조도
 - Kafka/Spark/Airflow/PostgreSQL 선정 이유
 - 공통 event envelope와 DB logical schema
 - 1차/2차 사용자와 P0 query pattern
@@ -163,6 +178,7 @@ Exit gate:
 - local runtime/Java/Spark/Kafka 호환 버전 검증 계획이 있다.
 - 실제 EPS는 미측정으로 표시되고 측정 방법과 partition 재결정 조건이 문서화되어 있다.
 - 정규장 10거래일 수집 목표, 과거 20거래일 feed별 warm-up, raw 24시간/분석 결과 90일 보존 정책을 설명할 수 있다.
+- CPI·고용·FOMC 최근 24개월은 초기 목표이며, 공식 발표 시각과 장전 SIP coverage smoke test 결과로 최종 분석 범위를 확정한다.
 
 ### 3회차 — Kafka 수집 설계 및 구현
 
@@ -224,9 +240,11 @@ Exit gate:
 
 1. 15분 schedule에서 `window_end <= now-20m`인 닫힌 window를 고르는 SIP reconciliation provider/task
 2. SIP bar validate/upsert → IEX/SIP 비교 → alert 상태 전이
-3. FRED 9개 series를 일 1회 수집하고 최근 7일을 overlap하는 extract → validate → upsert → quality check task
-4. logical date/window 기반 증분·백필 범위와 idempotency
-5. retry, exponential backoff, timeout, pipeline status 기록
+3. 공식 BLS/BEA/Federal Reserve 발표 일정에서 CPI·고용·FOMC의 정확한 시각과 source URL 수집
+4. FRED/ALFRED 9개 series의 observation·vintage를 extract → validate → upsert → quality check
+5. 발표 전후 historical SIP window 수집과 event impact 계산
+6. logical date/window 기반 증분·백필 범위와 idempotency
+7. retry, exponential backoff, timeout, pipeline status 기록
 
 권장 최소 series:
 
@@ -239,6 +257,8 @@ Exit gate:
 - SIP 실패/누락 시 alert는 `PRELIMINARY_IEX` 상태를 유지한다.
 - fixture contract test와 실제 API smoke test가 분리되어 있다.
 - 429, timeout, missing value를 재현한 task test가 통과한다.
+- 한 경제 이벤트를 재실행해도 event·window·impact row가 중복되지 않는다.
+- 공식 발표 시각이 없거나 장전 데이터 coverage가 부족하면 결과를 확정하지 않고 reason code를 남긴다.
 
 ### 6회차 — Load test 및 장애 대응
 
@@ -313,20 +333,20 @@ Exit gate:
 - 추가 기능이 없어도 P0 데모는 완결된다.
 - 구현했다면 endpoint schema, sample response, error/freshness 상태가 문서화된다.
 - LLM은 신호나 주문을 직접 생성하지 않는다.
+- 7회차 선택 기능도 실제 주문이나 포지션 변경을 수행하지 않는다.
 
 ### 8회차 — 최종 발표
 
 데모 순서:
 
-1. 데이터 출처와 IEX 한계를 설명한다.
-2. replay producer로 Kafka에 trade를 발행한다.
-3. Spark UI/metrics와 1분 window 결과를 보여준다.
-4. PostgreSQL IEX bar, feature, `PRELIMINARY_IEX` alert를 확인한다.
-5. 15분 이상 지난 SIP fixture/API로 Airflow reconciliation을 실행하고 confirmed/rejected 상태 전이를 확인한다.
-6. Airflow FRED DAG와 macro data를 확인한다.
-7. load-test 결과와 장애 복구 trace를 설명한다.
-8. 선택 구현이 있으면 API/dashboard를 보여준다.
-9. Agent·MCP·RAG는 검증된 후속 단계로만 제시한다.
+1. 첫 목표와 공식 발표 일정·FRED/ALFRED·SIP 데이터의 역할을 설명한다.
+2. CPI·고용·FOMC 한 유형의 공식 시각과 당시 vintage를 확인한다.
+3. 발표 전후 SIP 반응과 평소·시장·섹터·과거 발표 비교 report를 보여준다.
+4. replay producer로 Kafka에 trade를 발행하고 Spark 1분 window를 보여준다.
+5. PostgreSQL의 `PRELIMINARY_IEX` alert와 SIP confirmed/rejected 전이를 확인한다.
+6. load-test 결과와 장애 복구 trace를 설명한다.
+7. 선택 구현이 있으면 API/dashboard를 보여준다.
+8. 자동매매·Agent·MCP·RAG는 검증된 후속 단계로만 제시한다.
 
 ## 6. 처리 경계와 Trigger
 
@@ -355,6 +375,17 @@ IEX finalized window ending <= now - 20m
 + matching historical SIP bar and SIP baseline
 → reconciliation evidence
 → CONFIRMED_SIP or REJECTED_AFTER_RECONCILIATION
+```
+
+### Macro Impact Processor
+
+```text
+official economic event + as-known FRED/ALFRED vintage
++ historical SIP pre/post windows
+→ return / volume / volatility response
+→ matched non-event baseline + market/sector controls
+→ repeated-event aggregate + coverage/limitation
+→ macro_event_impacts / macro_impact_reports
 ```
 
 ### Optional Signal Engine
@@ -412,12 +443,15 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - IEX/SIP baseline isolation과 alert state transition
 - UTC/DST/calendar transform
 - FRED normalization
+- official release time/timezone normalization
+- macro event window, matched baseline와 market/sector excess calculation
 
 ### Integration
 
 - replay → Kafka → Spark → PostgreSQL
 - Spark checkpoint restart
 - FRED fixture → Airflow task → PostgreSQL
+- official schedule + FRED vintage + SIP fixture → macro impact report
 - IEX/SIP bar fixture → reconciliation task → alert status/history
 - optional news fixture → processor/LLM stub → PostgreSQL
 
@@ -425,6 +459,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 
 - Alpaca market/news response fixture
 - FRED response fixture
+- BLS/BEA/Federal Reserve release schedule fixture
 - Kafka event schema version compatibility
 - PostgreSQL unique key/upsert
 
@@ -448,6 +483,9 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 | OCI 공개 포트·secret 노출 | 계정·데이터 보안 위험 | NSG 최소 개방, 내부 서비스 비공개 binding, secret 주입, volume backup |
 | UI/LLM 범위 확장 | 필수 코드 미완성 | P0 gate 이후에만 선택 구현 시작 |
 | 장외 발표 | 실시간 event 없음 | timestamped replay dataset 사용 |
+| 장전 SIP coverage 부족 | 즉시 반응 왜곡 | coverage gate, first-regular-session 결과 분리, 한계 표시 |
+| 미래 revision 사용 | 백테스트 누수 | FRED/ALFRED vintage와 `released_at` point-in-time contract test |
+| 단일 사례를 인과로 과장 | 잘못된 결론 | 반복 event, matched baseline, market/sector control과 표본 수 보고 |
 
 ## 11. 최종 제출 체크리스트
 
@@ -456,7 +494,8 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - [ ] Kafka market/replay producer
 - [ ] Kafka Consumer 역할의 Spark Structured Streaming `preprocess.py`와 checkpoint·offset·lag 증거
 - [ ] PostgreSQL schema, migration, load/upsert logic
-- [ ] Airflow historical SIP reconciliation DAG와 FRED DAG
+- [ ] Airflow official release, FRED/ALFRED, historical SIP reconciliation DAG
+- [ ] `macro_event_impacts`와 반복 event 분석 report
 - [ ] IEX/SIP reconciliation 결과와 alert 상태 전이 이력
 - [ ] load-test dataset, runner, metric report
 - [ ] 실행 ID별 structured log·CSV/JSON metric report
@@ -473,6 +512,9 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 
 다음 질문에 코드와 측정 결과로 답하면 프로젝트는 성공이다.
 
+- 공식 발표 시각과 당시 이용 가능했던 지표 값만으로 분석을 재현할 수 있는가?
+- 발표 전후 반응을 평소 같은 시간대·시장·섹터·과거 동일 발표와 비교했는가?
+- 인과관계가 아니라 관측된 연관성과 표본·coverage 한계를 정확히 설명하는가?
 - Kafka event가 Spark의 event-time window를 거쳐 올바른 1분 bar가 되는가?
 - checkpoint 재시작과 full replay의 차이를 설명할 수 있는가?
 - 중복·지연·DB 장애에도 PostgreSQL 결과가 일관적인가?

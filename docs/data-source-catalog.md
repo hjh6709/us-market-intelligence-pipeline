@@ -4,7 +4,7 @@
 
 검증일: 2026-08-13
 
-이 문서는 각 API가 **무엇을 제공하는지**, 그중 MVP가 **무엇을 가져오고 무엇을 제외하는지**, 받은 raw field를 **어디에 사용하는지**를 정의한다. 요금제·권한·schema는 구현 직전과 발표 전에 공식 문서와 실제 계정으로 다시 검증한다.
+이 문서는 장기 자동매매 목표의 첫 단계에서 각 API가 **무엇을 제공하는지**, 경제지표 영향 검증 MVP가 **무엇을 가져오고 어디에 사용하는지**를 정의한다. Stage A에서는 경제·시장 데이터만 수집하며 계좌·주문 데이터는 사용하지 않는다.
 
 ## 1. 한눈에 보는 선택
 
@@ -12,8 +12,9 @@
 | --- | --- | --- | --- |
 | Alpaca Real-time Stock WebSocket | trade, quote, minute/updated/daily bar, trading status, LULD 등 | IEX feed의 raw `trade` event | quote와 provider bar는 비교용 smoke test만, 나머지 channel은 제외 |
 | Alpaca Historical Stock REST | trade, quote, bar와 IEX/SIP 등 feed 선택 | IEX/SIP `1Min` bar, 과거 20거래일 warm-up과 지연 검증 | historical raw trade/quote 장기 backfill 제외 |
-| Alpaca Asset/Calendar/Clock | symbol metadata, 거래일, open/close, 현재 개장 상태 | active/tradable symbol 확인, 정규장·휴장·조기종료 판정 | 주문 가능성·margin 정보는 사용하지 않음 |
-| FRED API | series metadata, observations, revisions/vintage, releases | 9개 series metadata와 observations | 서버측 임의 변환과 forecast 추정 제외 |
+| Alpaca Asset/Calendar/Clock | symbol metadata, 거래일, open/close, 현재 개장 상태 | active/tradable symbol 확인, 정규장·휴장·조기종료 판정 | Stage A에서는 주문 가능성·margin·계좌 정보 사용하지 않음 |
+| BLS·BEA·Federal Reserve 공식 일정 | release date/time, reference period, official URL | CPI·고용·FOMC의 정확한 발표 시각 | forecast 추정과 비공식 timestamp 제외 |
+| FRED/ALFRED API | series metadata, observations, revisions/vintage, release dates | 9개 series metadata, observations, vintage | 정확한 장중 발표 시각으로 단독 사용하지 않음; forecast 추정 제외 |
 | Alpaca News REST/WebSocket — 선택 | 기사 metadata, symbol, headline, summary, content, URL | 구현 시 metadata와 summary, URL, symbols | 전체 본문 저장·재배포 제외 |
 | Groq — 선택 | 입력 text에 대한 LLM output | 뉴스의 제한된 structured classification | 시장 원천 데이터 공급자가 아니며 가격/거시 데이터를 제공하지 않음 |
 | Replay fixture | 우리가 만든 raw event | 정상·급등·중복·지연·오류 payload | 외부 API가 아님 |
@@ -61,7 +62,7 @@ Kafka `raw.market.v1`은 이 provider payload를 수정하지 않고 common enve
 | Kafka key | `S` | symbol을 그대로 사용해 종목 내 순서 유지 |
 | `source_event_id` | `i` | 문자열로 변환 |
 | `event_timestamp` | `t` | timezone-aware UTC로 parse 가능해야 함 |
-| `event_id` | source, feed, `T`, `S`, `i` | 예: `alpaca:iex:trade:NVDA:12345` |
+| `event_id` | source, feed, `T`, `S`, `i`, `t` | canonical serialization의 SHA-256. provider ID의 전역 유일성을 가정하지 않음 |
 | `payload` | 수신 JSON object | field를 삭제·rename하지 않고 그대로 보존 |
 
 ## 3. Alpaca Historical Stock REST
@@ -109,17 +110,29 @@ Historical IEX bar는 IEX feature warm-up, SIP bar는 SIP feature warm-up과 실
 | Calendar | trading date, market open/close, 조기 종료 정보 | 정규장 window, 휴장일, early close 판정 |
 | Clock | current timestamp, `is_open`, next open/close | collector와 dashboard의 현재 session 상태 |
 
-주문·계좌 기능은 사용하지 않는다. Calendar 결과가 세션 판단의 기준이고, 고정된 평일 시간만으로 거래일을 추정하지 않는다.
+Stage A에서는 주문·계좌 기능을 사용하지 않는다. Calendar 결과가 세션 판단의 기준이고, 고정된 평일 시간만으로 거래일을 추정하지 않는다. 후속 paper/live execution은 별도 broker 계약, credential과 위험 관리 경계를 사용한다.
 
-## 5. FRED API
+## 5. Official macro release schedules
 
-공식 문서: [FRED API Overview](https://fred.stlouisfed.org/docs/api/fred/overview.html), [Series Observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html), [Real-Time Periods](https://fred.stlouisfed.org/docs/api/fred/realtime_period.html)
+| Source | 초기 event | 가져오는 값 | 사용 |
+| --- | --- | --- | --- |
+| [BLS schedule](https://www.bls.gov/schedule/) | CPI, Employment Situation | event name, date/time, reference period, release URL | 발표 전후 window 기준 시각 |
+| [BEA schedule](https://www.bea.gov/news/schedule) | PCE — coverage 확인 후 | event name, date/time, release URL | 후속 event-study |
+| [Federal Reserve calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) | FOMC statement | meeting date, statement release time/link | 정규장 event-study |
+
+공통 내부 field는 `economic_event_id`, `event_type`, `reference_period`, `scheduled_at`, `released_at`, `original_timezone`, `release_source`, `release_source_url`, `ingested_at`이다. 정확한 발표 시각을 공식 출처에서 확인하지 못하면 임의로 만들지 않고 `OFFICIAL_RELEASE_TIME_MISSING`을 기록한다.
+
+## 6. FRED / ALFRED API
+
+공식 문서: [FRED API Overview](https://fred.stlouisfed.org/docs/api/fred/overview.html), [Series Observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html), [Real-Time Periods](https://fred.stlouisfed.org/docs/api/fred/realtime_period.html), [Release Dates](https://fred.stlouisfed.org/docs/api/fred/release_dates.html), [Vintage Dates](https://fred.stlouisfed.org/docs/api/fred/series_vintagedates.html)
 
 MVP endpoint:
 
 ```text
 GET https://api.stlouisfed.org/fred/series
 GET https://api.stlouisfed.org/fred/series/observations
+GET https://api.stlouisfed.org/fred/series/vintagedates
+GET https://api.stlouisfed.org/fred/release/dates
 ```
 
 ### API가 제공하는 값
@@ -138,7 +151,7 @@ Observation:
 realtime_start, realtime_end, date, value
 ```
 
-`value`는 문자열이며 결측은 `.`으로 올 수 있으므로 `.`을 `null`로 바꾸고 나머지를 Decimal 계열 숫자로 검증한다. `date`는 관측 대상일이지 반드시 실제 발표 timestamp는 아니다. revision을 추적하기 위해 realtime/vintage 정보를 버리지 않는다. 서버측 `units` 변환은 사용하지 않고 `units=lin` 원값을 저장한 뒤 필요한 변화량을 애플리케이션에서 계산한다.
+`value`는 문자열이며 결측은 `.`으로 올 수 있으므로 `.`을 `null`로 바꾸고 나머지를 Decimal 계열 숫자로 검증한다. `date`는 관측 대상일이지 실제 발표 timestamp가 아니다. FRED release date도 source가 제공한 날짜이며 FRED에서 이용 가능해진 정확한 시각을 보장한다고 가정하지 않는다. 정확한 `released_at`은 공식 기관 일정에서 가져오고, revision 추적을 위해 realtime/vintage 정보를 버리지 않는다.
 
 ### 선택한 9개 series
 
@@ -154,9 +167,9 @@ realtime_start, realtime_end, date, value
 | [`DGS10`](https://fred.stlouisfed.org/series/DGS10) | 10년 미 국채 constant maturity 금리 | 일간, percent | 장기 금리와 `DGS10-DGS2` |
 | [`VIXCLS`](https://fred.stlouisfed.org/series/VIXCLS) | CBOE VIX 종가 | 일간 close, index | 시장 변동성 환경 |
 
-FRED는 실시간 주가 feed가 아니다. Alert 시각 이전에 발표·수집되어 이용 가능했던 최신 observation만 배경 정보로 붙이며, 인과관계나 forecast consensus를 만들지 않는다.
+FRED는 실시간 주가 feed가 아니다. CPI·고용 event에는 해당 발표 시점의 observation/vintage를 연결하고, 일간 금리·VIX는 event 이전 최신 환경으로 사용한다. forecast consensus나 인과관계를 만들지 않는다.
 
-## 6. Alpaca News — Optional
+## 7. Alpaca News — Optional
 
 공식 문서: [News REST](https://docs.alpaca.markets/us/reference/news-3), [Real-time News](https://docs.alpaca.markets/us/docs/streaming-real-time-news)
 
@@ -177,7 +190,7 @@ content, url, symbols, source
 
 REST는 `start`, `end`, `symbols`, `sort`, `limit`, `include_content`, `page_token` 등을 지원한다. 구현한다면 `symbols=allowlist`, `include_content=false`로 시작하고 id/headline/summary/URL/symbol/source/timestamp metadata만 저장한다. provider 이용 조건을 확인하기 전에는 HTML 본문을 장기 저장하거나 재배포하지 않는다.
 
-## 7. Groq LLM — Optional Processor
+## 8. Groq LLM — Optional Processor
 
 Groq는 데이터셋이나 시장 데이터 API가 아니다. News metadata/summary를 입력받아 다음처럼 제한된 JSON으로 구조화하는 처리 후보다.
 
@@ -189,7 +202,7 @@ summary, model_confidence
 
 LLM 출력은 원천 사실이 아니며 schema validation을 통과한 파생 데이터다. 시장 가격, FRED observation 또는 alert 값을 생성·수정하지 않는다.
 
-## 8. Replay Fixture — Internal Source
+## 9. Replay Fixture — Internal Source
 
 Replay는 외부 API가 아니라 Alpaca raw trade envelope와 같은 계약으로 만든 입력이다.
 
@@ -205,7 +218,7 @@ price and volume spike
 
 각 fixture에는 입력 event뿐 아니라 기대 OHLCV, DLQ code와 alert 결과가 함께 있어야 한다. live credential이나 장 운영 시간과 무관하게 Kafka→Spark→PostgreSQL을 검증하는 데 사용한다.
 
-## 9. 구현 전 Contract Smoke Test
+## 10. 구현 전 Contract Smoke Test
 
 | Source | 확인할 것 |
 | --- | --- |
@@ -213,6 +226,7 @@ price and volume spike
 | Alpaca Historical | IEX/SIP 권한, `end` 제한, pagination, bar field, `adjustment=raw` |
 | Asset/Calendar/Clock | inactive symbol, holiday, early close, DST, current session |
 | FRED | API key, 9개 series metadata/frequency/units, `.` 결측, revision field, 429 |
+| Official release schedules | CPI·고용·FOMC의 정확한 ET/UTC 시각, reference period, source URL, page format change |
 | News — 선택 | entitlement, symbol filter, content 제외, pagination, storage terms |
 
 실제 응답 fixture의 hash와 smoke-test 날짜를 남기고 문서 예시와 다르면 provider adapter contract를 먼저 갱신한다.

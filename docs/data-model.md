@@ -4,7 +4,7 @@
 
 기준일: 2026-08-13
 
-이 문서는 provider와 내부 처리 사이의 안정된 계약 및 PostgreSQL의 논리 모델을 정의한다. 실제 migration의 이름·타입은 구현 중 테스트와 함께 확정한다.
+이 문서는 provider와 내부 처리 사이의 안정된 계약 및 PostgreSQL의 Stage A 논리 모델을 정의한다. 이 모델은 후속 자동매매 전략과 point-in-time backtest가 당시 이용 가능했던 입력을 재현할 수 있게 설계하지만, 주문·체결·포지션 schema는 이번 MVP 범위에 포함하지 않는다. 실제 migration의 이름·타입은 구현 중 테스트와 함께 확정한다.
 
 P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.md#7-조회-패턴과-인덱스)을 기준으로 migration과 함께 검증한다.
 
@@ -18,12 +18,14 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 - at-least-once delivery를 가정하고 deterministic id/unique key를 둔다.
 - signal 계산에 사용한 값은 `as_of` 이후에 알려진 정보를 포함하지 않는다.
 - `source`와 `feed`가 다른 bar·feature·baseline은 결합하거나 서로 덮어쓰지 않는다.
+- 경제지표 event는 공식 발표 출처의 `released_at`과 FRED/ALFRED의 당시 vintage를 분리해 추적한다.
+- 분석 결과에는 표본 수, market coverage와 비교 기준 version을 포함하며 시간적 동시성을 인과관계로 저장하지 않는다.
 
 ## 2. Common event envelope
 
 ```json
 {
-  "event_id": "alpaca:iex:trade:NVDA:12345",
+  "event_id": "sha256:canonical-source-feed-type-symbol-id-timestamp",
   "event_type": "market.trade.raw",
   "schema_version": 1,
   "source": "alpaca",
@@ -48,13 +50,13 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 
 이 절이 `raw.market.v1` envelope의 **정본(canonical contract)** 이다. 필수 field는 `event_id`, `event_type`, `schema_version`, `source`, `feed`, `source_event_id`, `event_timestamp`, `ingested_at`, `payload`이며, `trace_id`는 collector 연결 또는 replay 실행 단위의 선택적 상관관계 ID다.
 
-`event_id`는 provider가 안정적 id를 제공하면 source·feed·event type·symbol과 함께 그것을 포함한다. 그렇지 않으면 identity field의 canonical serialization을 hash한다. 무작위 UUID만으로 중복 제거하지 않는다. Collector는 Kafka routing과 결정적 ID를 만들기 위해 raw `T`, `S`, `i`, `t`만 읽을 수 있다. 이 단계에서는 provider field를 rename하거나 거래 조건을 해석하지 않으며 원본 JSON을 `payload`에 그대로 보존한다. 전체 type/schema 검증, condition filter와 normalized field mapping은 Spark가 담당한다. API별 raw field의 의미는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
+`event_id`는 `source`, `feed`, event type, symbol, provider trade ID와 원본 event timestamp의 canonical serialization을 hash해 만든다. 2026-08-19 smoke test에서 test stream이 다른 timestamp에 같은 trade ID를 반복했으므로 provider ID 하나의 전역 유일성을 가정하지 않는다. 무작위 UUID만으로 중복 제거하지 않는다. Collector는 Kafka routing과 결정적 ID를 만들기 위해 raw `T`, `S`, `i`, `t`만 읽을 수 있다. 이 단계에서는 provider field를 rename하거나 거래 조건을 해석하지 않으며 원본 JSON을 `payload`에 그대로 보존한다. 전체 type/schema 검증, condition filter와 normalized field mapping은 Spark가 담당한다. API별 raw field의 의미는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
 
 ## 3. Market trade
 
 ```json
 {
-  "event_id": "alpaca:iex:trade:NVDA:12345",
+  "event_id": "sha256:canonical-source-feed-type-symbol-id-timestamp",
   "source_event_id": "12345",
   "event_timestamp": "2026-08-13T13:30:00.123456Z",
   "symbol": "NVDA",
@@ -124,13 +126,18 @@ Economic event:
 {
   "event_type": "CPI",
   "reference_period": "2026-07",
+  "scheduled_at": "2026-08-12T12:30:00Z",
   "released_at": "2026-08-12T12:30:00Z",
   "previous": 2.8,
   "forecast": null,
   "actual": 3.0,
   "surprise": null,
   "unit": "percent_yoy",
-  "source": "fred"
+  "release_source": "bls",
+  "release_source_url": "https://www.bls.gov/schedule/news_release/cpi.htm",
+  "value_source": "fred",
+  "vintage_as_of": "2026-08-12",
+  "ingested_at": "2026-08-12T12:35:00Z"
 }
 ```
 
@@ -140,6 +147,39 @@ Rules:
 - previous를 forecast로 사용하지 않는다.
 - observation date를 가짜 release timestamp로 변환하지 않는다.
 - revision 추적을 위해 FRED/ALFRED realtime/vintage field를 보존한다.
+- `released_at`은 BLS·BEA·Federal Reserve 등 공식 발표 출처에서 확인한다. FRED release date만으로 장중 공개 시각을 만들지 않는다.
+- `actual`과 `previous`는 해당 시점에 이용 가능했던 값과 vintage를 연결한다.
+- 공식 시각이나 당시 값이 확인되지 않으면 event study 대상에서 제외하고 reason code를 남긴다.
+
+### Macro event impact
+
+```json
+{
+  "impact_id": "sha256:...",
+  "economic_event_id": "CPI|2026-07|2026-08-12T12:30:00Z",
+  "symbol": "QQQ",
+  "source": "alpaca",
+  "feed": "sip",
+  "session_scope": "EXTENDED_HOURS",
+  "pre_window_minutes": 5,
+  "post_window_minutes": 30,
+  "return_pre": -0.001,
+  "return_post": 0.012,
+  "volume_ratio_vs_matched_baseline": 2.4,
+  "realized_volatility_ratio": 1.8,
+  "market_excess_return": 0.004,
+  "sector_excess_return": 0.002,
+  "matched_baseline_version": 1,
+  "coverage_ratio": 0.98,
+  "analysis_version": 1,
+  "interpretation_scope": "OBSERVED_ASSOCIATION",
+  "calculated_at": "2026-08-13T01:00:00Z"
+}
+```
+
+Unique key: `(economic_event_id, symbol, feed, post_window_minutes, analysis_version)`.
+
+`return_post`, 거래량 비율과 실현 변동성은 같은 feed의 bar에서 계산한다. `market_excess_return`은 시장 ETF, `sector_excess_return`은 사전에 정한 섹터 ETF 대비 값이다. 한 event row는 인과관계 결론이 아니며 동일 event type의 여러 날짜를 집계한 report에 표본 수, 분포와 한계를 함께 기록한다.
 
 ## 6. News article
 
@@ -294,7 +334,7 @@ PRELIMINARY_IEX
 └── REJECTED_AFTER_RECONCILIATION
 ```
 
-SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `PRELIMINARY_IEX`를 유지한다. 상태 전이는 idempotent해야 하며 `alert_status_history`에 이전 상태, 다음 상태, reconciliation id, rule version, 시각을 기록한다. Alert는 관측된 이상 변화이며 미래 가격 방향이나 매수·매도 권고가 아니다.
+SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `PRELIMINARY_IEX`를 유지한다. 상태 전이는 idempotent해야 하며 `alert_status_history`에 이전 상태, 다음 상태, reconciliation id, rule version, 시각을 기록한다. Alert는 관측된 이상 변화다. 후속 전략이 입력 후보로 사용할 수 있지만 alert 하나만으로 매수·매도 주문을 만들지는 않는다.
 
 ## 11. Market signal — Optional
 
@@ -332,7 +372,7 @@ SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `
 }
 ```
 
-`confidence`는 수익 확률이 아니다. 입력 coverage, freshness, agreement, 품질을 요약한 시스템 신뢰도다. 이 의미를 API/UI에 명시한다.
+`confidence`는 수익 확률이 아니다. 입력 coverage, freshness, agreement, 품질을 요약한 시스템 신뢰도다. 후속 매매 전략은 별도 기대수익·위험·비용 평가를 수행해야 하며 이 의미를 API/UI에 명시한다.
 
 ## 12. PostgreSQL logical tables
 
@@ -346,16 +386,20 @@ SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `
 | `macro_series` | series metadata | series_id |
 | `macro_observations` | 값과 vintage | series/date/realtime_start |
 | `economic_events` | release event, optional forecast | event_type/reference/released/source |
+| `macro_event_impacts` | 발표 전후 종목별 반응과 baseline/control 비교 | event/symbol/feed/window/analysis_version |
+| `macro_impact_reports` | 동일 발표 유형의 반복 사례 집계와 한계 | event_type/universe/period/analysis_version |
 | `news_articles` (optional) | normalized news와 처리상태 | source/source_article_id, news_hash |
 | `llm_analyses` (optional) | cache/audit | news_hash/prompt/schema/provider/model |
 | `market_events` (optional) | validated structured events | event_id |
 | `anomaly_alerts` | 설명 가능한 가격·거래량 이상 징후와 현재 검증 상태 | alert_id, symbol/window/type/version/source/feed |
 | `alert_status_history` | preliminary/confirmed/rejected 전이 감사 기록 | alert_id/to/reconciliation_id |
-| `market_signals` (optional) | composite snapshot | as_of/signal_version/universe_version |
+| `market_signals` (optional) | 후속 전략이 평가할 composite snapshot; 주문 아님 | as_of/signal_version/universe_version |
 | `pipeline_status` | source/Spark query/Airflow freshness | component/instance |
 | `dead_letters` (optional) | queryable DLQ index | event_id/error_code |
 
 Kafka raw event를 PostgreSQL에 별도 tick table로 장기 저장하지 않는다.
+
+주문 의도, broker order, fill, position, cash, exposure와 risk-limit 이력은 Stage A table에 넣지 않는다. 해당 계약은 point-in-time backtest와 paper trading이 검증된 후 별도 versioned execution model로 설계한다.
 
 ## 13. Data quality reason codes
 
@@ -376,6 +420,10 @@ SIP_BAR_MISSING
 IEX_SIP_PRICE_DIVERGENCE
 IEX_SIP_VOLUME_DIVERGENCE
 MISSING_MACRO_VALUE
+OFFICIAL_RELEASE_TIME_MISSING
+VINTAGE_UNAVAILABLE
+INSUFFICIENT_EVENT_SAMPLES
+PARTIAL_MARKET_COVERAGE
 FORECAST_UNAVAILABLE
 LLM_SCHEMA_INVALID
 LLM_RATE_LIMITED
@@ -391,6 +439,7 @@ MVP 기본값은 [데이터 수집·수명주기](data-lifecycle.md)를 따른�
 - raw market Kafka: 24h
 - IEX/SIP bars, features, alerts, reconciliation/history: PostgreSQL 90일 rolling
 - FRED observations/vintage: MVP 자동 삭제 없음
+- economic events, macro impact rows/reports: MVP 자동 삭제 없음
 - optional news metadata: 30일, 기사 전체 본문 저장 안 함
 - DLQ: 7일
 - structured raw log: 14일

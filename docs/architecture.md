@@ -1,4 +1,4 @@
-# MVP Architecture
+# Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
 상태: proposed
 
@@ -6,7 +6,7 @@
 
 범위: 2026-09-12 발표 MVP
 
-이 문서는 [최종 프로젝트 비전](final-vision.md)의 Stage A만 상세화한다. Agent·MCP·RAG 목표 아키텍처는 최종 비전 문서를 기준으로 한다.
+이 문서는 안전한 자동매매 시스템으로 확장하기 전 단계인 [최종 프로젝트 비전](final-vision.md)의 Stage A만 상세화한다. Stage A는 공식 경제지표 발표 시각과 당시 공개된 값, 발표 전후 시장 반응을 재현 가능하게 연결하는 데이터·분석 경계이며 주문을 실행하지 않는다.
 
 사용자·조회 패턴과 Kafka/Spark/Airflow/저장소의 비교 근거는 [MVP 설계 결정](design-decisions.md)에 정의한다.
 
@@ -20,10 +20,12 @@
 6. Spark Structured Streaming을 local mode에서 핵심 처리 엔진으로 직접 구현해야 한다.
 7. 신호와 이상 징후는 설명 가능하고 데이터 품질 저하를 명시해야 한다.
 8. 무료 IEX 실시간 범위와 15분 지연 SIP 검증 범위를 사용자에게 구분해 보여주고, 서로 다른 feed의 baseline을 섞지 않아야 한다.
+9. 후속 백테스트가 미래 정보를 섞지 않고 당시 이용 가능했던 입력을 재구성할 수 있어야 한다.
+10. 경제지표 영향은 공식 발표 시각, 당시 이용 가능했던 vintage, 반복 사례와 시장·섹터·시간대 비교 기준으로 검증해야 한다.
 
 ## 2. System boundary
 
-시스템은 데이터를 관측하고 시장 상태를 설명한다. 주문을 제출하거나 포지션을 관리하지 않는다.
+장기적으로는 자동매매까지 확장하지만, **Stage A 시스템 경계는 경제지표 발표에 대한 관측된 시장 반응과 실시간 이상 징후를 저장하는 데서 끝난다.** 시간적 동시성만으로 인과관계를 확정하거나 주문을 제출하지 않는다.
 
 ```mermaid
 flowchart TB
@@ -31,7 +33,8 @@ flowchart TB
       AI["Alpaca IEX realtime"]
       AS["Alpaca historical SIP\nend <= now - 15m"]
       AN["Alpaca News (optional)"]
-      FR["FRED"]
+      FR["FRED / ALFRED\nobservations + vintage"]
+      OR["BLS / BEA / Federal Reserve\nofficial release times"]
       GR["Groq LLM (optional)"]
     end
 
@@ -45,15 +48,24 @@ flowchart TB
     subgraph Batch["Scheduled path"]
       AF["Airflow"]
       MAC["Macro task"]
+      IMP["Macro event impact task"]
       REC["SIP reconciliation task"]
     end
 
     subgraph Intelligence["Application path"]
       PG[("PostgreSQL")]
       FE["Feature / anomaly engine"]
+      ME["Macro event study"]
       SE["Optional signal engine"]
       API["FastAPI read API"]
       UI["Streamlit"]
+    end
+
+    subgraph FutureTrading["Future automated-trading path — outside Stage A"]
+      ST["Strategy + point-in-time backtest"]
+      RK["Risk engine"]
+      PE["Paper execution"]
+      LE["Controlled live execution"]
     end
 
     AI --> COL --> K
@@ -62,12 +74,19 @@ flowchart TB
     NP <--> GR
     NP --> PG
     FR --> MAC
+    OR --> MAC
     AF --> MAC --> PG
+    AS --> IMP
+    MAC --> IMP
+    AF --> IMP --> PG
     AS --> REC
     AF --> REC --> PG
     PG --> FE --> PG
+    PG --> ME --> PG
     PG --> SE --> PG
     PG --> API --> UI
+    PG -. validated inputs .-> ST --> RK --> PE
+    PE -. safety gates .-> LE
 ```
 
 ## 3. Logical components
@@ -77,12 +96,13 @@ flowchart TB
 | Provider adapter | 인증, 원천 payload 수신, provider schema와 최소 envelope 계약 | score 계산, bar 계산, DB schema 노출 |
 | Market collector | subscribe, heartbeat, reconnect, source/feed/ingestion metadata 추가, 원본 payload publish | field 정규화, bar 계산, 장기 저장 |
 | Spark market processor | Kafka raw consume, provider schema parsing, normalized model 변환, validation, event-time watermark/dedup, 1분 OHLCV, PostgreSQL micro-batch upsert | 외부 API 호출, LLM 분석, signal 계산 |
-| Feature/anomaly engine | 확정 IEX bar에서 IEX 전용 baseline과 feature를 계산하고 `PRELIMINARY_IEX` alert 생성 | raw trade 재집계, SIP baseline 혼합, 매수·매도 결정 |
+| Feature/anomaly engine | 확정 IEX bar에서 IEX 전용 baseline과 feature를 계산하고 `PRELIMINARY_IEX` alert 생성 | raw trade 재집계, SIP baseline 혼합, 직접 매수·매도 결정 |
 | Optional news collector | 지정 symbol 뉴스 수신, source id 보존 | LLM 호출 |
 | Optional news processor | dedup, relevance filter, budget, LLM schema validation | 매매 신호 직접 결정 |
 | Airflow macro DAG | 예약 수집, transform, quality check, upsert | 실시간 tick 처리 |
+| Macro impact processor | 공식 발표 시각 기준 SIP window를 계산하고 동일 시간대·시장·섹터·과거 발표와 비교 | 한 사례만으로 인과관계 확정, 주문 결정 |
 | Airflow market reconciliation DAG | 15분 이상 지난 window의 SIP bar 수집, IEX/SIP 비교, alert 상태 전이와 감사 기록 | 실시간 alert 생성, SIP로 IEX 원천 bar 덮어쓰기 |
-| Optional signal engine | 같은 `as_of` snapshot에서 subscore/composite/reasons 생성 | 주문/리스크 포지션 관리 |
+| Optional signal engine | 같은 `as_of` snapshot에서 후속 전략이 평가할 subscore/composite/reasons 생성 | 주문 제출, 포지션·손실 한도 관리 |
 | FastAPI | read-only query contract, health/freshness | ingestion orchestration |
 | Streamlit | 현황·근거·제약 표시 | 비즈니스 규칙 재구현 |
 
@@ -97,10 +117,11 @@ MarketDataProvider.stream_trades(symbols) -> AsyncIterator[RawMarketEvent]
 MarketDataProvider.fetch_bars(symbols, feed, start, end) -> list[MarketBar]
 NewsProvider.fetch_or_stream(symbols, cursor) -> Iterator[NewsArticle]
 MacroProvider.fetch_series(series_id, since) -> list[MacroObservation]
+ReleaseCalendarProvider.fetch_events(event_types, start, end) -> list[EconomicRelease]
 LLMProvider.classify(article) -> MarketEvent
 ```
 
-P0 구현은 Alpaca IEX 실시간 trade, Alpaca historical SIP bar, replay, FRED다. API별 raw field와 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다. historical SIP 요청은 `end <= now - 15m`인 닫힌 구간만 허용한다. Alpaca news와 Groq는 7회차 선택 구현이다. replay/stub은 외부 구현의 대체 test adapter이며 두 번째 상용 provider가 아니다.
+P0 구현은 Alpaca IEX 실시간 trade, Alpaca historical SIP bar, replay, FRED/ALFRED와 BLS·BEA·Federal Reserve 공식 발표 일정이다. FRED release date는 정확한 공개 시각으로 가정하지 않고 공식 기관 시각과 별도로 검증한다. API별 raw field와 선택 범위는 [API 데이터 소스 카탈로그](data-source-catalog.md)를 따른다.
 
 provider 전용 필드는 24시간 보존되는 raw envelope의 `payload` 안에서만 유지한다. Spark 이후 계약에는 provider 전용 이름을 노출하지 않으며, 추적이 필요한 원문 식별자는 `source_event_id`, 제한 정보는 `metadata`의 allowlisted field로 보존한다.
 
@@ -143,15 +164,16 @@ Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. 
 
 ## 7. Scheduled batch flows
 
-### 7.1 Macro
+### 7.1 Macro observations and release calendar
 
 Airflow daily DAG는 초기 `14:00 UTC`에 실행하며 최근 7일을 겹쳐 조회해 늦은 갱신과 결측을 idempotent upsert한다.
 
 ```text
 check configuration
-→ fetch changed FRED observations
+→ fetch official release calendar/timestamps
+→ fetch changed FRED/ALFRED observations and vintage
 → validate/normalize
-→ upsert macro_observations
+→ upsert economic_events and macro_observations
 → derive macro snapshot
 → run quality checks
 → update pipeline_status
@@ -159,9 +181,24 @@ check configuration
 
 DAG의 logical date와 `series_id + observation_date + realtime_start` unique key를 사용한다. 같은 실행을 반복해도 결과가 증가하지 않아야 한다.
 
-`forecast`와 `surprise`는 nullable이다. 검증된 forecast provider 없이 FRED actual에서 forecast를 추정하거나 previous를 forecast로 오용하지 않는다. 발표 시점의 정확한 release timestamp를 확인하지 못하면 observation date와 release time을 별도 필드로 유지한다.
+`forecast`와 `surprise`는 nullable이다. 검증된 forecast provider 없이 FRED actual에서 forecast를 추정하거나 previous를 forecast로 오용하지 않는다. `released_at`은 BLS·BEA·Federal Reserve 등 공식 출처에서 확인하고 source URL을 저장한다. 확인하지 못한 observation date를 가짜 발표 시각으로 변환하지 않는다.
 
-### 7.2 Delayed market reconciliation
+### 7.2 Macro release impact
+
+초기 이벤트 유형은 CPI, Employment Situation, FOMC이고 최근 24개월을 분석 후보 범위로 둔다. 실제 범위는 공식 일정과 SIP extended-hours coverage smoke test 뒤 고정한다.
+
+```text
+economic event with official released_at + as-known vintage
+→ fetch SIP 1m bars for configured pre/post windows
+→ calculate return, volume and volatility response
+→ compare with matched non-event time, SPY/QQQ and sector ETF
+→ aggregate the same release type across multiple dates
+→ store observed association, sample size, coverage and limitation
+```
+
+발표 후 `5m/30m/60m`은 초기 비교 window이며 config와 analysis version으로 관리한다. CPI·고용처럼 정규장 전 발표는 extended-hours SIP coverage가 충분할 때만 즉시 반응을 계산한다. 부족하면 첫 정규장 반응으로 분리하고 `PARTIAL_MARKET_COVERAGE`를 표시한다. FOMC처럼 정규장 중 발표는 정규장 기준으로 계산한다.
+
+### 7.3 Delayed market reconciliation
 
 Airflow reconciliation DAG는 초기 15분 간격으로 실행하고, 무료 제한에 5분 safety margin을 둬 `window_end <= now - 20m`인 미수집 window를 선택한다.
 
@@ -221,7 +258,7 @@ Spark가 확정한 IEX bar를 입력 경계로 삼는다. IEX feature는 IEX 이
 
 ### Macro
 
-최근 관측값과 변화 방향을 사용한다. 서로 다른 발표 주기를 억지로 1분 단위 forward-fill한 뒤 같은 신선도로 취급하지 않는다. 각 feature는 `observed_for`, `released_at`(알 때), `ingested_at`, `as_of`를 유지한다.
+최근 관측값과 변화 방향을 사용한다. 각 feature는 `observed_for`, 공식 `released_at`, `ingested_at`, `vintage_as_of`, `as_of`를 유지한다. 서로 다른 발표 주기를 억지로 1분 단위 forward-fill하거나 미래 revision을 과거 분석에 사용하지 않는다.
 
 ### Event
 
@@ -261,7 +298,7 @@ event     = 0.30
 - calendar: Alpaca market calendar/clock response를 adapter로 사용하고 fixture로 holiday/early close 검증
 - state: `PRE_MARKET`, `OPENING`, `REGULAR`, `CLOSING`, `AFTER_HOURS`, `CLOSED`
 
-세션의 구체 분 경계는 config에 무분별하게 넣지 않는다. `OPENING`/`CLOSING` window처럼 전략 실험 대상만 명시하고 거래일/open/close 자체는 calendar에서 얻는다.
+실시간 IEX 이상 탐지는 정규장만 사용한다. 경제지표 event study는 공식 발표 시각을 기준으로 별도 session policy를 사용하며 장전 반응과 첫 정규장 반응을 섞지 않는다. 세션의 구체 분 경계는 versioned config로 관리한다.
 
 ## 11. Reliability and risk state
 
@@ -353,4 +390,5 @@ Replay producer는 동일 dataset을 `1x`, `10x`, `50x`, `100x` 순서로 전송
 | OCI 2-node 배포 | ARM64와 network/security smoke test 후 | image 호환, node별 memory, private connectivity, backup restore |
 | 별도 Spark cluster/scale-out | local Spark가 load-test 목표를 충족하지 못할 때 | lag/throughput/CPU-memory benchmark |
 | SIP confirmation tolerance | fixture와 실제 IEX/SIP 쌍을 수집한 뒤 | close difference와 volume coverage distribution |
-| paper/live execution | backtest와 risk engine 후 | out-of-sample evidence, safety review |
+| 매매 전략·paper execution | Stage A 이후 | point-in-time backtest, out-of-sample evidence, risk limit |
+| 제한적 live 자동 주문 | paper trading과 별도 안전 검토 이후 | 장기간 성능·장애 증거, kill switch, 주문 멱등성, 사용자 승인 정책 |

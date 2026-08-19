@@ -8,23 +8,44 @@
 
 ## 1. 최종 목표
 
-> 실시간 미국 주식 데이터, 거시경제 지표, 금융 뉴스와 공시를 수집·정규화하고, 재현 가능한 시장 신호와 이상 징후를 생성한 뒤, Agent가 내부 데이터와 외부 근거를 조사하여 출처와 함께 설명하는 Market Intelligence Platform을 구축한다.
+> 경제지표 발표가 미국 주식·ETF의 가격, 거래량과 변동성에 어떤 반응을 만들었는지 반복 가능한 데이터로 검증하고, 검증된 시장 데이터와 전략을 바탕으로 위험을 통제하는 자동매매 시스템까지 단계적으로 구축한다.
+
+첫 번째 분석 목표는 “경제지표 때문에 올랐다”를 한 사례만으로 단정하는 것이 아니다. 공식 발표 시각과 당시 공개된 값, 발표 전후 시장 반응, 평소 같은 시간대와 시장·섹터 기준을 여러 발표 사례에서 비교해 **어떤 반응이 반복해서 관측됐는지**를 보여주는 것이다. 이상 탐지는 이 반응을 포착하는 방법이고, 자동매매는 충분히 검증된 관계를 전략과 위험 관리 규칙으로 바꾸는 장기 목표다.
 
 최종 사용자는 다음 질문에 답을 얻을 수 있어야 한다.
 
 ```text
 현재 시장에 무슨 일이 일어나고 있는가?
+어떤 경제지표가 언제 발표되었고 시장은 발표 전후 어떻게 반응했는가?
+그 반응은 평소와 비교해 비정상적이며 여러 발표에서도 반복됐는가?
 어떤 종목에서 이상 징후가 발생했는가?
 어떤 데이터 때문에 이 결과가 생성되었는가?
 관련 뉴스·공시 근거는 무엇인가?
 데이터가 충분하고 신선한가?
+검증된 전략과 위험 한도 안에서 주문을 실행할 수 있는가?
 ```
 
-이 시스템은 가격을 확정적으로 예측하거나 LLM이 직접 주문하는 시스템이 아니다. 최종 가치도 투자 수익률 하나가 아니라 **데이터 신뢰성, 분석 재현성, 설명 가능성, 실패 시 안전성**으로 평가한다.
+최종적으로 자동매매까지 확장하지만 가격 상승을 확정적으로 예측하거나 LLM이 직접 주문하지 않는다. 주문은 versioned strategy, point-in-time backtest, risk engine과 kill switch를 통과한 경우에만 실행한다. 프로젝트의 가치는 수익률 하나가 아니라 **데이터 신뢰성, 분석 재현성, 전략 검증, 설명 가능성, 실패 시 안전성**으로 평가한다.
 
 ## 2. 핵심 제품 시나리오
 
-대표 질문:
+첫 번째 대표 질문:
+
+> “CPI 발표 전후 QQQ·SMH·NVDA의 가격, 거래량과 변동성은 평소보다 얼마나 달라졌고, 비슷한 반응이 과거 발표에서도 반복됐는가?”
+
+목표 동작:
+
+```text
+1. BLS·BEA·Federal Reserve 등 공식 출처의 발표 일시 확인
+2. FRED/ALFRED에서 그 시점에 알려졌던 값과 revision/vintage 조회
+3. 발표 전후 5분·30분·60분의 SIP 1분 bar와 feature 계산
+4. SPY·QQQ·섹터 ETF 및 평소 같은 시간대 baseline과 비교
+5. 여러 발표 사례에서 방향, 크기, 지속 시간과 오탐을 집계
+6. 단일 사례의 인과관계가 아니라 관측된 연관성과 한계를 저장
+7. 후속 전략·백테스트가 같은 시점 입력으로 결과를 재현
+```
+
+두 번째 대표 질문:
 
 > “NVDA 급등 경고가 발생한 이유를 데이터와 출처로 설명해 줘.”
 
@@ -41,7 +62,7 @@
 8. 사용한 Tool, 반복 횟수, 종료 사유를 감사 로그로 기록
 ```
 
-이 하나의 시나리오가 Data Pipeline, Signal/Anomaly Engine, MCP, Agent Loop, RAG, 평가, 보안을 실제로 연결한다.
+첫 번째 시나리오가 Data Pipeline, Macro Event Study, Signal/Anomaly Engine과 후속 자동매매 연구를 연결하고, 두 번째 시나리오가 MCP, Agent Loop, RAG, 평가와 보안을 연결한다.
 
 ## 3. 목표 아키텍처
 
@@ -51,6 +72,7 @@ flowchart TB
       Market["Alpaca IEX Realtime"]
       MarketSIP["Alpaca Historical SIP\nend <= now - 15m"]
       Macro["FRED"]
+      Releases["BLS / BEA / Federal Reserve\nOfficial Release Times"]
       News["Market News"]
       Filings["SEC Filings / Reports"]
       Replay["Deterministic Replay Fixtures"]
@@ -70,6 +92,7 @@ flowchart TB
 
     subgraph Intelligence["Market Intelligence"]
       Features["Technical / Macro / Event Features"]
+      Impact["Macro Release Event Study"]
       Anomaly["Anomaly Detection"]
       Signal["Rule-based Signal Engine"]
       Risk["Data Quality + Risk State"]
@@ -95,6 +118,14 @@ flowchart TB
       Audit["Tool / Decision Audit Log"]
     end
 
+    subgraph Trading["Validated Trading — Later Stages"]
+      Strategy["Versioned Strategy"]
+      Backtest["Point-in-time Backtest"]
+      TradeRisk["Risk Limits + Kill Switch"]
+      Paper["Paper Execution"]
+      Live["Controlled Automated Orders"]
+    end
+
     Market --> MarketAdapter
     Replay --> MarketAdapter
     MarketAdapter --> Kafka --> Spark --> Postgres
@@ -102,6 +133,7 @@ flowchart TB
     Airflow --> Reconcile --> Postgres
     News --> NewsProcessor --> Postgres
     Macro --> Processors
+    Releases --> Processors
     Airflow --> Processors --> Postgres
     Filings --> Ingest
     News --> Ingest
@@ -109,6 +141,7 @@ flowchart TB
     Spark -. measured need .-> Archive
 
     Postgres --> Features --> Anomaly
+    Features --> Impact
     Features --> Signal
     Anomaly --> Risk
     Signal --> Risk
@@ -121,6 +154,8 @@ flowchart TB
     Postgres --> API --> Dashboard
     Agent --> Audit
     API --> Eval
+    Postgres --> Strategy --> Backtest --> TradeRisk --> Paper
+    Paper -. safety gates .-> Live
 ```
 
 ## 4. 아키텍처 원칙
@@ -136,6 +171,10 @@ Agent가 없어도 수집, 저장, feature, alert, signal, dashboard가 작동�
 ### Evidence before answer
 
 Agent 답변은 Tool 결과와 문서 출처에 연결되어야 한다. 근거를 찾지 못하면 추측하지 않고 `INSUFFICIENT_EVIDENCE`로 종료한다.
+
+### Event time and as-known evidence
+
+경제지표 영향 분석은 공식 기관의 발표 시각과 당시 이용 가능했던 FRED/ALFRED vintage를 사용한다. 발표 후 수정된 값이나 미래 시장 데이터를 과거 판단에 섞지 않는다. 한 사례의 시간적 일치가 아니라 반복 사례, 평소 같은 시간대, 시장·섹터 control과 비교한 관측 결과를 제시한다.
 
 ### Feed-scoped evidence
 
@@ -176,11 +215,11 @@ Alpaca IEX WebSocket / replay
 ### Batch path
 
 ```text
-Alpaca historical SIP / FRED / historical data / documents
+official release schedules / FRED-ALFRED vintage / Alpaca historical SIP / documents
 → Airflow
 → raw response validation
 → normalization
-→ IEX/SIP reconciliation or PostgreSQL/search index
+→ macro event windows / IEX-SIP reconciliation / PostgreSQL-search index
 → data quality checks
 ```
 
@@ -191,6 +230,22 @@ Airflow는 실시간 tick을 처리하지 않는다. 15분 이상 지난 SIP win
 PostgreSQL은 앱과 분석에 필요한 1분 bar, feature, macro observation, news event, alert, signal, pipeline status를 저장한다. Raw tick 장기 저장이나 대규모 역사 데이터가 실제로 필요해질 때만 Parquet/object storage를 추가한다.
 
 ## 6. Market Intelligence
+
+### Macro Release Impact Engine
+
+첫 번째 분석 엔진은 경제지표 발표가 시장에 미친 **관측 가능한 반응**을 계산한다.
+
+```text
+official released_at + as-known observation/vintage
++ SIP 1-minute pre/post bars
+→ 5m / 30m / 60m return, volume and realized volatility
+→ matched non-event time baseline
+→ SPY/QQQ market and sector ETF controls
+→ repeated releases by event type
+→ sample size, distribution, coverage and limitation
+```
+
+결과는 `OBSERVED_ASSOCIATION`으로 표현한다. forecast source가 없으면 surprise를 만들지 않으며, 공식 발표 시각이나 market coverage가 불충분하면 분석을 확정하지 않는다. 후속 strategy는 이 결과를 가설로 사용할 수 있지만 별도 point-in-time backtest 없이 주문 규칙으로 채택할 수 없다.
 
 ### Anomaly Engine
 
@@ -438,14 +493,15 @@ Stage A의 필수 관측 증거는 structured log/query progress에서 metric �
 
 ## 13. 단계별 구현 로드맵
 
-### Stage A — Data Pipeline MVP
+### Stage A — Macro Impact Data Pipeline MVP
 
 목표일: 2026-09-12
 
 ```text
 IEX/replay → Kafka → Spark Structured Streaming → 1m bars → PRELIMINARY_IEX → PostgreSQL
 Historical SIP (>=15m delayed) → Airflow → reconciliation → confirmed/rejected
-FRED → Airflow → PostgreSQL
+Official release times + FRED/ALFRED vintage + SIP event windows
+→ Airflow → macro impact analysis → PostgreSQL
 Finalized bars → features/anomaly → PostgreSQL
 Optional: News/LLM and FastAPI/Streamlit
 ```
@@ -458,41 +514,52 @@ Optional: News/LLM and FastAPI/Streamlit
 - data freshness와 risk state
 - 설명 가능한 signal/anomaly
 - feed별 baseline 분리와 IEX→SIP alert 상태 전이
+- CPI·고용·FOMC의 공식 발표 시각, 당시 vintage와 발표 전후 시장 반응 report
+- 평소 같은 시간대·시장·섹터·과거 동일 발표 비교와 표본/coverage 한계
 - live와 offline demo
 
 상세 범위는 [4주·8회차 실행 계획](../PROJECT_PLAN.md)에 정의한다.
 
-### Stage B — Agent + MCP vertical slice
+### Stage B — Strategy hypothesis and point-in-time backtest
 
-선행 조건: Stage A의 alert, feature, pipeline status schema가 안정됨.
+선행 조건: Stage A의 economic event, impact, alert, feature schema가 안정됨.
 
-- read-only MCP Tools 4~5개
-- Observe/Plan/Act/Evaluate loop
-- 최대 반복, 중복 방지, retry/fallback, 감사 로그
-- “이 경고가 왜 발생했는가?” 한 질문의 end-to-end 해결
-- 10개 평가 scenario
+- 반복된 macro response로 제한된 전략 가설 정의
+- 미래 정보가 없는 point-in-time dataset
+- 거래비용·slippage를 포함한 walk-forward backtest
+- out-of-sample 성능, drawdown과 실패 구간 분석
+- anomaly 단독 주문 금지와 strategy version 관리
 
-### Stage C — RAG + Security + Evaluation
+### Stage C — Risk engine and paper execution
 
-선행 조건: Stage B tool trace가 안정적이고 문서 이용 조건이 확인됨.
+선행 조건: Stage B가 데이터 누수 없는 out-of-sample 근거를 만듦.
 
-- SEC/공식 문서 ingestion
-- hybrid search, metadata filter, reranking
-- citation과 insufficient-evidence 처리
-- Prompt Injection/data leakage tests
-- 최소 50개 Golden Dataset과 비교 실험 report
-
-### Stage D — Validation and controlled execution
-
-선행 조건: 데이터 누수 없는 historical snapshot과 evaluation regression이 준비됨.
-
-- walk-forward backtesting
-- signal/anomaly 성능과 오탐 분석
-- 별도 risk engine
+- position/exposure/daily-loss limits
+- stale-data trading disable과 kill switch
+- idempotent order intent와 감사 로그
 - human-approved paper trading
-- SOXL/SOXS simulation
+- 실제 체결과 backtest 가정의 차이 측정
 
-Live trading은 Stage D의 자동 결과가 아니라, 충분한 out-of-sample 검증과 별도 안전 검토 이후의 장기 의사결정이다.
+### Stage D — Agent + MCP + RAG evidence layer
+
+선행 조건: Stage A의 읽기 schema와 Stage C의 상태 변경 경계가 안정됨.
+
+- read-only MCP Tools와 Observe/Plan/Act/Evaluate loop
+- SEC/공식 문서 hybrid search, metadata filter, reranking
+- citation, insufficient-evidence, Prompt Injection/data leakage tests
+- 최소 50개 Golden Dataset과 비교 평가 report
+- LLM은 설명을 담당하며 전략이나 주문을 자의적으로 변경하지 않음
+
+### Stage E — Controlled automated execution
+
+선행 조건: 충분한 out-of-sample·paper trading 기간과 별도 안전 검토.
+
+- 소액·제한된 symbol과 strategy allowlist
+- hard risk limits, kill switch와 즉시 수동 중단
+- broker reconciliation, partial fill·reject 처리
+- 데이터·전략·주문 전 과정 감사 기록
+
+Live trading은 Stage D의 Agent 결과가 아니라 versioned strategy와 deterministic risk engine만 요청할 수 있다.
 
 ## 14. 의도적으로 제외하는 기술
 
@@ -503,7 +570,7 @@ Live trading은 Stage D의 자동 결과가 아니라, 충분한 out-of-sample �
 - vLLM self-hosting
 - Kubernetes
 - 대규모 Spark cluster
-- high-frequency/live automated trading
+- Stage A에서의 high-frequency/live automated trading
 - 복잡한 multi-agent hierarchy
 - 제품 사용자 A/B testing
 
@@ -516,12 +583,12 @@ Live trading은 Stage D의 자동 결과가 아니라, 충분한 out-of-sample �
 1. 데이터 파이프라인과 최종 시스템 아키텍처
 2. 재현 가능한 event/schema와 idempotency test
 3. Kafka 처리량·지연 시간 및 failure recovery 결과
-4. 설명 가능한 alert/signal과 reason code
-5. Agent 상태 흐름도와 종료·재계획 trace
-6. MCP Tool/Resource schema와 감사 로그
-7. RAG 검색 방식별 품질 비교
-8. Golden Dataset과 versioned 평가 report
-9. Prompt Injection/data leakage 테스트 결과
+4. 공식 발표 시각·당시 vintage·SIP 반응을 연결한 macro impact report
+5. 반복 event, baseline과 market/sector control 비교 결과
+6. 설명 가능한 alert/signal과 reason code
+7. point-in-time backtest와 risk/paper execution report
+8. Agent 상태 흐름도와 종료·재계획 trace
+9. MCP/RAG schema, 검색 품질·보안·평가 report
 10. clean checkout에서 실행되는 README와 demo recording
 
 ## 16. 최종 성공 기준
@@ -529,10 +596,13 @@ Live trading은 Stage D의 자동 결과가 아니라, 충분한 out-of-sample �
 최고의 프로젝트는 기술 수가 가장 많은 프로젝트가 아니다. 다음 질문에 코드, 테스트, metric, 문서로 답할 수 있는 프로젝트다.
 
 - 여러 종류의 데이터가 같은 시간축과 계약으로 안정적으로 모이는가?
+- 경제지표 발표 당시 알 수 있었던 값만으로 전후 시장 반응을 반복 검증할 수 있는가?
+- 관측된 연관성과 인과관계, 표본·coverage의 한계를 구분해 설명하는가?
 - 중복, 지연, 재시작, 공급자 장애에도 결과가 일관적인가?
 - 신호와 이상 징후를 같은 입력에서 재현할 수 있는가?
 - Agent 답변의 모든 핵심 주장이 Tool 결과나 문서 출처로 추적되는가?
 - 정보가 없거나 위험한 요청일 때 안전하게 멈추는가?
+- 검증되지 않은 이상 징후나 LLM 판단이 주문으로 연결되지 않는가?
 - 각 추가 기술이 실제 관측된 문제 하나를 해결하는가?
 
 이 기준을 Stage별로 직접 구현하고 반복 검증하는 것이 프로젝트의 최종 목표다.

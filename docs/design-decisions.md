@@ -4,13 +4,13 @@
 
 기준일: 2026-08-13
 
-이 문서는 데이터 특성, 사용자, Kafka/Spark/Airflow 사용 이유, 저장·조회 방식을 명시한다. 아직 관측하지 않은 처리량은 추정값으로 확정하지 않고 측정 절차와 결정 조건을 정의한다.
+이 문서는 안전한 자동매매라는 장기 목표 중 Stage A의 **경제지표 영향 검증 데이터 기반**과 Kafka/Spark/Airflow 사용 이유를 명시한다. 주문 실행과 포지션 관리는 후속 전략·위험 관리 계층이다.
 
 ## 1. 해결할 문제와 사용자
 
 ### 핵심 문제
 
-22개 미국 주식·ETF의 IEX trade event를 지속적으로 수집하고 1분 OHLCV와 가격·거래량 이상 징후로 변환하여, 데이터가 중복·지연되거나 처리 프로세스가 재시작돼도 일관된 결과를 조회할 수 있게 한다. 실시간 경고는 `PRELIMINARY_IEX`로 명시하고 15분 이상 지난 historical SIP bar로 검증해 확정 또는 기각한다.
+첫 번째 문제는 CPI·고용·FOMC 발표 당시 공개된 값과 공식 시각을 미국 주식·ETF의 발표 전후 SIP 1분 데이터에 연결하고, 평소·시장·섹터·과거 발표와 비교해 반복된 반응을 검증하는 것이다. 두 번째 문제는 22개 종목의 IEX trade를 1분 OHLCV와 이상 징후로 바꾸고 SIP로 사후 검증하는 것이다. 두 결과 모두 후속 point-in-time backtest의 입력이며 Stage A에서 주문으로 변환하지 않는다.
 
 ### 1차 사용자 — 프로젝트 운영자 / 데이터 엔지니어
 
@@ -28,12 +28,26 @@
 
 필요한 답:
 
+- 어떤 경제지표가 언제 발표됐고 당시 공개 값은 무엇인가?
+- 발표 후 5분·30분·60분 반응은 평소와 시장·섹터 대비 얼마나 달랐는가?
+- 같은 종류의 과거 발표에서도 그 반응이 반복됐는가?
 - 특정 종목과 기간의 1분 OHLCV는 무엇인가?
 - 이상 징후 발생 전후 return과 volume feature는 무엇인가?
 - 같은 시각의 시장·섹터 ETF는 어떻게 움직였는가?
 - 당시 사용 가능한 거시경제 관측값은 무엇인가?
 
 접근 방식: PostgreSQL SQL. FastAPI는 선택 구현이며 SQL 조회를 대체하는 P0 요구사항이 아니다.
+
+### 후속 사용자 — 매매 전략·백테스트·위험 관리 계층
+
+필요한 답:
+
+- 특정 시점에 실제로 이용 가능했던 bar·feature·alert는 무엇인가?
+- 해당 alert가 IEX 예비 상태였는지 SIP 검증까지 끝났는가?
+- 입력 데이터의 freshness와 품질 상태는 전략 실행 조건을 만족하는가?
+- 같은 입력과 전략 버전으로 결과를 재현할 수 있는가?
+
+접근 방식: Stage A PostgreSQL의 versioned point-in-time query. 주문·포지션·손실 한도는 후속 risk/execution schema에서 별도로 관리한다.
 
 ### 선택 사용자 — Dashboard/API 사용자
 
@@ -45,7 +59,7 @@
 - IEX와 SIP의 가격 차이·거래량 coverage는 어느 정도인가?
 - 데이터가 최신이며 신뢰 가능한가?
 
-접근 방식: 7회차 선택 구현인 FastAPI/Streamlit. 주문과 포지션 변경 기능은 제공하지 않는다.
+접근 방식: 7회차 선택 구현인 FastAPI/Streamlit. Stage A에서는 주문과 포지션 변경 기능을 제공하지 않는다.
 
 ## 2. 데이터 특성
 
@@ -54,7 +68,8 @@
 | Alpaca IEX market trade | 작은 JSON event | WebSocket 실시간 | event time, out-of-order 가능 | 필수 | Kafka 24h, PostgreSQL IEX 1m bar |
 | Alpaca historical SIP bar | 1분 OHLCV JSON | Airflow batch, 15분 이상 지연 | 닫힌 window 검증 | 필수 | PostgreSQL SIP 1m bar/reconciliation |
 | Replay market data | Parquet/JSON fixture | 조절 가능한 stream | 원래 inter-arrival 또는 배속 | 필수 | repository fixture, Kafka 경유 |
-| FRED macro | JSON observation | Airflow daily batch | 관측일·발표시각·수집시각 분리 | 필수 | PostgreSQL |
+| Official macro releases | schedule/release page | Airflow batch/backfill | 정확한 공식 발표 시각 | 필수 | PostgreSQL economic events |
+| FRED/ALFRED macro | JSON observation/vintage | Airflow daily/backfill | 관측일·발표시각·수집시각 분리 | 필수 | PostgreSQL |
 | Alpaca news | JSON/document metadata | REST/WebSocket | publish/update time | 선택 | PostgreSQL metadata/event |
 
 정확한 수집 시간, warm-up 기간, 저장 위치와 삭제 정책은 [데이터 수집·수명주기](data-lifecycle.md)에 정의한다. P0 실시간 탐지 범위는 정규장이고 live/recorded 최소 10거래일을 목표로 하며, feed별 과거 20거래일 1분 bar를 baseline warm-up으로 사용한다.
@@ -218,9 +233,11 @@ P0에서 하지 않는 처리:
 
 ```text
 configuration check
-→ extract observations
+→ extract official release times and observations/vintage
 → validate/normalize
 → idempotent upsert
+→ fetch event-window SIP bars
+→ calculate macro impact with baselines/controls
 → data quality checks
 → pipeline status update
 ```
@@ -252,7 +269,7 @@ Dynamic Task Mapping은 9개 FRED series의 독립 실패 격리와 재실행이
 
 | 저장소 | 선택 | 역할 | 선택 이유 |
 | --- | --- | --- | --- |
-| PostgreSQL | P0 | feed별 bar/feature, reconciliation, macro, alert/history, pipeline status | 관계형 query, JOIN, unique key/upsert, SQL 분석 |
+| PostgreSQL | P0 | economic event/vintage/impact, feed별 bar/feature, reconciliation, alert/history, pipeline status | 시간 조건 JOIN, unique key/upsert, SQL 분석 |
 | Kafka | P0 | raw event 단기 buffer | 실시간 전달, lag 관찰, retention 내 재처리 |
 | Parquet/JSON | P0 fixture | deterministic replay | 반복 가능한 demo/load/failure test |
 | MongoDB | 미선택 | 없음 | P0 schema가 안정적이고 관계형·시간 조건 query가 중심 |
@@ -273,6 +290,8 @@ PostgreSQL에 raw tick을 장기 저장하지 않는다. Spark가 생성한 1분
 | Q5 | Signal/분석가 | `as_of` 이전 최신 macro observation | `macro_observations(series_id, observation_date DESC, realtime_start DESC)` |
 | Q6 | 운영자 | component별 pipeline health | `pipeline_status` primary key `(component, instance)` |
 | Q7 | 분석가/운영자 | symbol·기간별 IEX/SIP 차이와 검증 결과 | `market_bar_reconciliations(symbol, bar_start DESC)` |
+| Q8 | 분석가 | event type·기간별 발표와 당시 vintage 조회 | `economic_events(event_type, released_at DESC)` |
+| Q9 | 분석가 | event·symbol·window별 시장 반응과 비교값 조회 | `macro_event_impacts(economic_event_id, symbol, post_window_minutes)` |
 
 Business uniqueness:
 

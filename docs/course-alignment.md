@@ -1,6 +1,6 @@
 # 과정 학습 내용과 프로젝트 구현 연결
 
-이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 현재 프로젝트에서 **어떤 문제를 해결하는 데 다시 사용하는지**, 반대로 **왜 사용하지 않는 기술이 있는지**를 설명한다. 목표는 기술 이름을 많이 나열하는 것이 아니라, 배운 내용을 하나의 재현 가능한 주식 데이터 파이프라인에서 구현하고 검증하는 것이다.
+이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 경제지표 발표 영향 검증과 장기 자동매매 프로젝트에 **어떻게 연결하는지** 설명한다. 첫 분석 증거는 공식 발표 시각과 당시 vintage, SIP 시장 반응을 결합한 반복 가능한 macro event study다.
 
 이 문서는 학습 내용과 증거의 **연결표**이며 구현 계약을 중복 정의하지 않는다. event/schema는 [데이터 모델](data-model.md), API raw field는 [데이터 소스 카탈로그](data-source-catalog.md), 실행·장애 보장은 [아키텍처](architecture.md), 선택 근거는 [설계 결정](design-decisions.md)을 정본으로 따른다.
 
@@ -11,6 +11,7 @@
 3. 6회차 필수 관측 증거는 structured log·CSV/JSON metric report이며, Prometheus/Grafana는 자원이 허용될 때 같은 지표를 시각화하는 선택 profile이다.
 4. Kafka Connect, AWS 관리형 서비스, Kubernetes는 현재 데이터 흐름에 필요할 때만 도입한다.
 5. 이미 별도 과제로 구현한 기능을 그대로 복제하기보다, 이번 프로젝트의 데이터·장애 시나리오에 맞게 재검증한다.
+6. 매매 전략·백테스트·위험 관리·주문 실행은 Stage A 데이터 품질과 재현성이 검증된 뒤 진행하며, 4주 제출물에 억지로 포함하지 않는다.
 
 ## 2. 학습 내용 → 프로젝트 구현 → 증거
 
@@ -23,7 +24,7 @@
 | Spark schema와 DataFrame | provider raw JSON parsing, normalized `MarketTrade`, validation/DLQ | 입력 JSON과 normalized row, invalid code |
 | Structured Streaming window·watermark | event-time 1분 OHLCV·VWAP·trade count, late-event 처리 | 정상·중복·허용 지연·초과 지연 fixture 결과 |
 | Spark checkpoint·장애 복구 | query checkpoint와 PostgreSQL idempotent upsert 분리 | Spark 재시작 및 DB 장애 후 row/value 일치 |
-| Airflow TaskFlow·의존성 | FRED와 SIP reconciliation의 extract → validate → upsert → quality 흐름 | Graph/Grid View, task log와 logical date |
+| Airflow TaskFlow·의존성 | 공식 발표 일정·FRED/ALFRED·SIP event window의 extract → validate → upsert → impact → quality 흐름 | Graph/Grid View, task log와 logical date |
 | Airflow retry·backfill·멱등성 | timeout, exponential backoff, overlap 조회, business-key upsert | 동일 logical date 재실행·backfill 중복 없음 |
 | Dynamic Task Mapping | 9개 FRED series를 독립 호출할 실익이 확인될 때만 적용 | 적용 시 mapped task별 성공·실패, 미적용 시 결정 근거 |
 | Dataset 기반 DAG | 별도 데이터 준비 완료 이벤트로 DAG를 분리할 때만 적용 | 단일 DAG보다 명확한 의존성이 생길 때 ADR 작성 |
@@ -49,10 +50,10 @@
 → Spark/DB/Kafka 장애 후 checkpoint·upsert 복구 검증
 
 기존의 AWS batch ETL
-→ Airflow logical date·backfill·quality check가 있는 SIP/FRED batch
+→ Airflow logical date·backfill·quality check가 있는 공식 발표/FRED vintage/SIP batch
 ```
 
-이번 프로젝트의 차별점은 같은 예제를 반복하는 것이 아니라, **실시간 탐지와 지연 검증을 분리하고 전체 처리 이력을 데이터 모델로 남기는 것**이다.
+이번 프로젝트의 차별점은 같은 예제를 반복하는 것이 아니라, **경제지표 발표의 시점 정합성과 시장 반응을 검증하고 실시간 탐지·지연 검증까지 같은 데이터 모델로 남기는 것**이다.
 
 ## 4. 의도적으로 사용하지 않는 기술
 
@@ -77,7 +78,7 @@ Dynamic Task Mapping과 Dataset scheduling은 문제를 단순하게 만들 때�
 | 환경 | 목적 | 포함 | 보장하지 않는 것 |
 | --- | --- | --- | --- |
 | 로컬 `core` | 첫 수직 슬라이스와 회귀 테스트 | Kafka single broker, Spark local, PostgreSQL, replay | broker HA |
-| 로컬 `batch` | SIP/FRED workflow | Airflow, PostgreSQL | 초 단위 실시간 처리 |
+| 로컬 `batch` | 공식 발표/FRED vintage/SIP workflow | Airflow, PostgreSQL | 초 단위 실시간 처리 |
 | 로컬 metric report — 필수 | 6회차 측정·발표 | structured log, query progress, lag, CSV/JSON export | 상시 dashboard |
 | 로컬 `monitoring` — 선택 | 필수 report 시각화 | Prometheus, Grafana, exporters | P0 완료 전 동시 실행 |
 | 별도 multi-broker 실험 — 조건부 | P0 이후 Kafka 복제·ISR 학습 | 3 KRaft brokers 후보, 실제 설정은 실험 시 확정 | OCI 6GB 실행 가능성 |
@@ -91,6 +92,7 @@ Dynamic Task Mapping과 Dataset scheduling은 문제를 단순하게 만들 때�
 - Spark schema, window, watermark, checkpoint 코드
 - PostgreSQL unique key와 재실행 결과
 - Airflow DAG, retry/backoff, backfill 결과
+- 공식 발표 시각·당시 vintage·SIP event window를 연결한 macro impact report
 - 실행 ID별 structured log·CSV/JSON 부하·장애 metric report
 - 선택: Prometheus/Grafana dashboard
 - 1x·10x·50x·100x load-test report

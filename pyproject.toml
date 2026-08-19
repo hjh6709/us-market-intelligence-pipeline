@@ -1,0 +1,8 @@
+[project]
+name = "for-my-stock"
+version = "0.1.0"
+description = "U.S. macro impact and market data pipeline"
+requires-python = ">=3.12"
+dependencies = [
+    "websockets>=15,<16",
+]
