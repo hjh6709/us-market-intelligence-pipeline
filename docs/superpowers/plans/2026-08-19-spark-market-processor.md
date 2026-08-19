@@ -87,15 +87,15 @@
 
 ---
 
-### Task 5: Evidence, Documentation, and Draft PR
+### Task 5: Evidence, Documentation, and Ready-for-review PR
 
 **Files:** Modify `README.md`, `docs/course-alignment.md`; create `docs/test-results/2026-08-19-spark-market-processor-smoke.md`.
 
-**Interfaces:** Produce reproducible commands and a Draft PR from `spark-market-processor` to `main`.
+**Interfaces:** Produce reproducible commands and a ready-for-review PR from `spark-market-processor` to `main`.
 
 - [ ] Document that Spark Structured Streaming is the Kafka Consumer and PostgreSQL remains the next PR.
 - [ ] Record runtime versions, fixture inputs, final bar, duplicate/late behavior, checkpoint restart, and single-broker limitation.
 - [ ] Run all unit tests, compileall, both real Kafka integration tests, `docker compose config`, and `git diff --check`.
 - [ ] Commit `docs: record Spark market processor verification`.
 - [ ] Push `spark-market-processor` with upstream tracking.
-- [ ] Use the GitHub connector, not the invalid local `gh` token, to create a Draft PR against `main` with changes, rationale, limitations, and validation commands.
+- [ ] Use the GitHub connector, not the invalid local `gh` token, to create a ready-for-review PR against `main` with changes, rationale, limitations, and validation commands.
