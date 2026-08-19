@@ -126,3 +126,55 @@ def split_valid_invalid(validated_df: DataFrame) -> tuple[DataFrame, DataFrame]:
         validated_df.filter(F.size("reason_codes") == 0),
         validated_df.filter(F.size("reason_codes") > 0),
     )
+
+
+def prepare_streaming_trades(
+    valid_df: DataFrame,
+    watermark_delay: str = "2 minutes",
+) -> DataFrame:
+    """Bound streaming deduplication state by the event-time watermark."""
+    if not valid_df.isStreaming:
+        raise ValueError("prepare_streaming_trades requires a streaming DataFrame")
+    return valid_df.withWatermark(
+        "event_timestamp", watermark_delay
+    ).dropDuplicatesWithinWatermark(["event_id"])
+
+
+def aggregate_minute_bars(trades_df: DataFrame) -> DataFrame:
+    """Aggregate normalized trades into deterministic event-time bars."""
+    order_key = F.struct(F.col("event_timestamp"), F.col("event_id"))
+    grouped = trades_df.groupBy(
+        "symbol",
+        "source",
+        "feed",
+        F.window("event_timestamp", "1 minute").alias("bar_window"),
+    ).agg(
+        F.min_by("price", order_key).alias("open"),
+        F.max("price").alias("high"),
+        F.min("price").alias("low"),
+        F.max_by("price", order_key).alias("close"),
+        F.sum("size").alias("volume"),
+        F.count(F.lit(1)).alias("trade_count"),
+        F.sum(F.col("price") * F.col("size")).alias("notional"),
+    )
+    return grouped.select(
+        "symbol",
+        F.col("bar_window.start").alias("bar_start"),
+        F.lit("1m").alias("timeframe"),
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "trade_count",
+        F.when(
+            F.col("volume") > 0,
+            (F.col("notional") / F.col("volume")).cast("decimal(18,6)"),
+        )
+        .otherwise(F.lit(None).cast("decimal(18,6)"))
+        .alias("vwap"),
+        "source",
+        "feed",
+        F.lit(True).alias("is_final"),
+        F.lit("all_valid_trades_v1").alias("condition_policy"),
+    )

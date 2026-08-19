@@ -2,8 +2,12 @@ import json
 import unittest
 from copy import deepcopy
 
+from pyspark.sql import functions as F
+
 from src.preprocess import (
+    aggregate_minute_bars,
     parse_market_events,
+    prepare_streaming_trades,
     split_valid_invalid,
     validate_market_trades,
 )
@@ -100,6 +104,59 @@ class PreprocessTest(unittest.TestCase):
                 any(expected_reason in reasons for reasons in reason_sets),
                 expected_reason,
             )
+
+    def valid_trades(self, events: list[dict]):
+        parsed = parse_market_events(
+            self.kafka_frame([json.dumps(event) for event in events])
+        )
+        valid, _ = split_valid_invalid(validate_market_trades(parsed, ["NVDA"]))
+        return valid
+
+    def test_aggregates_out_of_order_trades_by_event_time(self) -> None:
+        event_specs = [
+            ("sha256:middle", "2026-08-19T13:30:30Z", 105.0, 2),
+            ("sha256:open", "2026-08-19T13:30:10Z", 100.0, 3),
+            ("sha256:close", "2026-08-19T13:30:50Z", 102.0, 5),
+        ]
+        events = []
+        for event_id, timestamp, price, size in event_specs:
+            event = canonical_event()
+            event["event_id"] = event_id
+            event["source_event_id"] = event_id
+            event["event_timestamp"] = timestamp
+            event["payload"].update(i=len(events) + 1, p=price, s=size, t=timestamp)
+            events.append(event)
+
+        bars = aggregate_minute_bars(self.valid_trades(events))
+        row = bars.collect()[0]
+
+        self.assertEqual(str(row.open), "100.000000")
+        self.assertEqual(str(row.high), "105.000000")
+        self.assertEqual(str(row.low), "100.000000")
+        self.assertEqual(str(row.close), "102.000000")
+        self.assertEqual(row.volume, 10)
+        self.assertEqual(row.trade_count, 3)
+        self.assertEqual(str(row.vwap), "102.000000")
+        self.assertEqual(row.timeframe, "1m")
+        self.assertTrue(row.is_final)
+        self.assertEqual(row.condition_policy, "all_valid_trades_v1")
+        utc_bar_start = bars.select(
+            F.date_format("bar_start", "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("value")
+        ).collect()[0].value
+        self.assertEqual(utc_bar_start, "2026-08-19T13:30:00Z")
+
+    def test_returns_null_vwap_when_bar_volume_is_zero(self) -> None:
+        event = canonical_event()
+        event["payload"]["s"] = 0
+
+        row = aggregate_minute_bars(self.valid_trades([event])).collect()[0]
+
+        self.assertEqual(row.volume, 0)
+        self.assertIsNone(row.vwap)
+
+    def test_rejects_batch_dataframe_at_streaming_state_boundary(self) -> None:
+        with self.assertRaisesRegex(ValueError, "requires a streaming DataFrame"):
+            prepare_streaming_trades(self.valid_trades([canonical_event()]))
 
 
 if __name__ == "__main__":
