@@ -2,6 +2,8 @@
 
 이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 경제지표 발표 영향 검증과 장기 자동매매 프로젝트에 **어떻게 연결하는지** 설명한다. 첫 분석 증거는 공식 발표 시각과 당시 vintage, SIP 시장 반응을 결합한 반복 가능한 macro event study다.
 
+2026-08-19 현재 Kafka Producer와 Spark Structured Streaming Consumer를 실제 local broker로 연결했다. Spark schema·validation, event-id deduplication, 2분 watermark, 1분 OHLCV/VWAP, 허용/초과 지연과 checkpoint 재시작 결과는 [Spark 테스트 보고서](test-results/2026-08-19-spark-market-processor-smoke.md)에 기록한다.
+
 이 문서는 학습 내용과 증거의 **연결표**이며 구현 계약을 중복 정의하지 않는다. event/schema는 [데이터 모델](data-model.md), API raw field는 [데이터 소스 카탈로그](data-source-catalog.md), 실행·장애 보장은 [아키텍처](architecture.md), 선택 근거는 [설계 결정](design-decisions.md)을 정본으로 따른다.
 
 ## 1. 적용 원칙
