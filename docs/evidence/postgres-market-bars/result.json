@@ -1,0 +1,29 @@
+{
+  "run_date": "2026-08-20",
+  "vertical_slice": {
+    "published_events": 5,
+    "duplicate_events": 1,
+    "unique_trades_in_final_bar": 3,
+    "postgres_rows_before_checkpoint_restart": 1,
+    "postgres_rows_after_checkpoint_restart": 1,
+    "final_bar": {
+      "symbol": "NVDA",
+      "bar_start": "2026-08-19T13:30:00+00:00",
+      "open": "100.000000",
+      "high": "105.000000",
+      "low": "100.000000",
+      "close": "102.000000",
+      "volume": 10,
+      "trade_count": 3
+    }
+  },
+  "database_recovery": {
+    "spark_batch_id": 9001,
+    "rows_before_stop": 1,
+    "failure_while_stopped": "OperationalError",
+    "rows_after_restart_and_retry": 1,
+    "close_after_retry": "102.000000",
+    "volume_after_retry": 11,
+    "trade_count_after_retry": 4
+  }
+}
