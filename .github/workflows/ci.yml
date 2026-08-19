@@ -17,6 +17,20 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: market
+          POSTGRES_USER: market
+          POSTGRES_PASSWORD: market
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U market -d market"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
 
     steps:
       - name: Check out repository
@@ -44,3 +58,11 @@ jobs:
 
       - name: Run unit tests
         run: .venv/bin/python -m unittest discover -s tests -v
+
+      - name: Run PostgreSQL integration tests
+        env:
+          DATABASE_URL: postgresql://market:market@localhost:55432/market
+          RUN_POSTGRES_INTEGRATION: "1"
+        run: >-
+          .venv/bin/python -m unittest
+          tests/integration/test_postgres_market_bars.py -v

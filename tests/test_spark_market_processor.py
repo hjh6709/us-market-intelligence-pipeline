@@ -1,9 +1,11 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.spark_market_processor import (
     KAFKA_CONNECTOR_PACKAGE,
+    _load_setting,
     checkpoint_paths,
     parse_args,
     summarize_invalid_reasons,
@@ -34,6 +36,22 @@ class SparkMarketProcessorTest(unittest.TestCase):
         self.assertEqual(args.symbols, ["SPY", "QQQ", "NVDA"])
         self.assertEqual(args.starting_offsets, "latest")
         self.assertEqual(args.watermark, "2 minutes")
+        self.assertEqual(args.bar_sink, "postgres")
+        self.assertEqual(
+            args.database_url,
+            "postgresql://market:market@localhost:55432/market",
+        )
+
+    def test_database_url_can_load_from_ignored_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+            env_path.write_text(
+                "DATABASE_URL=postgresql://user:secret@db:5432/market\n"
+            )
+            with patch.dict("os.environ", {}, clear=True):
+                value = _load_setting("DATABASE_URL", "fallback", env_path)
+
+        self.assertEqual(value, "postgresql://user:secret@db:5432/market")
 
     def test_separates_stateful_query_checkpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

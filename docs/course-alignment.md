@@ -2,7 +2,7 @@
 
 이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 경제지표 발표 영향 검증과 장기 자동매매 프로젝트에 **어떻게 연결하는지** 설명한다. 첫 분석 증거는 공식 발표 시각과 당시 vintage, SIP 시장 반응을 결합한 반복 가능한 macro event study다.
 
-2026-08-19 현재 Kafka Producer와 Spark Structured Streaming Consumer를 실제 local broker로 연결했다. Spark schema·validation, event-id deduplication, 2분 watermark, 1분 OHLCV/VWAP, 허용/초과 지연과 checkpoint 재시작 결과는 [Spark 테스트 보고서](test-results/2026-08-19-spark-market-processor-smoke.md)에 기록한다.
+2026-08-20 현재 Kafka Producer와 Spark Structured Streaming Consumer를 실제 local broker로 연결하고, final 1분 bar를 PostgreSQL에 transaction upsert한다. Spark schema·watermark·checkpoint 결과는 [Spark 테스트 보고서](test-results/2026-08-19-spark-market-processor-smoke.md), DB 재처리·rollback·실제 중단/복구 결과는 [PostgreSQL 테스트 보고서](test-results/2026-08-20-postgres-market-bars.md)에 기록한다.
 
 이 문서는 학습 내용과 증거의 **연결표**이며 구현 계약을 중복 정의하지 않는다. event/schema는 [데이터 모델](data-model.md), API raw field는 [데이터 소스 카탈로그](data-source-catalog.md), 실행·장애 보장은 [아키텍처](architecture.md), 선택 근거는 [설계 결정](design-decisions.md)을 정본으로 따른다.
 
@@ -30,7 +30,7 @@
 | Airflow retry·backfill·멱등성 | timeout, exponential backoff, overlap 조회, business-key upsert | 동일 logical date 재실행·backfill 중복 없음 |
 | Dynamic Task Mapping | 9개 FRED series를 독립 호출할 실익이 확인될 때만 적용 | 적용 시 mapped task별 성공·실패, 미적용 시 결정 근거 |
 | Dataset 기반 DAG | 별도 데이터 준비 완료 이벤트로 DAG를 분리할 때만 적용 | 단일 DAG보다 명확한 의존성이 생길 때 ADR 작성 |
-| PostgreSQL·SQL | feed별 bar/feature, alert 상태, reconciliation, macro 저장 | schema, unique key, index와 주요 SQL query |
+| PostgreSQL·SQL | `market_bars` migration과 transaction upsert 구현 완료. feature, alert, reconciliation, macro는 후속 단계 | schema, unique key, index, replay 전후 row/value와 주요 SQL query |
 | Observability·Prometheus/Grafana | 실행 ID별 structured log·CSV/JSON report 필수, 자원 여유 시 `monitoring` profile | 처리량·lag·batch duration·장애 metric report, 선택 dashboard |
 | Kafka broker 장애·ISR | 기본 single broker는 재시작 복구만 검증. P0 이후 필요·자원이 확인될 때만 별도 multi-broker 실험 설계 | 기본 환경의 HA 비보장 명시, 수행했을 때만 leader/ISR 변화 |
 | Docker Compose | `core`, `batch`, 선택 `monitoring`, `optional-app` profile | clean checkout 실행 명령과 container health |

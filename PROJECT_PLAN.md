@@ -493,7 +493,7 @@ P0 output mode는 append로 정해 final bar만 DB에 저장한다. 정확한 wa
 - [ ] 데이터 모델과 sample rows
 - [ ] Kafka market/replay producer
 - [ ] Kafka Consumer 역할의 Spark Structured Streaming `preprocess.py`와 checkpoint·offset·lag 증거
-- [ ] PostgreSQL schema, migration, load/upsert logic
+- [x] PostgreSQL schema, migration, load/upsert logic
 - [ ] Airflow official release, FRED/ALFRED, historical SIP reconciliation DAG
 - [ ] `macro_event_impacts`와 반복 event 분석 report
 - [ ] IEX/SIP reconciliation 결과와 alert 상태 전이 이력

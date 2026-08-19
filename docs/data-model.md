@@ -93,6 +93,7 @@ Validation:
   "source": "alpaca",
   "feed": "iex",
   "is_final": true,
+  "condition_policy": "all_valid_trades_v1",
   "spark_batch_id": 42,
   "updated_at": "2026-08-13T13:32:00Z"
 }

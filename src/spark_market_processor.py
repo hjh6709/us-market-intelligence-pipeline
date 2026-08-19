@@ -9,6 +9,7 @@ from typing import Sequence
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
 
+from src.live_market_smoke import _read_env_file
 from src.preprocess import (
     aggregate_minute_bars,
     parse_market_events,
@@ -16,9 +17,14 @@ from src.preprocess import (
     split_valid_invalid,
     validate_market_trades,
 )
+from src.postgres import postgres_bar_sink
 
 
 KAFKA_CONNECTOR_PACKAGE = "org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0"
+
+
+def _load_setting(name: str, default: str, env_path: Path = Path(".env")) -> str:
+    return os.environ.get(name) or _read_env_file(env_path).get(name) or default
 
 
 def checkpoint_paths(root: Path) -> tuple[Path, Path]:
@@ -29,10 +35,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--bootstrap-servers",
-        default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+        default=_load_setting("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
     )
     parser.add_argument(
-        "--topic", default=os.environ.get("KAFKA_TOPIC", "raw.market.v1")
+        "--topic", default=_load_setting("KAFKA_TOPIC", "raw.market.v1")
     )
     parser.add_argument("--symbols", nargs="+", default=["SPY", "QQQ", "NVDA"])
     parser.add_argument("--starting-offsets", choices=("latest", "earliest"), default="latest")
@@ -41,12 +47,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--checkpoint-root",
         type=Path,
         default=Path(
-            os.environ.get(
+            _load_setting(
                 "SPARK_CHECKPOINT_ROOT", ".spark-checkpoints/market-processor"
             )
         ),
     )
     parser.add_argument("--trigger", default="5 seconds")
+    parser.add_argument(
+        "--bar-sink",
+        choices=("postgres", "console"),
+        default=_load_setting("BAR_SINK", "postgres"),
+    )
+    parser.set_defaults(
+        database_url=_load_setting(
+            "DATABASE_URL", "postgresql://market:market@localhost:55432/market"
+        )
+    )
     parser.add_argument("--timeout", type=float, default=None)
     return parser.parse_args(argv)
 
@@ -117,15 +133,21 @@ def run_processor(args: argparse.Namespace) -> None:
     )
     queries = []
     try:
-        queries.append(
+        bar_writer = (
             bars.writeStream.queryName("final-market-bars")
-            .format("console")
             .outputMode("append")
-            .option("truncate", "false")
             .option("checkpointLocation", str(bars_checkpoint))
             .trigger(processingTime=args.trigger)
-            .start()
         )
+        if args.bar_sink == "postgres":
+            bar_query = bar_writer.foreachBatch(
+                postgres_bar_sink(args.database_url)
+            ).start()
+        else:
+            bar_query = bar_writer.format("console").option(
+                "truncate", "false"
+            ).start()
+        queries.append(bar_query)
         queries.append(
             invalid_rows.writeStream.queryName("invalid-market-metrics")
             .foreachBatch(_show_invalid_batch)
