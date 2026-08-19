@@ -3,7 +3,7 @@
 > 미국 경제지표 발표 전후의 주식·ETF 반응을 반복 가능한 데이터로 검증하고, 향후 안전한 자동매매 전략을 연구할 데이터 기반을 만든다.
 
 - 프로젝트 기간: 2026-08-13 ~ 2026-09-12
-- 현재 단계: 프로젝트 주제·데이터셋 선정 및 구조 설계
+- 현재 단계: Alpaca 실시간 수집기와 Kafka Producer 구현 완료
 - 핵심 기술 후보: Kafka, Spark Structured Streaming, Airflow, PostgreSQL
 
 ## 프로젝트 목표
@@ -163,7 +163,8 @@ README는 1차시 과제와 프로젝트 개요를 설명하는 요약 문서다
 
 ## 현재 상태와 제약
 
-- 핵심 파이프라인은 아직 기획 단계지만, 2026-08-19에 Alpaca test/IEX WebSocket 인증과 `SPY`·`QQQ`·`NVDA` 실제 trade 수신을 확인했다.
+- 2026-08-19에 Alpaca test/IEX WebSocket 인증과 `SPY`·`QQQ`·`NVDA` 실제 trade 수신을 확인했다.
+- Alpaca 원본 trade를 공통 envelope로 감싸 `raw.market.v1`에 종목코드 key로 발행하는 Kafka Producer를 구현했다. Spark 처리와 PostgreSQL 저장은 다음 단계다.
 - 첫 구현은 외부 API 없이 검증 가능한 `Replay → Kafka → Spark → PostgreSQL` 흐름이다.
 - 공식 발표와 시장 반응의 시간적 일치만으로 인과관계를 확정하지 않는다. 반복 사례와 비교 기준을 통해 관측된 연관성을 보고한다.
 - 무료 실시간 IEX 데이터는 미국 전체 거래소를 대표하지 않으며, SIP 확인은 최소 15분 지연된 사후 검증이다.
@@ -171,3 +172,30 @@ README는 1차시 과제와 프로젝트 개요를 설명하는 요약 문서다
 - 본 프로젝트는 교육·연구 목적이며 투자 조언이 아니다.
 
 This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+
+## 현재 구현 실행하기
+
+Alpaca 키는 저장소에 올리지 않고 로컬 `.env`에만 둔다.
+
+```bash
+cp .env.example .env
+uv sync
+docker compose up -d kafka kafka-init
+```
+
+실시간 IEX 거래 10건을 Kafka에 발행한다.
+
+```bash
+.venv/bin/python -m src.market_producer \
+  --feed iex --symbols SPY QQQ NVDA --max-trades 10 --timeout 60
+```
+
+단위 테스트와 실제 Kafka 통합 테스트는 다음과 같이 실행한다.
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+RUN_KAFKA_INTEGRATION=1 \
+  .venv/bin/python -m unittest tests/integration/test_kafka_market_producer.py -v
+```
+
+로컬 Kafka는 학습·검증용 단일 브로커다. 장애 복구 로직을 시험할 수는 있지만, 브로커 복제에 의한 고가용성은 제공하지 않는다.
