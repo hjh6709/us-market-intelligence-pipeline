@@ -2,6 +2,7 @@
 .env
 .venv/
 .worktrees/
+.spark-checkpoints/
 __pycache__/
 .pytest_cache/
 *.py[cod]
