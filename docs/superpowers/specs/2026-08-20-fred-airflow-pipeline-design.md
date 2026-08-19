@@ -216,3 +216,30 @@ Airflow task 기본값은 `retries=3`, `retry_exponential_backoff=True`, `max_re
 - README에는 `batch` profile 실행, DAG trigger, SQL 확인과 optional smoke 명령을 추가한다.
 - FRED required notice는 기존 README 문구를 유지한다.
 - 이 단계가 끝나도 “경제지표가 시장을 움직였다”는 분석 결과를 주장하지 않는다. 저장된 vintage와 후속 공식 발표 시각·SIP 데이터를 결합한 뒤에만 event study를 수행한다.
+
+## 11. GitHub 공개 저장소 보안 게이트
+
+다음 항목은 생성 위치와 관계없이 Git에 추가하지 않는다.
+
+```text
+.env와 FRED_API_KEY
+Airflow standalone 생성 파일, metadata DB와 인증 정보
+Airflow task log와 scheduler/API server log
+PostgreSQL·Airflow Docker volume
+DB dump, backup과 restore 임시 파일
+FRED 원본 응답·HTTP header·api_key가 포함된 URL
+Spark checkpoint, Python cache와 로컬 가상환경
+발표 캡처 중 terminal history, 환경변수, connection URL이 보이는 파일
+```
+
+`.gitignore`에는 `.env*` 중 `.env.example`만 허용하는 규칙, `airflow/` runtime directory, `logs/`, `*.db`, `*.sqlite*`, `*.dump`, `*.backup`과 로컬 evidence capture directory를 명시한다. Docker named volume은 host repository directory에 bind mount하지 않는다.
+
+커밋 가능한 fixture는 API key·request id·개인 식별정보를 제거한 최소 FRED 응답만 포함한다. fixture의 숫자와 날짜는 공개 경제 데이터 계약 테스트용이며 실제 secret을 포함하지 않는다. `result.json`에는 series별 count, date range, missing count와 business row count만 기록하고 원본 payload·환경변수·전체 connection URL은 기록하지 않는다.
+
+커밋 전 자동·수동 게이트는 다음과 같다.
+
+1. `git status --short`로 의도한 파일만 stage되었는지 확인한다.
+2. tracked file에서 `FRED_API_KEY=`, FRED `api_key=` query, 비기본 credential과 private key header를 검색한다.
+3. `.env`, runtime log, DB·dump·capture 파일이 tracked되지 않았는지 확인한다.
+4. `git diff --cached`를 읽고 fixture와 evidence에 원본 인증 정보가 없는지 확인한다.
+5. 실제 key가 발견되면 단순 삭제로 끝내지 않고 key를 폐기·재발급한 뒤 Git history 포함 여부를 확인한다.
