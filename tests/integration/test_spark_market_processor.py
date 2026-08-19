@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import time
@@ -119,8 +120,28 @@ class SparkMarketProcessorIntegrationTest(unittest.TestCase):
                     .start()
                 )
                 restarted.processAllAvailable()
-                self.assertEqual(spark.read.parquet(str(output)).count(), before_restart)
+                after_restart = spark.read.parquet(str(output)).count()
+                self.assertEqual(after_restart, before_restart)
                 self.assertIsNotNone(progress)
+                print(
+                    json.dumps(
+                        {
+                            "final_bar": {
+                                "open": str(row.open),
+                                "high": str(row.high),
+                                "low": str(row.low),
+                                "close": str(row.close),
+                                "volume": row.volume,
+                                "trade_count": row.trade_count,
+                                "vwap": str(row.vwap),
+                            },
+                            "dropped_by_watermark": dropped_by_watermark,
+                            "rows_before_restart": before_restart,
+                            "rows_after_restart": after_restart,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             finally:
                 if query is not None and query.isActive:
                     query.stop()

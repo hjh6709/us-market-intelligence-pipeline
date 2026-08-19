@@ -77,7 +77,7 @@ envelope timestamp와 payload timestamp가 다르면 `TIMESTAMP_MISMATCH`다.
 
 ### `src/spark_market_processor.py`
 
-CLI와 SparkSession 구성을 담당한다. `raw.market.v1`을 한 번 정의한 source DataFrame에서 두 query를 시작한다. bar query는 final bar를 append/console mode로 출력하고, invalid metric query는 raw payload 없이 reason별 count만 update/console mode로 출력한다. 두 query는 각각 `bars/`, `invalid-metrics/` checkpoint path를 사용한다. local MVP에서는 같은 Kafka source를 두 번 읽는 비용보다 invalid 관측 가능성을 우선하며, 부하 테스트에서 이 비용을 측정한다. 주요 입력은 bootstrap servers, topic, symbol allowlist, watermark delay, checkpoint root, trigger interval이다.
+CLI와 SparkSession 구성을 담당한다. `raw.market.v1`을 한 번 정의한 source DataFrame에서 두 query를 시작한다. bar query는 final bar를 append/console mode로 출력한다. invalid metric query는 `foreachBatch`에서 해당 micro-batch의 reason별 count만 출력해 장시간 누적되는 불필요한 groupBy state를 만들지 않는다. 두 query는 각각 `bars/`, `invalid-metrics/` checkpoint path를 사용한다. local MVP에서는 같은 Kafka source를 두 번 읽는 비용보다 invalid 관측 가능성을 우선하며, 부하 테스트에서 이 비용을 측정한다. 주요 입력은 bootstrap servers, topic, symbol allowlist, watermark delay, checkpoint root, trigger interval이다.
 
 runner는 변환 로직을 중복 구현하지 않는다. 종료 시 query exception과 마지막 progress를 출력하되 credential이나 raw payload 전체를 log에 남기지 않는다.
 
@@ -98,7 +98,7 @@ runner는 변환 로직을 중복 구현하지 않는다. 종료 시 query excep
 
 `price > 0`, `size >= 0`, UTC-aware timestamp, allowlist symbol을 요구한다. live future-skew와 replay 최솟값은 실행 모드에 따라 달라지므로 이 PR에서 임의의 wall-clock cutoff로 과거 fixture를 폐기하지 않는다. 해당 정책은 replay runner를 만들 때 configuration으로 추가한다.
 
-invalid row는 테스트에서 분리 결과와 reason을 검증한다. 운영용 `dead-letter.v1` 발행은 다음 sink PR에서 추가한다. 이번 runner의 두 번째 query는 invalid payload 전체를 console에 출력하지 않고 reason별 count만 보여준다.
+invalid row는 테스트에서 분리 결과와 reason을 검증한다. 운영용 `dead-letter.v1` 발행은 다음 sink PR에서 추가한다. 이번 runner의 두 번째 query는 invalid payload 전체를 출력하지 않고 micro-batch별 reason count만 보여준다.
 
 ## 6. Trade condition 정책
 
