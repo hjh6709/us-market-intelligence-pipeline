@@ -14,6 +14,7 @@ def create_local_spark(
         SparkSession.builder.appName(app_name)
         .master(master)
         .config("spark.sql.session.timeZone", "UTC")
+        .config("spark.sql.caseSensitive", "true")
         .config("spark.ui.enabled", "false")
         .config("spark.sql.shuffle.partitions", "2")
         .getOrCreate()

@@ -18,6 +18,7 @@ class SparkSessionTest(unittest.TestCase):
         self.assertEqual(row_count, 1)
         self.assertEqual(self.spark.conf.get("spark.sql.session.timeZone"), "UTC")
         self.assertEqual(self.spark.conf.get("spark.sql.shuffle.partitions"), "2")
+        self.assertEqual(self.spark.conf.get("spark.sql.caseSensitive"), "true")
 
 
 if __name__ == "__main__":
