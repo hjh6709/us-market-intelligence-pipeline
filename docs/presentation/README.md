@@ -4,6 +4,7 @@
 - 발표 대본: [4분 발표 대본](../presentation-script.md)
 - 예상 질문: [발표 Q&A](../presentation-qa.md)
 - 실행 증거: [발표용 캡처 6종](../evidence/presentation-captures/README.md)
+- 아키텍처 원본: [pipeline-architecture.svg](../diagrams/pipeline-architecture.svg)
 
 슬라이드는 다음 순서로 구성했다.
 

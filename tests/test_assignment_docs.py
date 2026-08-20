@@ -30,7 +30,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("다음 미국 정규장에 검증", readme)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
-        diagram = Path("docs/architecture.svg").read_text(encoding="utf-8")
+        diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")
 
         self.assertIn("Alpaca IEX", diagram)
         self.assertIn("Kafka raw.market.v1", diagram)
