@@ -1,8 +1,16 @@
 .DS_Store
-.env
+.env*
+!.env.example
 .venv/
 .worktrees/
 .spark-checkpoints/
+airflow-runtime/
+logs/
 __pycache__/
 .pytest_cache/
 *.py[cod]
+*.db
+*.sqlite*
+*.dump
+*.backup
+docs/evidence/**/captures/
