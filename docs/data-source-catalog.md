@@ -1,8 +1,8 @@
 # API Data Source Catalog
 
-상태: initial contract, smoke test required
+상태: ingestion contract implemented, end-to-end evidence in progress
 
-검증일: 2026-08-13
+검증일: 2026-08-20
 
 이 문서는 장기 자동매매 목표의 첫 단계에서 각 API가 **무엇을 제공하는지**, 경제지표 영향 검증 MVP가 **무엇을 가져오고 어디에 사용하는지**를 정의한다. Stage A에서는 경제·시장 데이터만 수집하며 계좌·주문 데이터는 사용하지 않는다.
 
@@ -11,7 +11,7 @@
 | API/Source | 제공 범위 | MVP에서 가져오는 것 | 제외 또는 후속 |
 | --- | --- | --- | --- |
 | Alpaca Real-time Stock WebSocket | trade, quote, minute/updated/daily bar, trading status, LULD 등 | IEX feed의 raw `trade` event | quote와 provider bar는 비교용 smoke test만, 나머지 channel은 제외 |
-| Alpaca Historical Stock REST | trade, quote, bar와 IEX/SIP 등 feed 선택 | IEX/SIP `1Min` bar, 과거 20거래일 warm-up과 지연 검증 | historical raw trade/quote 장기 backfill 제외 |
+| Alpaca Historical Stock REST | trade, quote, bar와 IEX/SIP 등 feed 선택 | 짧은 실제 IEX trade replay, IEX/SIP `1Min` bar warm-up과 지연 검증 | historical raw trade/quote 장기 보관 제외 |
 | Alpaca Asset/Calendar/Clock | symbol metadata, 거래일, open/close, 현재 개장 상태 | active/tradable symbol 확인, 정규장·휴장·조기종료 판정 | Stage A에서는 주문 가능성·margin·계좌 정보 사용하지 않음 |
 | BLS·BEA·Federal Reserve 공식 일정 | release date/time, reference period, official URL | CPI·고용·FOMC의 정확한 발표 시각 | forecast 추정과 비공식 timestamp 제외 |
 | FRED/ALFRED API | series metadata, observations, revisions/vintage, release dates | 9개 series metadata, observations, vintage | 정확한 장중 발표 시각으로 단독 사용하지 않음; forecast 추정 제외 |
@@ -67,13 +67,18 @@ Kafka `raw.market.v1`은 이 provider payload를 수정하지 않고 common enve
 
 ## 3. Alpaca Historical Stock REST
 
-공식 문서: [Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars), [Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)
+공식 문서: [Historical Trades](https://docs.alpaca.markets/us/reference/stocktradesingle-1), [Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars), [Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)
 
 MVP endpoint:
 
 ```text
+GET https://data.alpaca.markets/v2/stocks/{symbol}/trades
 GET https://data.alpaca.markets/v2/stocks/bars
 ```
+
+Historical Trades는 장이 닫힌 뒤에도 실제 IEX 거래로 ingestion을 재현하는 데 사용한다. 지정 구간을 `sort=asc`로 pagination하며, `next_page_token`이 없을 때만 완전한 수집으로 판정한다. REST 응답의 trade에 `T="t"`, 요청 symbol을 `S`로 보강한 뒤 WebSocket과 동일한 공통 envelope·Kafka topic·Spark schema를 사용한다. 이 과정은 실제 거래 값을 합성하거나 timestamp를 바꾸지 않는다.
+
+고정 과제 증빙은 짧은 구간만 메모리에 유지해 Kafka에 발행한다. 원본 HTTP response, header와 API key가 포함된 정보는 파일 또는 Git에 저장하지 않으며, 장기 raw archive로 사용하지 않는다.
 
 ### 요청에서 지정할 수 있는 값
 
