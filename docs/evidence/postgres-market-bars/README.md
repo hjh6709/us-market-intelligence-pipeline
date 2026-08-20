@@ -59,3 +59,5 @@ docker compose up -d --wait postgres
 5. `05_database_recovered.png` — 복구 후 동일 batch 성공과 최종 행 수 1
 
 캡처는 실행 결과를 보조한다. 코드, migration, 자동 테스트와 [테스트 보고서](../../test-results/2026-08-20-postgres-market-bars.md)를 함께 제출해야 재현 가능하다.
+
+공개 발표에서는 비밀정보가 제거된 `04_postgres_storage.png`와 `06_database_recovery.png`를 포함한 [발표용 캡처 묶음](../presentation-captures/README.md)을 사용한다.
