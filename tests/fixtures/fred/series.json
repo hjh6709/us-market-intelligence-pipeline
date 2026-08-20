@@ -1,0 +1,15 @@
+{
+  "seriess": [
+    {
+      "id": "DGS10",
+      "title": "Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity",
+      "observation_start": "1962-01-02",
+      "observation_end": "2026-08-19",
+      "frequency": "Daily",
+      "units": "Percent",
+      "seasonal_adjustment": "Not Seasonally Adjusted",
+      "last_updated": "2026-08-19 15:16:01-05:00",
+      "notes": "Public contract fixture with shortened notes."
+    }
+  ]
+}
