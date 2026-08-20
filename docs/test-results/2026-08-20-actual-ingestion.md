@@ -1,9 +1,11 @@
-# 실제 Alpaca 데이터 수집·저장 결과
+# Historical 실제 Alpaca 데이터 수집·저장 결과
 
 - 실행일: 2026-08-20 KST
 - 데이터: Alpaca Historical Trades API의 실제 IEX `SMH` 거래
 - 조회 구간: 2026-08-19 19:50:00Z 이상, 19:56:00Z 미만
 - 실행 경로: Alpaca REST → Python ingestion → Kafka `raw.market.v1` → Spark Structured Streaming → PostgreSQL `market_bars`
+
+이 보고서의 1분 봉은 WebSocket 실시간 10건으로 만든 결과가 아니다. 장 종료 후 Historical Trades REST API로 조회한 실제 거래를 동일한 처리 경로에 넣어 저장 단계를 검증한 결과다. WebSocket 실제 거래 10건은 별도 실행에서 Kafka 발행·재소비까지 검증했으며, WebSocket부터 PostgreSQL까지의 전체 실시간 실행은 다음 미국 정규장 검증 항목이다.
 
 ## 결과
 

@@ -145,17 +145,27 @@ RUN_KAFKA_SPARK_POSTGRES_INTEGRATION=1 \
 - [x] PostgreSQL `market_bars` migration과 transaction upsert
 - [x] checkpoint 재시작, DB rollback·중단·복구 자동 테스트
 - [x] 실제 Alpaca historical trade → Kafka → Spark → PostgreSQL 통합 실행
+- [ ] 실시간 WebSocket trade → Kafka → Spark → PostgreSQL 통합 실행 증빙
 
-2026-08-20 실행에서 Alpaca IEX의 실제 SMH 거래 427건을 Kafka에 발행했고, Spark watermark가 확정한 1분 봉 3건을 PostgreSQL에 저장했습니다. 저장된 business key 중복은 0건입니다. 자세한 명령과 수치는 [실제 데이터 수집·저장 결과](docs/test-results/2026-08-20-actual-ingestion.md)에 있습니다.
+### 실제 데이터 검증 상태
+
+| 검증 경로 | 실제 결과 | 상태 |
+| --- | --- | --- |
+| WebSocket → Kafka | 2026-08-19 정규장 시작 구간의 실제 IEX 거래 10건 수신·발행·재소비 | 완료 |
+| Historical REST → Kafka → Spark → PostgreSQL | 실제 IEX 거래 427건 → final 1분 봉 3건, 중복 business key 0건 | 완료 |
+| WebSocket → Kafka → Spark → PostgreSQL | 동일 프로세스를 함께 실행해 final 1분 봉과 중복 여부 확인 | 다음 미국 정규장에 검증 |
+
+따라서 PostgreSQL의 3개 1분 봉은 WebSocket에서 받은 10건으로 만든 결과가 아니라, Alpaca Historical Trades API에서 받은 실제 거래 427건을 동일한 Kafka·Spark 경로로 처리한 결과입니다. 실시간 수집은 Kafka까지 검증했으며, 실시간 전체 저장 경로는 아직 완료로 표시하지 않습니다. 자세한 명령과 수치는 [Historical 실제 데이터 수집·저장 결과](docs/test-results/2026-08-20-actual-ingestion.md)에 있습니다.
 
 ## 다음 단계
 
-1. BLS·BEA·Federal Reserve의 공식 발표 시각 수집
-2. FRED/ALFRED observation과 당시 vintage 저장
-3. Airflow logical date·retry·backfill DAG
-4. Historical SIP 발표 전후 window 수집
-5. 발표 후 5분·30분·60분 수익률·거래량·변동성과 평소 기준 비교
-6. 결과 조회용 SQL·Streamlit 또는 BI 화면
+1. 다음 미국 정규장에 WebSocket → Kafka → Spark → PostgreSQL 전체 경로 검증
+2. BLS·BEA·Federal Reserve의 공식 발표 시각 수집
+3. FRED/ALFRED observation과 당시 vintage 저장
+4. Airflow logical date·retry·backfill DAG
+5. Historical SIP 발표 전후 window 수집
+6. 발표 후 5분·30분·60분 수익률·거래량·변동성과 평소 기준 비교
+7. 결과 조회용 SQL·Streamlit 또는 BI 화면
 
 자동 주문은 이번 4주 범위가 아닙니다. 충분한 반복 사례, point-in-time 백테스트와 위험 관리 검증을 통과한 뒤 별도 단계로 진행합니다.
 
@@ -177,11 +187,11 @@ RUN_KAFKA_SPARK_POSTGRES_INTEGRATION=1 \
 - [데이터 모델과 이벤트 계약](docs/data-model.md)
 - [설계 결정](docs/design-decisions.md)
 - [과정 학습 내용과 구현 연결](docs/course-alignment.md)
-- [Alpaca 실제 데이터 smoke 결과](docs/test-results/2026-08-19-alpaca-live-smoke.md)
-- [Kafka Producer 결과](docs/test-results/2026-08-19-kafka-producer-smoke.md)
+- [Alpaca WebSocket 실제 IEX 거래 10건 수신 결과](docs/test-results/2026-08-19-alpaca-live-smoke.md)
+- [WebSocket 실제 거래 10건 Kafka 발행·재소비 결과](docs/test-results/2026-08-19-kafka-producer-smoke.md)
 - [Spark 처리 결과](docs/test-results/2026-08-19-spark-market-processor-smoke.md)
 - [PostgreSQL 저장·복구 결과](docs/test-results/2026-08-20-postgres-market-bars.md)
-- [실제 Alpaca → Kafka → Spark → PostgreSQL 결과](docs/test-results/2026-08-20-actual-ingestion.md)
+- [Historical 실제 Alpaca → Kafka → Spark → PostgreSQL 결과](docs/test-results/2026-08-20-actual-ingestion.md)
 - [실제 데이터 증빙 재현 절차](docs/evidence/actual-ingestion/README.md)
 - [PostgreSQL 증빙 체크리스트](docs/evidence/postgres-market-bars/README.md)
 - [Agent·MCP·RAG 장기 비전](docs/final-vision.md)

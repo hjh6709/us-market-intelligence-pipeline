@@ -19,6 +19,16 @@ class AssignmentDocumentationTest(unittest.TestCase):
 
         self.assertEqual(positions, sorted(positions))
 
+    def test_readme_separates_live_and_historical_evidence(self) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+
+        self.assertIn("WebSocket → Kafka", readme)
+        self.assertIn("실제 IEX 거래 10건", readme)
+        self.assertIn("Historical REST → Kafka → Spark → PostgreSQL", readme)
+        self.assertIn("실제 IEX 거래 427건 → final 1분 봉 3건", readme)
+        self.assertIn("WebSocket → Kafka → Spark → PostgreSQL", readme)
+        self.assertIn("다음 미국 정규장에 검증", readme)
+
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/architecture.svg").read_text(encoding="utf-8")
 

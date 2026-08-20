@@ -1,6 +1,8 @@
-# 실제 Alpaca 데이터 수집·저장 증빙
+# Historical 실제 Alpaca 데이터 수집·저장 증빙
 
 이 증빙은 합성 fixture가 아니라 Alpaca Historical Trades API의 실제 IEX 거래를 기존 ingestion 경로로 재생해 PostgreSQL 저장까지 확인한다.
+
+이 결과를 WebSocket 실시간 end-to-end 증빙으로 사용하지 않는다. WebSocket 실제 거래는 Kafka까지 별도로 검증했으며, WebSocket → Kafka → Spark → PostgreSQL 전체 실행은 다음 정규장에 확인한다.
 
 2026-08-20 검증 결과는 [테스트 보고서](../../test-results/2026-08-20-actual-ingestion.md)와 [result.json](result.json)에 저장했다. 공개 파일에는 집계 수치만 남기고 API key, secret, 원본 응답은 남기지 않았다.
 
