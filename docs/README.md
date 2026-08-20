@@ -25,6 +25,8 @@ README에는 과제 설명과 실행에 필요한 핵심만 둔다. 세부 계�
 | [evidence/actual-ingestion/](evidence/actual-ingestion/README.md) | 실제 Historical 거래 수집·저장 수치와 재현 절차 |
 | [evidence/postgres-market-bars/](evidence/postgres-market-bars/README.md) | DB 중복 방지와 장애 복구 증거 |
 | [evidence/presentation-captures/](evidence/presentation-captures/README.md) | 비밀정보를 제거한 발표용 캡처 6종 |
+| [submission-checklist.md](submission-checklist.md) | 과제 요구사항별 완료 상태와 발표 직전 확인 순서 |
+| [../data/README.md](../data/README.md) | 공개 합성 샘플과 로컬 실제 데이터의 구분 |
 
 ## 발표 자료
 

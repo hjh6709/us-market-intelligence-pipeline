@@ -20,8 +20,13 @@ SELECT
     symbol,
     bar_start,
     timeframe,
+    open,
+    high,
+    low,
+    close,
     volume,
     trade_count,
+    vwap,
     source,
     feed,
     is_final

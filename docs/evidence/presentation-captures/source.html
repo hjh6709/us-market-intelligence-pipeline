@@ -60,9 +60,9 @@ PORT    55432</pre><div class="box"><h2>Raw storage 확인</h2><p>Kafka <code>ra
         source: "docs/test-results/2026-08-19-kafka-producer-smoke.md"
       },
       actual: {
-        title: "실제 거래 427건을 같은 처리 경로로 최종 저장했습니다",
+        title: "실제 거래 427건 발행 후, 174건이 확정 봉 3건에 반영됐습니다",
         flow: "Alpaca Historical IEX <span>→</span> Kafka <span>→</span> Spark <span>→</span> PostgreSQL",
-        body: `<div class="metrics"><div class="metric good"><div class="value">427</div><div class="label">조회 = 발행</div><div class="desc">실제 SMH trade · API 1 page</div></div><div class="metric good"><div class="value">3</div><div class="label">최종 1분봉</div><div class="desc">19:50Z ~ 19:52Z · watermark 확정</div></div><div class="metric good"><div class="value">0</div><div class="label">중복 business key</div><div class="desc">symbol + bar_start + source + feed</div></div></div><div class="result"><span class="dot"></span>합성 데이터가 아닌 외부 API 실제 데이터로 Ingestion → Storage 검증 완료</div>`,
+        body: `<div class="metrics"><div class="metric good"><div class="value">427</div><div class="label">조회 = 발행</div><div class="desc">실제 SMH trade · API 1 page</div></div><div class="metric good"><div class="value">174</div><div class="label">확정 봉 반영 거래</div><div class="desc">3개 final 1분봉 · 19:50Z ~ 19:52Z</div></div><div class="metric good"><div class="value">0</div><div class="label">중복 business key</div><div class="desc">symbol + bar_start + source + feed</div></div></div><div class="result"><span class="dot"></span>나머지 구간은 실행 종료 시 watermark 미통과로 final row에 저장되지 않음</div>`,
         source: "docs/evidence/actual-ingestion/result.json"
       },
       storage: {

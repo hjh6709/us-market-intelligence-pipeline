@@ -17,6 +17,9 @@
   "last_final_bar_start": "2026-08-19T19:52:00Z",
   "aggregated_volume": 6914,
   "aggregated_trade_count": 174,
+  "market_bars_sha256": "098f3ce57033680c6d4f3ef24b2668ec58d4f3c65804b7908cea1d9ea1206c51",
+  "hash_contract": "CSV_FIELDS order, rows ordered by bar_start, comma joined values, newline joined rows, no header",
   "raw_payload_persisted_in_repository": false,
+  "exact_market_values_persisted_in_repository": false,
   "credentials_persisted_in_repository": false
 }

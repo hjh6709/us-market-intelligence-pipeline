@@ -22,7 +22,7 @@ Alpaca Historical Trades
 - end: `2026-08-19T19:56:00Z`
 - API endpoint: `/v2/stocks/SMH/trades`
 
-원본 API 응답, request header, API key와 전체 인증 URL은 파일이나 Git에 저장하지 않는다. 커밋 가능한 결과는 수집 건수, page 수, 저장된 final bar 수, UTC 범위와 중복 수뿐이다.
+원본 API 응답, request header, API key와 전체 인증 URL은 파일이나 Git에 저장하지 않는다. 정확한 시장 가격 행도 Alpaca 재배포 조건 때문에 공개 Git에 커밋하지 않는다. 커밋 가능한 결과는 수집 건수, page 수, 저장된 final bar 수, UTC 범위, 중복 수와 실제 행의 SHA-256 해시다.
 
 ## 실행 순서
 
@@ -38,6 +38,8 @@ Alpaca Historical Trades
 docker compose exec -T postgres \
   psql -U market -d market \
   -f /dev/stdin < scripts/evidence/actual_ingestion_evidence.sql
+
+.venv/bin/python -m scripts.evidence.export_actual_market_bars
 ```
 
 ## 합격 기준

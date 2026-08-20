@@ -34,7 +34,7 @@ Alpaca actual trade
 
 ![전체 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
-- 실선: 현재 구현하고 실행 증거가 있는 경로
+- 실선: 현재 구현된 데이터 경로. 실행 증거 범위는 화살표의 설명으로 구분
 - 점선: Airflow, 경제지표 영향 분석과 BI 등 다음 단계
 - Kafka: 원본 거래 이벤트를 24시간 보관
 - PostgreSQL: 확정된 1분 봉을 business key 기준으로 저장
@@ -94,6 +94,14 @@ docker compose exec -T postgres \
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
+실제 저장된 OHLCV 행을 로컬 CSV로 확인하려면 다음 명령을 실행합니다.
+
+```bash
+.venv/bin/python -m scripts.evidence.export_actual_market_bars
+```
+
+생성되는 `data/local/actual_market_bars.csv`는 실제 Alpaca 시장 데이터이므로 Git에서 제외합니다. 공개 저장소에는 [합성 스키마 예시](data/sample/market_bars.synthetic.csv), 실제 처리 건수·시간 범위·중복 검사와 재현 코드만 둡니다. 구분 이유는 [데이터 파일 안내](data/README.md)에 적었습니다.
+
 통합 테스트와 증빙 재현 명령은 [문서 안내](docs/README.md)에서 확인할 수 있습니다.
 
 ## 현재 구현 범위
@@ -109,10 +117,10 @@ docker compose exec -T postgres \
 | 검증 경로 | 실제 결과 | 상태 |
 | --- | --- | --- |
 | WebSocket → Kafka | 2026-08-19 실제 IEX 거래 10건 수신·발행·재소비 | 완료 |
-| Historical REST → Kafka → Spark → PostgreSQL | 실제 IEX 거래 427건 → final 1분 봉 3건, 중복 business key 0건 | 완료 |
-| WebSocket → Kafka → Spark → PostgreSQL | 한 프로세스로 실행해 final 봉과 중복 여부 확인 | 다음 미국 정규장에 검증 |
+| Historical REST → Kafka → Spark → PostgreSQL | 실제 IEX 거래 427건 발행, 그중 174건이 final 1분 봉 3건에 반영, 중복 key 0건 | 완료 |
+| WebSocket → Kafka → Spark → PostgreSQL | Spark와 Producer를 동시에 실행해 end-to-end로 확인 | 다음 미국 정규장에 검증 |
 
-PostgreSQL의 3개 봉은 WebSocket 10건이 아니라 Historical API의 실제 거래 427건을 처리한 결과입니다. 자세한 수치는 [실제 수집·저장 결과](docs/test-results/2026-08-20-actual-ingestion.md)에 있습니다.
+PostgreSQL의 3개 봉은 WebSocket 10건으로 만든 것이 아닙니다. Historical API의 실제 거래 427건을 Kafka에 발행한 실행에서, watermark를 통과한 174건이 반영된 결과입니다. 자세한 수치는 [실제 수집·저장 결과](docs/test-results/2026-08-20-actual-ingestion.md)에 있습니다.
 
 ## 다음 단계
 
@@ -133,6 +141,8 @@ PostgreSQL의 3개 봉은 WebSocket 10건이 아니라 Historical API의 실제 
 ## 문서와 발표 자료
 
 - [문서 전체 안내](docs/README.md)
+- [과제 제출 점검표](docs/submission-checklist.md)
+- [데이터 파일 안내](data/README.md)
 - [4주·8회차 실행 계획](PROJECT_PLAN.md)
 - [실제 실행 증거](docs/evidence/actual-ingestion/README.md)
 - [발표 자료·대본·예상 질문](docs/presentation/README.md)
