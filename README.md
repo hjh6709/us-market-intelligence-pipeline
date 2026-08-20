@@ -194,6 +194,10 @@ RUN_KAFKA_SPARK_POSTGRES_INTEGRATION=1 \
 - [Historical 실제 Alpaca → Kafka → Spark → PostgreSQL 결과](docs/test-results/2026-08-20-actual-ingestion.md)
 - [실제 데이터 증빙 재현 절차](docs/evidence/actual-ingestion/README.md)
 - [PostgreSQL 증빙 체크리스트](docs/evidence/postgres-market-bars/README.md)
+- [발표용 실행 증거 캡처 6종](docs/evidence/presentation-captures/README.md)
+- [4분 발표 대본](docs/presentation-script.md)
+- [발표 예상 질문과 답변](docs/presentation-qa.md)
+- [2차시 과제 발표 자료](docs/presentation/README.md)
 - [Agent·MCP·RAG 장기 비전](docs/final-vision.md)
 
 ## 면책 및 데이터 출처 고지

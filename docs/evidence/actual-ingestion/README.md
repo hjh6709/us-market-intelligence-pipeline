@@ -52,7 +52,7 @@ docker compose exec -T postgres \
 
 ## 발표 캡처
 
-캡처는 `docs/evidence/actual-ingestion/captures/`에 로컬 보관하며 Git에는 올리지 않는다.
+원본 터미널 전체 화면은 `docs/evidence/actual-ingestion/captures/`에 로컬 보관하며 Git에는 올리지 않는다. 공개 발표에는 비밀정보를 제거하고 집계 결과만 정리한 [발표용 실행 증거 캡처](../presentation-captures/README.md)를 사용한다.
 
 1. Kafka·PostgreSQL healthy 상태
 2. historical replay의 sanitized summary
