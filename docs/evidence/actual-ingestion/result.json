@@ -1,0 +1,22 @@
+{
+  "verified_at": "2026-08-20T09:53:27+09:00",
+  "source": "alpaca_historical_trades",
+  "feed": "iex",
+  "symbol": "SMH",
+  "requested_start": "2026-08-19T19:50:00Z",
+  "requested_end": "2026-08-19T19:56:00Z",
+  "api_pages": 1,
+  "fetched_trades": 427,
+  "published_trades": 427,
+  "kafka_topic": "raw.market.v1",
+  "watermark": "2 minutes",
+  "final_bar_rows": 3,
+  "business_keys": 3,
+  "duplicate_business_keys": 0,
+  "first_final_bar_start": "2026-08-19T19:50:00Z",
+  "last_final_bar_start": "2026-08-19T19:52:00Z",
+  "aggregated_volume": 6914,
+  "aggregated_trade_count": 174,
+  "raw_payload_persisted_in_repository": false,
+  "credentials_persisted_in_repository": false
+}
