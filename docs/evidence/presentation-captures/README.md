@@ -4,6 +4,8 @@
 
 모든 이미지는 저장소의 테스트 보고서, 집계 결과 JSON과 2026-08-20의 읽기 전용 상태 조회를 바탕으로 작성했다. API key, secret, connection URL, `.env`, 원본 API payload는 포함하지 않았다. 실제 터미널 전체 화면은 비밀정보 노출 가능성이 있어 Git에 올리지 않는다.
 
+`source.html?view=services|live|actual|storage|tests|recovery`는 캡처의 편집 가능한 정본이다. PNG를 수정할 때는 1280×720 viewport로 렌더링하고, 글자 잘림과 수치가 근거 문서와 일치하는지 확인한다.
+
 | 파일 | 보여주는 내용 | 근거 |
 | --- | --- | --- |
 | `01_services_and_raw_storage.png` | Kafka·PostgreSQL healthy, Kafka partition offset | 로컬 서비스와 Kafka read-only 조회 |
