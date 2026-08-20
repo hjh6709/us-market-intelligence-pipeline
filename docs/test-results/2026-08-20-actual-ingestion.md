@@ -20,8 +20,9 @@
 | final 봉 시간 범위 | 19:50Z ~ 19:52Z |
 | 집계 거래량 | 6,914주 |
 | 집계 trade count | 174건 |
+| 실제 저장 행 SHA-256 | `098f3ce57033680c6d4f3ef24b2668ec58d4f3c65804b7908cea1d9ea1206c51` |
 
-Spark는 2분 event-time watermark를 사용합니다. 조회 구간의 끝부분은 이후 event가 충분히 진행되기 전까지 미확정 상태이므로, 이 실행에서는 19:50~19:52의 3개 봉만 final row로 저장됐습니다. 이는 손실이 아니라 늦게 도착하는 거래를 기다리는 설계입니다.
+Spark는 2분 event-time watermark를 사용합니다. 실제 거래 427건을 Kafka에 발행했으며, 이 실행 종료 시점에는 그중 174건이 19:50~19:52의 확정 봉 3개에 반영됐습니다. 나머지 구간은 watermark를 통과하지 않아 PostgreSQL final row로 저장되지 않았습니다. checkpoint를 유지하고 이후 event-time이 진행되면 확정될 수 있습니다.
 
 ## 합격 기준 확인
 
@@ -33,3 +34,13 @@ Spark는 2분 event-time watermark를 사용합니다. 조회 구간의 끝부�
 - [x] API key, secret, 원본 응답을 Git 증빙에 저장하지 않음
 
 재현 명령과 SQL은 [증빙 절차](../evidence/actual-ingestion/README.md), 기계 판독용 수치는 [result.json](../evidence/actual-ingestion/result.json)에 있습니다.
+
+## 실제 저장 행 확인
+
+`scripts/evidence/actual_ingestion_evidence.sql`은 로컬 PostgreSQL의 OHLCV·VWAP 실제 행과 중복 여부를 조회한다. 같은 행을 CSV로 확인할 때는 다음 명령을 사용한다.
+
+```bash
+.venv/bin/python -m scripts.evidence.export_actual_market_bars
+```
+
+CSV는 `data/local/actual_market_bars.csv`에 생성되며 Git에서 제외된다. 다른 출력 경로는 스크립트가 거부한다. Alpaca의 시장 데이터 재배포 제한 때문에 공개 저장소에는 정확한 가격 행이나 원본 payload를 올리지 않는다. 공개 증빙은 행 수, UTC 범위, 집계값, 중복 검사, 재현 코드와 행 해시로 구성한다. 해시는 로컬 행의 일관성을 확인하며 데이터 출처 자체를 독립 증명하지는 않는다. 자세한 공개·로컬 구분은 [데이터 파일 안내](../../data/README.md)에 있다.

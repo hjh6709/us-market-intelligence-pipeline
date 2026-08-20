@@ -18,9 +18,9 @@ Data Source
 → Analysis / BI
 ```
 
-- 파란색·초록색 실선: 현재 코드와 실행 증거가 있는 경로
+- 파란색·초록색 실선: 현재 구현된 코드 경로. 실행 증거의 끝은 화살표 설명으로 구분
 - 보라색 점선: 다음 회차에서 구현할 배치·분석 경로
-- 현재 경로: Alpaca → Python Ingestion → Kafka → Spark → PostgreSQL → SQL 검증
+- 현재 경로: WebSocket은 Kafka까지 검증, Historical REST는 PostgreSQL까지 검증
 - 다음 경로: 공식 경제지표·FRED·Historical SIP → Airflow → 영향 분석 → BI
 
 PNG를 수정한 뒤에는 SVG 정본과 내용이 같은지, 글자가 잘리거나 lane 경계를 침범하지 않는지 확인한다.

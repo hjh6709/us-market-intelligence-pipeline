@@ -28,10 +28,10 @@
 
   <g transform="translate(54 113)">
     <rect x="0" y="0" width="22" height="22" rx="4" class="implemented"/>
-    <text x="32" y="17" class="note">현재 구현·실행 가능</text>
+    <text x="32" y="17" class="note">현재 구현 경로</text>
     <rect x="190" y="0" width="22" height="22" rx="4" class="planned"/>
     <text x="222" y="17" class="note">다음 단계</text>
-    <text x="420" y="17" class="note">실선: 현재 데이터 흐름 · 점선: 예정 데이터 흐름</text>
+    <text x="420" y="17" class="note">실선: 구현 경로 · 화살표 설명: 실제 실행 증거 범위 · 점선: 예정 경로</text>
   </g>
 
   <g>
@@ -50,8 +50,8 @@
   <g>
     <rect x="66" y="238" width="214" height="112" rx="13" class="implemented"/>
     <text x="173" y="272" text-anchor="middle" class="box-title">Alpaca IEX</text>
-    <text x="173" y="299" text-anchor="middle" class="box-copy">실시간 WebSocket</text>
-    <text x="173" y="323" text-anchor="middle" class="box-copy">Historical Trades REST</text>
+    <text x="173" y="299" text-anchor="middle" class="box-copy">WebSocket · Kafka까지 검증</text>
+    <text x="173" y="323" text-anchor="middle" class="box-copy">Historical REST · DB까지 검증</text>
 
     <rect x="370" y="238" width="214" height="112" rx="13" class="implemented"/>
     <text x="477" y="272" text-anchor="middle" class="box-title">Python Ingestion</text>
@@ -80,11 +80,11 @@
   </g>
 
   <path d="M280 294 H370" class="flow"/>
-  <text x="325" y="282" text-anchor="middle" class="edge-copy">actual trade</text>
+  <text x="325" y="282" text-anchor="middle" class="edge-copy">actual trade · 2개 경로</text>
   <path d="M477 350 V426" class="flow"/>
-  <text x="489" y="392" class="edge-copy">JSON event</text>
+  <text x="489" y="392" class="edge-copy">live + historical</text>
   <path d="M584 488 H674" class="flow"/>
-  <text x="629" y="476" text-anchor="middle" class="edge-copy">consume</text>
+  <text x="629" y="476" text-anchor="middle" class="edge-copy">historical E2E</text>
   <path d="M888 488 H978" class="flow"/>
   <text x="933" y="476" text-anchor="middle" class="edge-copy">final 1m bar</text>
   <path d="M1192 488 H1282" class="flow"/>
@@ -126,7 +126,7 @@
 
   <g transform="translate(66 862)">
     <text x="0" y="0" class="box-title">이번 과제 구현 범위</text>
-    <text x="0" y="30" class="box-copy">실제 Alpaca 거래 → Python Ingestion → Kafka 원본 보관 → Spark 1분 가공 → PostgreSQL 저장 → SQL 검증</text>
+    <text x="0" y="30" class="box-copy">실행 증거: WebSocket → Kafka / Historical REST → Kafka → Spark → PostgreSQL → SQL 검증</text>
     <text x="0" y="57" class="note">Kafka는 처리기 장애 시 재처리 가능한 raw event buffer이고, PostgreSQL은 조회 가능한 final 1분 데이터를 보관한다.</text>
   </g>
 </svg>
