@@ -1,6 +1,6 @@
 # Kafka·Spark Supporting Assignment
 
-이 문서는 CPI 발표 구간의 실제 SIP 체결 전체를 Kafka·Spark로 재현한 수업 과제를 정리한다.
+이 문서는 CPI 발표 구간에 지정한 NVDA의 실제 SIP 체결을 Kafka·Spark로 재현한 수업 과제를 정리한다.
 
 ## 목적
 
@@ -18,6 +18,19 @@
 | NVDA 처리 결과 | Spark → PostgreSQL | event-time 1분 OHLCV | `11:30`~`13:30 UTC` | 121행 |
 
 `58,036건`은 하루치 데이터, CPI 지표 건수, 체결 수량의 합 또는 미국 전체 종목의 거래 건수가 아니다. API가 지정 종목·feed·시간 조건으로 반환한 개별 체결 행의 수다. 한 행의 `s`가 체결 수량이며, 거래량은 `SUM(s)`로 별도 계산한다.
+
+### IEX와 SIP 중 왜 SIP를 사용했는가
+
+Alpaca 주식 데이터에서 이 프로젝트가 사용하는 feed는 IEX와 SIP다. 둘은 같은 시장 범위를 제공하지 않으므로 데이터의 용도와 결과를 분리한다.
+
+| Feed | 데이터 범위 | 이 프로젝트에서의 역할 | 이번 과제 포함 여부 |
+| --- | --- | --- | --- |
+| IEX | IEX 거래소에서 발생한 거래 | 무료 실시간 WebSocket 연결과 예비 이상 징후 수집 | 별도 smoke test에서 실제 거래 10건을 Kafka까지 검증 |
+| SIP | 미국 여러 거래소의 체결을 통합한 시장 데이터 | 과거 경제지표 발표 구간의 시장 반응 검증 | **사용**: Historical Trades API에서 NVDA 체결 58,036건 조회 |
+
+따라서 이번 과제의 58,036건은 IEX 실시간 거래가 아니다. `feed=sip`로 Alpaca **Historical Trades REST API**를 조회해 받은 과거 원시 체결을 Kafka에 다시 발행한 replay 데이터다. SIP WebSocket을 실시간으로 구독한 결과도 아니며, 미국 전체 종목이나 하루 전체를 가져온 결과도 아니다. 조회 범위는 NVDA 한 종목의 `[2026-08-12 07:30, 09:31) ET`로 고정했다.
+
+IEX는 이후 실시간 예비 감지에 사용하고, 같은 시점의 historical SIP를 확보할 수 있게 되면 더 넓은 시장 범위에서 사후 검증한다. IEX와 SIP의 값이나 기준선은 서로 섞지 않고 `feed`를 구분해 저장한다. 상세한 API 선택 근거는 [API 선택 문서](api-selection.md#2-alpaca-market-data)에 정리했다.
 
 ```text
 Alpaca SIP trade / CPI release-window replay
@@ -164,7 +177,7 @@ Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC even
 
 ## 현재 구현과 다음 단계
 
-현재 구현된 범위는 CPI 발표 구간 SIP 전체 거래의 Kafka 전송, Consumer 건수 검증, Spark 전처리·집계 및 PostgreSQL 저장까지다. CPI 발표 일정·ALFRED vintage도 같은 발표 시각으로 연결된다. Airflow 자동 실행, API·대시보드와 주문 실행은 이번 과제 결과가 아니라 후속 범위다.
+현재 구현된 범위는 CPI 발표 구간에 지정한 NVDA SIP 거래의 Kafka 전송, Consumer 건수 검증, Spark 전처리·집계 및 PostgreSQL 저장까지다. CPI 발표 일정·ALFRED vintage도 같은 발표 시각으로 연결된다. Airflow 자동 실행, API·대시보드와 주문 실행은 이번 과제 결과가 아니라 후속 범위다.
 
 상세 증거:
 
