@@ -1,132 +1,143 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="950" viewBox="0 0 1600 950" role="img" aria-labelledby="title desc">
-  <title id="title">U.S. Macro Impact and Market Data Pipeline architecture</title>
-  <desc id="desc">Actual Alpaca trades flow through ingestion, Kafka raw storage, Spark processing and PostgreSQL. Official macro data, Airflow, analysis and BI are planned next.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
+  <title id="title">U.S. Macro Impact and Market Data Pipeline</title>
+  <desc id="desc">현재 구현된 경제지표 event study 경로와 SIP 원시 거래 Kafka Spark 경로, 후속 Airflow와 자동매매 연구 경계를 구분한 전체 프로젝트 아키텍처</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="#334155"/>
+    </marker>
+    <marker id="planned-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7e22ce"/>
     </marker>
     <style>
       .title { font: 700 34px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #0f172a; }
       .subtitle { font: 400 17px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #475569; }
-      .lane { font: 700 18px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #334155; letter-spacing: .4px; }
-      .box-title { font: 700 19px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #0f172a; }
-      .box-copy { font: 400 15px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #334155; }
-      .edge-copy { font: 600 13px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #475569; }
+      .column { font: 700 15px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #64748b; letter-spacing: .7px; }
+      .lane-title { font: 700 20px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #0f172a; }
+      .lane-copy { font: 400 14px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #64748b; }
+      .box-title { font: 700 18px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #0f172a; }
+      .box-copy { font: 400 14px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #334155; }
+      .metric { font: 700 16px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #0369a1; }
       .note { font: 400 14px -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif; fill: #475569; }
-      .implemented { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.5; }
-      .stored { fill: #ecfdf5; stroke: #059669; stroke-width: 2.5; }
-      .planned { fill: #faf5ff; stroke: #9333ea; stroke-width: 2.5; stroke-dasharray: 10 7; }
-      .neutral { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; }
-      .flow { fill: none; stroke: #334155; stroke-width: 2.5; marker-end: url(#arrow); }
-      .planned-flow { fill: none; stroke: #7e22ce; stroke-width: 2.5; stroke-dasharray: 9 7; marker-end: url(#arrow); }
+      .current { fill: #eff6ff; stroke: #2563eb; stroke-width: 2.3; }
+      .stored { fill: #ecfdf5; stroke: #059669; stroke-width: 2.3; }
+      .result { fill: #fff7ed; stroke: #ea580c; stroke-width: 2.3; }
+      .planned { fill: #faf5ff; stroke: #9333ea; stroke-width: 2.3; stroke-dasharray: 9 6; }
+      .lane { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; }
+      .flow { fill: none; stroke: #334155; stroke-width: 2.4; marker-end: url(#arrow); }
+      .planned-flow { fill: none; stroke: #7e22ce; stroke-width: 2.4; stroke-dasharray: 9 6; marker-end: url(#planned-arrow); }
     </style>
   </defs>
 
-  <rect width="1600" height="950" fill="#ffffff"/>
-  <text x="54" y="58" class="title">U.S. Macro Impact &amp; Market Data Pipeline</text>
-  <text x="54" y="88" class="subtitle">데이터가 수집 → 원본 보관 → 처리 → 저장 → 분석으로 흐르는 전체 구조</text>
+  <rect width="1600" height="980" fill="#ffffff"/>
+  <text x="52" y="58" class="title">U.S. Macro Impact &amp; Market Data Pipeline</text>
+  <text x="52" y="88" class="subtitle">경제지표 발표와 시장 데이터를 수집 → 처리 → 저장 → 검증하는 현재 구조와 후속 자동화 경계</text>
 
-  <g transform="translate(54 113)">
-    <rect x="0" y="0" width="22" height="22" rx="4" class="implemented"/>
-    <text x="32" y="17" class="note">현재 구현 경로</text>
-    <rect x="190" y="0" width="22" height="22" rx="4" class="planned"/>
-    <text x="222" y="17" class="note">다음 단계</text>
-    <text x="420" y="17" class="note">실선: 구현 경로 · 화살표 설명: 실제 실행 증거 범위 · 점선: 예정 경로</text>
+  <g transform="translate(52 112)">
+    <rect x="0" y="0" width="22" height="22" rx="4" class="current"/>
+    <text x="32" y="17" class="note">현재 구현</text>
+    <rect x="150" y="0" width="22" height="22" rx="4" class="planned"/>
+    <text x="182" y="17" class="note">후속 확장</text>
+    <text x="330" y="17" class="note">실선은 실행·검증된 경로, 점선은 아직 결과로 주장하지 않는 계획입니다.</text>
   </g>
 
   <g>
-    <rect x="38" y="160" width="270" height="660" rx="16" class="neutral"/>
-    <rect x="342" y="160" width="270" height="660" rx="16" class="neutral"/>
-    <rect x="646" y="160" width="270" height="660" rx="16" class="neutral"/>
-    <rect x="950" y="160" width="270" height="660" rx="16" class="neutral"/>
-    <rect x="1254" y="160" width="308" height="660" rx="16" class="neutral"/>
-    <text x="173" y="195" text-anchor="middle" class="lane">DATA SOURCE</text>
-    <text x="477" y="195" text-anchor="middle" class="lane">INGESTION / RAW</text>
-    <text x="781" y="195" text-anchor="middle" class="lane">PROCESSING</text>
-    <text x="1085" y="195" text-anchor="middle" class="lane">PROCESSED STORAGE</text>
-    <text x="1408" y="195" text-anchor="middle" class="lane">ANALYSIS / BI</text>
+    <text x="175" y="177" text-anchor="middle" class="column">DATA SOURCE</text>
+    <text x="475" y="177" text-anchor="middle" class="column">INGESTION / RAW</text>
+    <text x="775" y="177" text-anchor="middle" class="column">PROCESSING</text>
+    <text x="1075" y="177" text-anchor="middle" class="column">STORAGE</text>
+    <text x="1400" y="177" text-anchor="middle" class="column">ANALYSIS / EVIDENCE</text>
   </g>
+
+  <rect x="36" y="198" width="1528" height="276" rx="18" class="lane"/>
+  <text x="58" y="230" class="lane-title">A. 원시 시장 거래 처리</text>
+  <text x="58" y="254" class="lane-copy">실시간 IEX smoke test와 Historical SIP replay를 같은 raw event 계약으로 검증</text>
 
   <g>
-    <rect x="66" y="238" width="214" height="112" rx="13" class="implemented"/>
-    <text x="173" y="272" text-anchor="middle" class="box-title">Alpaca IEX</text>
-    <text x="173" y="299" text-anchor="middle" class="box-copy">WebSocket · Kafka까지 검증</text>
-    <text x="173" y="323" text-anchor="middle" class="box-copy">Historical REST · DB까지 검증</text>
+    <rect x="50" y="282" width="250" height="148" rx="14" class="current"/>
+    <text x="175" y="316" text-anchor="middle" class="box-title">Alpaca Market Data</text>
+    <text x="175" y="346" text-anchor="middle" class="box-copy">IEX WebSocket trades</text>
+    <text x="175" y="372" text-anchor="middle" class="box-copy">Historical SIP raw trades</text>
+    <text x="175" y="402" text-anchor="middle" class="metric">NVDA 지정 구간 58,036건</text>
 
-    <rect x="370" y="238" width="214" height="112" rx="13" class="implemented"/>
-    <text x="477" y="272" text-anchor="middle" class="box-title">Python Ingestion</text>
-    <text x="477" y="299" text-anchor="middle" class="box-copy">live collector / replay</text>
-    <text x="477" y="323" text-anchor="middle" class="box-copy">공통 event envelope</text>
+    <rect x="350" y="282" width="250" height="148" rx="14" class="current"/>
+    <text x="475" y="316" text-anchor="middle" class="box-title">Python Ingestion / Kafka</text>
+    <text x="475" y="346" text-anchor="middle" class="box-copy">canonical event envelope</text>
+    <text x="475" y="372" text-anchor="middle" class="box-copy">raw.market.v1</text>
+    <text x="475" y="398" text-anchor="middle" class="box-copy">raw.market-sip.v1 · retention 24h</text>
 
-    <rect x="370" y="426" width="214" height="124" rx="13" class="stored"/>
-    <text x="477" y="462" text-anchor="middle" class="box-title">Kafka raw.market.v1</text>
-    <text x="477" y="491" text-anchor="middle" class="box-copy">원본 거래 이벤트 임시 보관</text>
-    <text x="477" y="518" text-anchor="middle" class="box-copy">symbol key · retention 24h</text>
+    <rect x="650" y="282" width="250" height="148" rx="14" class="current"/>
+    <text x="775" y="316" text-anchor="middle" class="box-title">Spark Batch / Streaming</text>
+    <text x="775" y="346" text-anchor="middle" class="box-copy">schema·UTC·event_id 검증</text>
+    <text x="775" y="372" text-anchor="middle" class="box-copy">SIP condition-aware OHLCV</text>
+    <text x="775" y="402" text-anchor="middle" class="metric">58,034 count · 8,752 price</text>
 
-    <rect x="674" y="426" width="214" height="124" rx="13" class="implemented"/>
-    <text x="781" y="460" text-anchor="middle" class="box-title">Spark Streaming</text>
-    <text x="781" y="488" text-anchor="middle" class="box-copy">schema 검증 · 중복 제거</text>
-    <text x="781" y="515" text-anchor="middle" class="box-copy">event-time 1분 OHLCV</text>
+    <rect x="950" y="282" width="250" height="148" rx="14" class="stored"/>
+    <text x="1075" y="316" text-anchor="middle" class="box-title">PostgreSQL</text>
+    <text x="1075" y="346" text-anchor="middle" class="box-copy">market_bars · 1분 OHLCV</text>
+    <text x="1075" y="372" text-anchor="middle" class="box-copy">business-key upsert</text>
+    <text x="1075" y="402" text-anchor="middle" class="metric">replay 121 bars</text>
 
-    <rect x="978" y="426" width="214" height="124" rx="13" class="stored"/>
-    <text x="1085" y="460" text-anchor="middle" class="box-title">PostgreSQL</text>
-    <text x="1085" y="488" text-anchor="middle" class="box-copy">market_bars</text>
-    <text x="1085" y="515" text-anchor="middle" class="box-copy">business-key upsert</text>
-
-    <rect x="1282" y="426" width="252" height="124" rx="13" class="implemented"/>
-    <text x="1408" y="460" text-anchor="middle" class="box-title">SQL / Evidence</text>
-    <text x="1408" y="488" text-anchor="middle" class="box-copy">저장 건수·중복·시간 범위</text>
-    <text x="1408" y="515" text-anchor="middle" class="box-copy">테스트 결과·발표 증거</text>
+    <rect x="1250" y="282" width="300" height="148" rx="14" class="result"/>
+    <text x="1400" y="316" text-anchor="middle" class="box-title">Parity / SQL Evidence</text>
+    <text x="1400" y="346" text-anchor="middle" class="box-copy">Producer = Consumer = 58,036</text>
+    <text x="1400" y="372" text-anchor="middle" class="box-copy">provider vs replay 121 bars</text>
+    <text x="1400" y="402" text-anchor="middle" class="metric">OHLCV·VWAP mismatch 0</text>
   </g>
 
-  <path d="M280 294 H370" class="flow"/>
-  <text x="325" y="282" text-anchor="middle" class="edge-copy">actual trade · 2개 경로</text>
-  <path d="M477 350 V426" class="flow"/>
-  <text x="489" y="392" class="edge-copy">live + historical</text>
-  <path d="M584 488 H674" class="flow"/>
-  <text x="629" y="476" text-anchor="middle" class="edge-copy">historical E2E</text>
-  <path d="M888 488 H978" class="flow"/>
-  <text x="933" y="476" text-anchor="middle" class="edge-copy">final 1m bar</text>
-  <path d="M1192 488 H1282" class="flow"/>
-  <text x="1237" y="476" text-anchor="middle" class="edge-copy">query</text>
+  <path d="M300 356 H350" class="flow"/>
+  <path d="M600 356 H650" class="flow"/>
+  <path d="M900 356 H950" class="flow"/>
+  <path d="M1200 356 H1250" class="flow"/>
+
+  <rect x="36" y="498" width="1528" height="276" rx="18" class="lane"/>
+  <text x="58" y="530" class="lane-title">B. CPI 발표 영향 분석</text>
+  <text x="58" y="554" class="lane-copy">공식 발표 시각·당시 공개값·SIP 1분봉을 같은 시점으로 연결하는 point-in-time event study</text>
 
   <g>
-    <rect x="66" y="640" width="214" height="154" rx="13" class="planned"/>
-    <text x="173" y="675" text-anchor="middle" class="box-title">공식 Macro Data</text>
-    <text x="173" y="704" text-anchor="middle" class="box-copy">BLS · BEA · Fed 일정</text>
-    <text x="173" y="730" text-anchor="middle" class="box-copy">FRED/ALFRED vintage</text>
-    <text x="173" y="756" text-anchor="middle" class="box-copy">Historical SIP bars</text>
+    <rect x="50" y="582" width="250" height="148" rx="14" class="current"/>
+    <text x="175" y="616" text-anchor="middle" class="box-title">BLS · ALFRED · Alpaca SIP</text>
+    <text x="175" y="646" text-anchor="middle" class="box-copy">CPI release schedule</text>
+    <text x="175" y="672" text-anchor="middle" class="box-copy">CPIAUCSL · CPILFESL vintage</text>
+    <text x="175" y="702" text-anchor="middle" class="metric">12 releases · 4 symbols</text>
 
-    <rect x="370" y="658" width="214" height="118" rx="13" class="planned"/>
-    <text x="477" y="694" text-anchor="middle" class="box-title">Airflow Batch</text>
-    <text x="477" y="722" text-anchor="middle" class="box-copy">schedule · retry · backfill</text>
-    <text x="477" y="748" text-anchor="middle" class="box-copy">point-in-time 수집</text>
+    <rect x="350" y="582" width="250" height="148" rx="14" class="current"/>
+    <text x="475" y="616" text-anchor="middle" class="box-title">Python Batch Ingestion</text>
+    <text x="475" y="646" text-anchor="middle" class="box-copy">official time / vintage 검증</text>
+    <text x="475" y="672" text-anchor="middle" class="box-copy">Historical SIP 1Min backfill</text>
+    <text x="475" y="702" text-anchor="middle" class="metric">5,320 market bars</text>
 
-    <rect x="674" y="658" width="214" height="118" rx="13" class="planned"/>
-    <text x="781" y="694" text-anchor="middle" class="box-title">Macro Processing</text>
-    <text x="781" y="722" text-anchor="middle" class="box-copy">발표 전후 window 계산</text>
-    <text x="781" y="748" text-anchor="middle" class="box-copy">평소·시장·섹터 비교</text>
+    <rect x="650" y="582" width="250" height="148" rx="14" class="current"/>
+    <text x="775" y="616" text-anchor="middle" class="box-title">Macro Processing</text>
+    <text x="775" y="646" text-anchor="middle" class="box-copy">T-60 / T+5·30·60 반응</text>
+    <text x="775" y="672" text-anchor="middle" class="box-copy">SPY relative · matched baseline</text>
+    <text x="775" y="702" text-anchor="middle" class="metric">192 impacts · 576 controls</text>
 
-    <rect x="978" y="658" width="214" height="118" rx="13" class="planned"/>
-    <text x="1085" y="694" text-anchor="middle" class="box-title">PostgreSQL</text>
-    <text x="1085" y="722" text-anchor="middle" class="box-copy">macro observations</text>
-    <text x="1085" y="748" text-anchor="middle" class="box-copy">events / impacts</text>
+    <rect x="950" y="582" width="250" height="148" rx="14" class="stored"/>
+    <text x="1075" y="616" text-anchor="middle" class="box-title">PostgreSQL</text>
+    <text x="1075" y="646" text-anchor="middle" class="box-copy">economic_events · observations</text>
+    <text x="1075" y="672" text-anchor="middle" class="box-copy">macro_event_impacts</text>
+    <text x="1075" y="698" text-anchor="middle" class="box-copy">macro_event_baseline_impacts</text>
 
-    <rect x="1282" y="638" width="252" height="158" rx="13" class="planned"/>
-    <text x="1408" y="675" text-anchor="middle" class="box-title">Analysis / BI</text>
-    <text x="1408" y="704" text-anchor="middle" class="box-copy">경제지표 영향 report</text>
-    <text x="1408" y="730" text-anchor="middle" class="box-copy">Streamlit / Dashboard</text>
-    <text x="1408" y="756" text-anchor="middle" class="box-copy">과거 event-study backtest</text>
+    <rect x="1250" y="582" width="300" height="148" rx="14" class="result"/>
+    <text x="1400" y="616" text-anchor="middle" class="box-title">Event Study / Evidence</text>
+    <text x="1400" y="646" text-anchor="middle" class="box-copy">coverage·중복·재실행 검증</text>
+    <text x="1400" y="672" text-anchor="middle" class="box-copy">관측 연관성 · 인과 주장 금지</text>
+    <text x="1400" y="702" text-anchor="middle" class="metric">후속 backtest 입력</text>
   </g>
 
-  <path d="M280 717 H370" class="planned-flow"/>
-  <path d="M584 717 H674" class="planned-flow"/>
-  <path d="M888 717 H978" class="planned-flow"/>
-  <path d="M1192 717 H1282" class="planned-flow"/>
+  <path d="M300 656 H350" class="flow"/>
+  <path d="M600 656 H650" class="flow"/>
+  <path d="M900 656 H950" class="flow"/>
+  <path d="M1200 656 H1250" class="flow"/>
 
-  <g transform="translate(66 862)">
-    <text x="0" y="0" class="box-title">이번 과제 구현 범위</text>
-    <text x="0" y="30" class="box-copy">실행 증거: WebSocket → Kafka / Historical REST → Kafka → Spark → PostgreSQL → SQL 검증</text>
-    <text x="0" y="57" class="note">Kafka는 처리기 장애 시 재처리 가능한 raw event buffer이고, PostgreSQL은 조회 가능한 final 1분 데이터를 보관한다.</text>
-  </g>
+  <rect x="52" y="820" width="1496" height="108" rx="16" class="planned"/>
+  <text x="80" y="854" class="lane-title">후속 확장</text>
+  <text x="80" y="884" class="box-copy">Airflow orchestration</text>
+  <path d="M260 879 H385" class="planned-flow"/>
+  <text x="410" y="884" class="box-copy">API / Dashboard</text>
+  <path d="M570 879 H695" class="planned-flow"/>
+  <text x="720" y="884" class="box-copy">point-in-time strategy backtest</text>
+  <path d="M1000 879 H1125" class="planned-flow"/>
+  <text x="1150" y="884" class="box-copy">risk checks · paper trading</text>
+  <text x="80" y="914" class="note">실제 주문은 거래비용·위험 한도·반복 검증을 통과한 별도 단계이며 현재 파이프라인 결과에 포함하지 않습니다.</text>
 </svg>

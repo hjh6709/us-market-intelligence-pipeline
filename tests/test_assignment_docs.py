@@ -31,6 +31,15 @@ class AssignmentDocumentationTest(unittest.TestCase):
         positions = [readme.index(heading) for heading in headings]
 
         self.assertEqual(positions, sorted(positions))
+        self.assertIn(
+            "![전체 프로젝트 데이터 파이프라인 아키텍처]"
+            "(docs/diagrams/pipeline-architecture.png)",
+            readme,
+        )
+        self.assertNotIn(
+            "![CPI 발표 구간 SIP Kafka Spark 처리 경로]",
+            readme,
+        )
 
     def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -100,16 +109,22 @@ class AssignmentDocumentationTest(unittest.TestCase):
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")
 
-        self.assertIn("Alpaca IEX", diagram)
-        self.assertIn("Kafka raw.market.v1", diagram)
-        self.assertIn("Spark Streaming", diagram)
+        self.assertIn("BLS · ALFRED · Alpaca SIP", diagram)
+        self.assertIn("raw.market-sip.v1", diagram)
+        self.assertIn("Spark Batch / Streaming", diagram)
         self.assertIn("market_bars", diagram)
-        self.assertIn("현재 구현 경로", diagram)
-        self.assertIn("WebSocket · Kafka까지 검증", diagram)
-        self.assertIn("Historical REST · DB까지 검증", diagram)
-        self.assertIn("다음 단계", diagram)
-        self.assertIn("Airflow Batch", diagram)
-        self.assertIn("Analysis / BI", diagram)
+        self.assertIn("economic_events", diagram)
+        self.assertIn("macro_event_impacts", diagram)
+        self.assertIn("현재 구현", diagram)
+        self.assertIn("후속 확장", diagram)
+        self.assertIn("Airflow orchestration", diagram)
+
+        assignment_diagram = Path(
+            "docs/diagrams/cpi-sip-kafka-spark-assignment.svg"
+        ).read_text(encoding="utf-8")
+        self.assertIn("volume·trade_count 58,034", assignment_diagram)
+        self.assertIn("OHLC·VWAP 8,752", assignment_diagram)
+        self.assertIn("provider parity", assignment_diagram)
 
     def test_gitignore_excludes_local_secrets_and_runtime_artifacts(self) -> None:
         patterns = Path(".gitignore").read_text(encoding="utf-8").splitlines()

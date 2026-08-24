@@ -8,6 +8,7 @@
       .box-copy { font: 400 15px Arial, sans-serif; fill: #46536a; }
       .metric { font: 700 26px Arial, sans-serif; fill: #1769ff; }
       .metric-green { font: 700 26px Arial, sans-serif; fill: #079669; }
+      .metric-green-small { font: 700 19px Arial, sans-serif; fill: #079669; }
       .small { font: 400 13px Arial, sans-serif; fill: #657188; }
       .note-title { font: 700 16px Arial, sans-serif; fill: #172033; }
       .note { font: 400 14px Arial, sans-serif; fill: #4d596f; }
@@ -76,12 +77,13 @@
     <text x="45" y="180" class="box-copy">2. 종목·가격·수량 검증</text>
     <text x="45" y="212" class="box-copy">3. UTC event time 변환</text>
     <text x="45" y="244" class="box-copy">4. event_id 중복 제거</text>
-    <text x="45" y="276" class="box-copy">5. 1분 OHLCV·VWAP</text>
+    <text x="45" y="276" class="box-copy">5. SIP 조건 반영 OHLCV</text>
     <line x1="45" y1="302" x2="225" y2="302" stroke="#c9b8f7" stroke-width="1.5"/>
     <text x="135" y="342" text-anchor="middle" class="metric">58,036</text>
     <text x="135" y="370" text-anchor="middle" class="box-copy">입력 · 유효 · 고유 거래</text>
-    <text x="135" y="405" text-anchor="middle" class="metric-green">invalid 0</text>
-    <text x="135" y="436" text-anchor="middle" class="small">이미 집계된 봉이 아닌 raw trade 처리</text>
+    <text x="135" y="401" text-anchor="middle" class="metric-green-small">volume·trade_count 58,034</text>
+    <text x="135" y="429" text-anchor="middle" class="box-copy">OHLC·VWAP 8,752</text>
+    <text x="135" y="454" text-anchor="middle" class="small">invalid·duplicate·unsupported 0</text>
   </g>
 
   <path d="M940 412 L978 412" class="arrow"/>
@@ -98,10 +100,10 @@
     <text x="135" y="273" text-anchor="middle" class="small">source=alpaca_replay · feed=sip</text>
 
     <rect x="22" y="352" width="226" height="114" rx="14" fill="#ffffff" stroke="#8aa0bd" stroke-width="1.5"/>
-    <text x="135" y="386" text-anchor="middle" class="note-title">원천별 결과 분리</text>
-    <text x="135" y="410" text-anchor="middle" class="note">SIP 1m bars 121</text>
+    <text x="135" y="386" text-anchor="middle" class="note-title">provider parity</text>
+    <text x="135" y="410" text-anchor="middle" class="note">provider = replay 121 bars</text>
     <text x="135" y="432" text-anchor="middle" class="note">Σtrade_count 58,034</text>
-    <text x="135" y="454" text-anchor="middle" class="note">raw trade rows 58,036</text>
+    <text x="135" y="454" text-anchor="middle" class="note">OHLCV·VWAP mismatch 0</text>
   </g>
 
   <path d="M1248 412 L1286 412" class="arrow"/>
@@ -117,8 +119,8 @@
     <text x="43" y="260" class="box-copy">• PostgreSQL SQL</text>
     <text x="43" y="296" class="box-copy">• 실제 OHLCV 6행 확인</text>
     <line x1="43" y1="322" x2="217" y2="322" stroke="#e8cf91" stroke-width="1.5"/>
-    <text x="130" y="359" text-anchor="middle" class="metric-green">0 loss</text>
-    <text x="130" y="390" text-anchor="middle" class="box-copy">0 invalid · 0 duplicate</text>
+    <text x="130" y="359" text-anchor="middle" class="metric-green">0 mismatch</text>
+    <text x="130" y="390" text-anchor="middle" class="box-copy">121/121 bars · duplicate 0</text>
     <text x="130" y="430" text-anchor="middle" class="small">API key·원시 payload 미공개</text>
   </g>
 

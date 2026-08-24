@@ -27,6 +27,8 @@
 
 ## 데이터 흐름
 
+![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
+
 ```text
 BLS 공식 CPI 발표 시각
         +
@@ -56,8 +58,6 @@ PostgreSQL market_bars
 ```
 
 같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
-
-![CPI 발표 구간 SIP Kafka Spark 처리 경로](docs/diagrams/cpi-sip-kafka-spark-assignment.png)
 
 ## 데이터 출처
 
