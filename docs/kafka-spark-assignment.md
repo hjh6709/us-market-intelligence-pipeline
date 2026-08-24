@@ -122,9 +122,9 @@ docker compose up -d --wait kafka kafka-init postgres
 | PostgreSQL | 확정 거래 509건 → 1분봉 18건, 중복 key 0건 |
 | 100배속 replay | 1,523건, 169.567 events/s, Consumer·Spark 각 1,523건 |
 
-Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, 2분 watermark와 1분 window 집계를 수행한다. 처리 전 1,576건 중 validation 오류는 0건이며, append mode에서 watermark를 통과해 확정된 거래 509건이 최종 1분봉 18건으로 저장됐다. 나머지 1,067건은 실행 종료 시점에 아직 watermark를 통과하지 않은 window의 추정치이며 삭제 또는 오류로 계산하지 않는다.
+Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, 2분 watermark와 1분 window 집계를 수행한다. 처리 전 1,576건 중 validation 오류는 0건이다. 분석 대상 거래는 정확히 509건이며 전부 watermark를 통과해 최종 1분봉 18건으로 저장됐다. 나머지 1,067건은 watermark 진행용 tail의 거래 수와 정확히 일치하며, 실행 종료 시 미확정 상태이므로 분석 결과에 포함하지 않는다.
 
-요청 범위는 CPI 발표 전 60분부터 정규장 개장 후 4분까지다. 무료 IEX의 첫 실제 체결은 `12:10 UTC`에 나타났으므로 발표 전 60분 전체 coverage가 있다고 주장하지 않는다. 개장 후 4분은 개장 반응을 포함하면서 event-time watermark를 진행시키기 위해 포함했다.
+분석 대상은 CPI 발표 전 60분부터 정규장 첫 1분이 끝나는 `13:31 UTC`까지다. `13:31–13:34 UTC`의 거래는 마지막 분석 window를 확정하기 위한 watermark 진행용 tail이며 분석 결과에 포함하지 않는다. 무료 IEX의 첫 실제 체결은 `12:10 UTC`에 나타났으므로 발표 전 60분 전체 coverage가 있다고 주장하지 않는다. 최종 저장된 마지막 bar는 분석 대상의 마지막 분인 `13:30 UTC`다.
 
 ## 최종 저장 명세
 

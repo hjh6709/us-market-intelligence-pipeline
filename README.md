@@ -53,6 +53,7 @@ Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 
 | --- | --- | --- |
 | CPI 발표 날짜·시각 | [BLS CPI release schedule·archive](https://www.bls.gov/schedule/news_release/cpi.htm) | 이벤트 기준 시각과 대상 월 |
 | 당시 CPI 값과 revision | [FRED/ALFRED observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 미래 수정값이 섞이지 않는 point-in-time 값 |
+| 발표 구간 실제 체결 | [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle) | Kafka·Spark 실시간 경로의 결정적 replay |
 | 발표 전후 주식시장 | [Alpaca Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars) | SIP 1분 OHLCV·거래 수·VWAP |
 
 ## 실제 구현 결과
@@ -131,7 +132,7 @@ docker compose exec -T postgres \
 
 ## CPI 발표 구간 Kafka·Spark 경로
 
-2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 NVDA의 실제 IEX 거래를 발표 전 60분부터 정규장 개장 후 4분까지 조회해 다음 경로를 구현·검증했습니다.
+2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 NVDA의 실제 IEX 거래를 replay했습니다. 분석 대상은 발표 전 60분부터 정규장 첫 1분이 끝나는 `13:31 UTC`까지이고, `13:31–13:34 UTC`는 마지막 분석 window를 확정하기 위한 watermark 진행용 tail입니다.
 
 ```text
 Alpaca IEX raw trade 1,576건
@@ -141,7 +142,7 @@ Alpaca IEX raw trade 1,576건
 → PostgreSQL market_bars
 ```
 
-이 경로는 CPI 영향 계산에 사용하는 SIP bar를 대체하지 않습니다. 무료 IEX 체결로 발표 당일 실시간 경로를 재현하고, 더 넓은 시장 범위인 SIP bar는 배치 분석과 사후 검증에 사용합니다. 요청 구간의 첫 IEX 체결은 `12:10 UTC`였으므로 발표 전 60분 전체가 채워졌다고 과장하지 않습니다.
+이 경로는 CPI 영향 계산에 사용하는 SIP bar를 대체하지 않습니다. 무료 IEX 체결로 발표 당일 실시간 경로를 재현하고, 더 넓은 시장 범위인 SIP bar는 배치 분석과 사후 검증에 사용합니다. 요청 구간의 첫 IEX 체결은 `12:10 UTC`였으므로 발표 전 60분 전체가 채워졌다고 과장하지 않습니다. PostgreSQL의 마지막 확정 bar는 분석 대상의 마지막 분인 `13:30 UTC`입니다.
 
 ### 4차시 과제 제출 요약
 
@@ -151,7 +152,7 @@ Alpaca IEX raw trade 1,576건
 | 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
 | 프로젝트 연결 | 2026-08-12 CPI 발표 구간의 실제 NVDA IEX 체결 |
 | 전송 건수 | Producer 1,576건 = Consumer 1,576건 |
-| Spark 처리 전·후 | 입력 1,576건, validation 오류 0건, 확정 거래 509건 → 1분봉 18건 |
+| Spark 처리 전·후 | 입력 1,576건, 오류 0건, 분석 대상 509건 전부 확정 → 1분봉 18건; tail 1,067건은 미확정 |
 | 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
 ```bash

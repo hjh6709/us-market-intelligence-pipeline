@@ -26,7 +26,7 @@
 1. `docker compose ps`에서 Kafka와 PostgreSQL이 healthy인지 확인한다.
 2. README의 아키텍처에서 현재 실선 경로만 설명한다.
 3. 실행 보고서에서 `Producer 1,576건 = Consumer 1,576건 = Spark 입력 1,576건`을 보여준다.
-4. `509건 반영 → 18개 final 봉 → 중복 0개`를 보여주고, 입력과 반영 건수의 차이 1,067건은 watermark 미통과 상태로 추정한 값이라고 구분한다.
+4. 분석 대상 `509건 전부 반영 → 18개 final 봉 → 중복 0개`를 보여주고, 나머지 1,067건은 마지막 분석 봉을 확정하기 위한 3분 tail과 정확히 일치한다고 구분한다.
 5. 로컬 PostgreSQL에 아래 SQL을 실행해 OHLCV 실제 행을 보여준다.
 6. 필요하면 로컬 CSV를 내보내 실제 데이터가 파일로 생성되는 것까지 확인한다.
 7. WebSocket은 Kafka까지만 확인한 선행 실험이고, 제출 결과는 CPI 발표 구간 Historical Trades API의 실제 체결을 동일 Kafka·Spark 경로로 재생한 것이라고 구분한다.
@@ -50,6 +50,6 @@ docker compose exec -T postgres \
 
 ## 멘토에게 받을 피드백
 
-- 2분 watermark 때문에 마지막 구간의 봉이 미확정으로 남는 현재 기준이 적절한가?
+- 유한 replay에서 분석 대상 뒤에 3분 tail을 붙여 2분 watermark를 진행시키는 현재 검증 방식이 적절한가?
 - 현재 검증 규모에서 Spark를 유지할 실익과 Python processor 비교 기준은 무엇이 좋은가?
 - 다음 단계에서 IEX 실시간 예비 신호와 historical SIP 사후 검증을 어떻게 분리하면 좋은가?

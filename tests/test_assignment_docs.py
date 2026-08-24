@@ -71,6 +71,8 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn('"consumer_received_trades": 1576', result)
         self.assertIn('"spark_input_trades": 1576', result)
         self.assertIn('"spark_validation_error_trades": 0', result)
+        self.assertIn('"analysis_target_end": "2026-08-12T13:31:00Z"', result)
+        self.assertIn('"watermark_flush_tail_end": "2026-08-12T13:34:00Z"', result)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")
