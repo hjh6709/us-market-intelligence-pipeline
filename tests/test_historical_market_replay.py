@@ -164,6 +164,7 @@ class HistoricalMarketReplayTest(unittest.TestCase):
             parse_args([*base, "--speed-multiplier", "50"]).speed_multiplier,
             50,
         )
+        self.assertEqual(parse_args([*base, "--feed", "sip"]).feed, "sip")
 
     @staticmethod
     def trade(trade_id: int, timestamp: str) -> dict:

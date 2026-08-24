@@ -37,12 +37,12 @@ class AssignmentDocumentationTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("같은 CPI 발표 구간의 raw IEX 체결", readme)
+        self.assertIn("같은 CPI 발표 구간의 SIP 원시 체결 전체", readme)
         self.assertIn("4차시 Kafka·Spark 제출 문서", readme)
         self.assertIn("실제 IEX 거래 10건", assignment)
-        self.assertIn("Producer 1,576건 = Consumer 1,576건", assignment)
-        self.assertIn("입력 1,576건, validation 오류 0건", assignment)
-        self.assertIn("1분봉 18건", assignment)
+        self.assertIn("Producer 58,036건 = Consumer 58,036건", assignment)
+        self.assertIn("입력 58,036건, validation 오류 0건", assignment)
+        self.assertIn("1분봉 121건", assignment)
 
     def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -51,28 +51,28 @@ class AssignmentDocumentationTest(unittest.TestCase):
         )
 
         self.assertIn("### 4차시 과제 제출 요약", readme)
-        self.assertIn("Producer 1,576건 = Consumer 1,576건", readme)
-        self.assertIn("src.spark_market_processor", readme)
+        self.assertIn("Producer 58,036건 = Consumer 58,036건", readme)
+        self.assertIn("src.spark_sip_trade_batch", readme)
         self.assertIn("PostgreSQL `market_bars`", readme)
-        self.assertIn("`raw.market.v1`", assignment)
+        self.assertIn("`raw.market-sip.v1`", assignment)
         self.assertIn("`trace_id`", assignment)
         self.assertIn("`market.trade.raw`", assignment)
         self.assertIn("| 필드 | 타입 | 의미 |", assignment)
         self.assertIn('"event_type": "market.trade.raw"', assignment)
         self.assertIn("## 최종 저장 명세", assignment)
         self.assertIn("## 현재 구현과 다음 단계", assignment)
-        self.assertIn("Spark Structured Streaming", assignment)
+        self.assertIn("Spark batch", assignment)
         self.assertIn("PostgreSQL market_bars", assignment)
 
         result = Path("docs/evidence/cpi-kafka-spark/result.json").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"published_trades": 1576', result)
-        self.assertIn('"consumer_received_trades": 1576', result)
-        self.assertIn('"spark_input_trades": 1576', result)
+        self.assertIn('"published_trades": 58036', result)
+        self.assertIn('"consumer_received_trades": 58036', result)
+        self.assertIn('"spark_input_trades": 58036', result)
         self.assertIn('"spark_validation_error_trades": 0', result)
-        self.assertIn('"analysis_target_end": "2026-08-12T13:31:00Z"', result)
-        self.assertIn('"watermark_flush_tail_end": "2026-08-12T13:34:00Z"', result)
+        self.assertIn('"spark_output_bars": 121', result)
+        self.assertIn('"requested_end": "2026-08-12T13:31:00Z"', result)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")

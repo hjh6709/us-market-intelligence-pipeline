@@ -40,13 +40,13 @@ IEX는 미국 전체 거래소 데이터가 아니므로 실시간 결과를 전
 
 아닙니다. 실시간 데이터는 Kafka와 Spark가 처리합니다. Airflow는 경제지표, 과거 시장 데이터, 재수집과 backfill처럼 일정과 작업 의존성이 필요한 배치 흐름을 담당합니다.
 
-## 1,576건이 왜 1분봉 18건이 됐나요?
+## 58,036건이 왜 1분봉 121건이 됐나요?
 
-Spark append mode가 2분 watermark를 통과한 분만 저장하기 때문입니다. 분석 대상 거래는 509건이고 모두 18개 최종 봉에 반영됐습니다. 나머지 1,067건은 마지막 분석 봉을 확정하기 위해 붙인 3분 tail의 거래이며 validation 오류나 유실이 아닙니다.
+58,036건은 발표 전후 120분 동안 발생한 개별 SIP 체결입니다. Spark가 이를 거래 발생 시각 기준 1분 OHLCV로 묶었습니다. 시작 분과 종료 분을 모두 포함하므로 `11:30`부터 `13:30`까지 121개 봉이 됩니다.
 
 ## WebSocket으로 PostgreSQL까지 저장한 결과인가요?
 
-아직 아닙니다. WebSocket 실제 거래 10건은 Kafka 발행과 재소비까지 확인했습니다. PostgreSQL의 18개 1분봉은 2026-08-12 CPI 발표 구간의 Historical Trades API 거래 1,576건을 Kafka에 replay하고 Spark로 집계한 결과입니다. 같은 계약의 실시간 전체 경로는 실제 발표일에 별도로 검증해야 합니다.
+아직 아닙니다. WebSocket 실제 IEX 거래 10건은 Kafka 발행과 재소비까지 확인했습니다. PostgreSQL의 121개 재구성 봉은 2026-08-12 CPI 발표 구간의 Historical SIP Trades API 거래 58,036건을 Kafka에 replay하고 Spark batch로 집계한 결과입니다. 실시간 전체 경로는 실제 발표일에 별도로 검증해야 합니다.
 
 ## 가짜 거래 데이터도 분석에 사용하나요?
 
@@ -54,11 +54,11 @@ Spark append mode가 2분 watermark를 통과한 분만 저장하기 때문입�
 
 ## 원본 데이터는 어디에 얼마나 보관하나요?
 
-원본 trade는 Kafka `raw.market.v1` 토픽에서 24시간 보관합니다. 최종 1분봉은 PostgreSQL에 저장합니다. 수년치 raw tick을 장기 저장할 필요가 생기면 Parquet와 object storage를 추가하는 방향을 검토합니다.
+이번 원본 SIP trade는 Kafka `raw.market-sip.v1` 토픽에서 24시간 보관합니다. 최종 1분봉은 PostgreSQL에 저장합니다. 수년치 raw tick을 장기 저장할 필요가 생기면 Parquet와 object storage를 추가하는 방향을 검토합니다.
 
 ## 왜 GitHub에는 실제 가격 CSV가 없나요?
 
-CPI 발표 구간의 실제 거래 1,576건을 Kafka에 발행했고, watermark를 통과한 509건이 반영된 final 봉 18개가 PostgreSQL에 있습니다. 다만 Alpaca의 시장 데이터 재배포 제한을 지키기 위해 정확한 가격 행과 원본 payload는 공개하지 않았습니다. 공개 저장소에는 실제 처리 건수, 시간 범위, 중복 결과와 합성 스키마 예시를 남겼습니다.
+CPI 발표 구간의 실제 SIP 거래 58,036건을 Kafka에 발행했고, Spark가 만든 1분봉 121개가 PostgreSQL에 있습니다. 다만 Alpaca의 시장 데이터 재배포 제한을 지키기 위해 정확한 가격 행과 원본 payload는 공개하지 않았습니다. 공개 저장소에는 실제 처리 건수, 시간 범위, 중복 결과와 합성 스키마 예시를 남겼습니다.
 
 ## 중복 저장은 어떻게 막나요?
 
