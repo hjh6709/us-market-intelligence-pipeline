@@ -70,15 +70,39 @@ PostgreSQL market_bars
 
 ## 실제 구현 결과
 
-| 단계 | 실제 결과 | 품질 확인 |
-| --- | ---: | --- |
-| BLS CPI 이벤트 | 12건 | 공식 시각·미국 동부시간·UTC 보존 |
-| ALFRED 관측값 | 24건 | 결측 0, 중복 0 |
-| Historical SIP 1분봉 | 5,320건 | 재실행 후 동일 건수, 중복 0 |
-| Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
-| Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
-| 2026-08-12 CPI 구간 NVDA Historical SIP 체결 레코드 | 58,036건 | 지정 시간 범위의 Trades API 반환·Producer·Consumer·Spark 입력 일치, 오류 0 |
-| CPI 구간 Spark 재구성 1분봉 | 121건 | provider OHLC·volume·trade_count·VWAP와 불일치 0, 중복 key 0 |
+### A. 경제지표 발표 영향 분석 데이터
+
+이 경로는 Alpaca가 이미 1분 단위로 집계한 Historical Bars API 데이터를 사용합니다.
+
+| 데이터 | 한 행의 의미 | 수집·계산 범위 | 결과 |
+| --- | --- | --- | ---: |
+| BLS CPI 이벤트 | CPI 공식 발표 한 번 | 최근 실제 발표 12회 | 12행 |
+| ALFRED 관측값 | 발표 당시 알려진 지수 한 개 | 12회 × CPI·근원 CPI 2개 | 24행 |
+| Historical SIP 1분봉 | 종목 한 개의 1분 OHLCV | 12회 발표 구간 × `SPY`, `QQQ`, `SMH`, `NVDA` | 5,320행 |
+| Event impact | 발표 한 번·종목·분석 window의 반응 | 12회 × 4종목 × 4개 window | 192행 |
+| Matched baseline | 발표일과 비교할 과거 동일 요일·시각 반응 | 12회 × 4종목 × 4개 window × 3주 | 576행 |
+
+Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 이미 집계된 1분봉 전체**입니다. 거래가 없던 분은 임의로 생성하지 않았기 때문에 이론상 최대 행 수보다 적습니다.
+
+### B. Kafka·Spark 원시 거래 처리 데이터
+
+이 경로는 Historical Trades API의 개별 체결을 Kafka로 보내고 Spark가 직접 1분봉으로 집계합니다. 위의 5,320행과 행 단위가 다릅니다.
+
+| 데이터 | 한 행의 의미 | 수집·계산 범위 | 결과 |
+| --- | --- | --- | ---: |
+| Historical SIP 원시 체결 | NVDA에서 실제로 발생한 개별 체결 한 건 | 2026-08-12 CPI 한 번·NVDA 한 종목·`[07:30, 09:31) ET` | 58,036행 |
+| volume·trade_count 반영 체결 | provider 조건상 거래량·거래 건수에 포함되는 체결 | 위와 동일한 58,036행을 전처리 | 58,034행 |
+| OHLC·VWAP 가격 형성 체결 | provider 조건상 대표 가격 형성에 사용하는 체결 | 위와 동일한 58,036행을 전처리 | 8,752행 |
+| Spark 재구성 1분봉 | NVDA의 1분 OHLCV 한 개 | 위 원시 체결을 121개 event-time 분으로 집계 | 121행 |
+
+```text
+한 CPI 발표일의 NVDA 원시 체결 58,036행
+→ 거래 조건 적용: trade_count 58,034행 / 가격 형성 8,752행
+→ Spark 1분 집계 121행
+
+이 121행은 12회 발표·4종목의 Historical SIP 1분봉 5,320행 중
+같은 날짜·종목·시간 범위의 provider 121행과 비교해 정확성을 검증합니다.
+```
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
 

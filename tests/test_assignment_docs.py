@@ -40,6 +40,14 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "![CPI 발표 구간 SIP Kafka Spark 처리 경로]",
             readme,
         )
+        self.assertIn("### A. 경제지표 발표 영향 분석 데이터", readme)
+        self.assertIn("### B. Kafka·Spark 원시 거래 처리 데이터", readme)
+        self.assertIn(
+            "여러 발표일과 4개 종목을 합한, 이미 집계된 1분봉 전체",
+            readme,
+        )
+        self.assertIn("NVDA에서 실제로 발생한 개별 체결 한 건", readme)
+        self.assertIn("Spark 1분 집계 121행", readme)
 
     def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
