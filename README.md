@@ -159,7 +159,7 @@ NVDA Historical SIP 원시 체결 레코드 58,036건
 
 여기서 58,036건은 SIP 전체 시장의 거래량이 아니라, `NVDA`, `feed=sip`, `[2026-08-12 11:30:00, 13:31:00) UTC` 조건으로 Historical Trades API가 반환한 **개별 원시 체결 레코드 수**입니다. 첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다.
 
-비교값 `58,034건`은 같은 날짜·종목·feed·시간 범위를 `timeframe=1Min`으로 조회해 Alpaca Historical Bars API가 반환한 **121개 provider bar의 `trade_count`를 모두 더한 값**입니다. 즉 하루 거래량이나 체결 수량의 합이 아니며, 원시 Trades API 행 개수와도 정의가 다릅니다. provider bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 분리 저장했습니다. `58,034`와 `58,036`의 2건 차이는 Alpaca bar의 거래 조건 포함 정책과 우리 raw replay의 현재 전체 행 포함 정책을 대조하기 전까지 원인을 확정하지 않고 후속 검증 대상으로 남깁니다.
+비교값 `58,034건`은 같은 날짜·종목·feed·시간 범위를 `timeframe=1Min`으로 조회해 Alpaca Historical Bars API가 반환한 **121개 provider bar의 `trade_count`를 모두 더한 값**입니다. Spark에서도 Alpaca의 거래 조건별 bar 집계 규칙을 적용해 raw 58,036행 중 volume·trade_count 반영 대상 58,034행, OHLC·VWAP 가격 형성 대상 8,752행을 구분했습니다. 제외된 2행은 모두 `Q(Official Open)` 조건을 포함한 체결이었습니다. provider bar와 Spark 재구성 bar 121개를 행별 비교한 결과 OHLC·volume·trade_count·VWAP 불일치는 모두 0건이었습니다. 두 결과는 `source=alpaca`와 `source=alpaca_replay`로 분리 저장했습니다.
 
 ### 4차시 과제 제출 요약
 
@@ -169,7 +169,7 @@ NVDA Historical SIP 원시 체결 레코드 58,036건
 | 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
 | 프로젝트 연결 | 2026년 7월 CPI 발표 전후 지정 구간의 NVDA Historical SIP 개별 체결 레코드 |
 | 전송 건수 | Producer 58,036건 = Consumer 58,036건 |
-| Spark 처리 전·후 | 입력 58,036건, 오류·중복 0건 → 1분봉 121건 |
+| Spark 처리 전·후 | 입력 58,036건, 오류·중복·미지원 조건 0건 → volume/trade_count 반영 58,034건 → 1분봉 121건 |
 | 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
 필드명·타입·의미, Kafka JSON 예시와 Topic 상세는 [4차시 Kafka·Spark 제출 문서의 Kafka 메시지](docs/kafka-spark-assignment.md#kafka-메시지)를 정본으로 관리합니다.

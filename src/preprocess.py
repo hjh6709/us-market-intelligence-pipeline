@@ -10,6 +10,39 @@ from pyspark.sql.types import ArrayType, IntegerType, LongType, StringType, Time
 from src.spark_schemas import MARKET_ENVELOPE_SCHEMA
 
 
+MINUTE_BAR_CONDITION_POLICY = "alpaca_sip_minute_v1"
+
+# Alpaca follows the CTA/UTP sale-condition matrix when constructing minute
+# bars. An empty condition array represents an otherwise regular trade in the
+# normalized API payload. Unknown condition/tape combinations are excluded
+# instead of silently changing OHLCV semantics.
+_SUPPORTED_CONDITIONS_BY_TAPE = {
+    "A": [
+        "", "B", "C", "E", "F", "H", "I", "K", "L", "M", "N", "O",
+        "P", "Q", "R", "T", "U", "V", "X", "Z", "4", "5", "6", "7", "9",
+    ],
+    "B": [
+        "", "B", "C", "E", "F", "H", "I", "K", "L", "M", "N", "O",
+        "P", "Q", "R", "T", "U", "V", "X", "Z", "4", "5", "6", "7", "9",
+    ],
+    "C": [
+        "", "@", "A", "B", "C", "D", "F", "G", "H", "I", "K", "L",
+        "M", "N", "O", "P", "Q", "R", "T", "U", "V", "W", "X", "Y",
+        "Z", "4", "5", "6", "7", "9",
+    ],
+    "O": ["", "@", "C", "I", "N", "P", "R", "T", "U", "W"],
+}
+
+_PRICE_ONLY_EXCLUSIONS_BY_TAPE = {
+    "A": ["B", "C", "H", "I", "N", "P", "R", "U", "V", "Z", "4", "7"],
+    "B": ["B", "C", "H", "I", "N", "P", "R", "U", "V", "Z", "4", "7"],
+    "C": ["C", "G", "H", "I", "N", "P", "R", "U", "V", "W", "Z", "4", "7"],
+    "O": ["C", "I", "N", "P", "R", "U", "W"],
+}
+
+_PRICE_AND_VOLUME_EXCLUSIONS = ["M", "Q", "9"]
+
+
 def _optional_column(
     frame: DataFrame,
     name: str,
@@ -141,7 +174,7 @@ def validate_market_trades(
                 "INVALID_TAPE",
             ),
             (F.col("price").isNull() | (F.col("price") <= 0), "INVALID_PRICE"),
-            (F.col("size").isNull() | (F.col("size") < 0), "INVALID_SIZE"),
+            (F.col("size").isNull() | (F.col("size") <= 0), "INVALID_SIZE"),
             (invalid_timestamp, "INVALID_TIMESTAMP"),
             (timestamp_mismatch, "TIMESTAMP_MISMATCH"),
         ]
@@ -169,22 +202,97 @@ def prepare_streaming_trades(
     ).dropDuplicatesWithinWatermark(["event_id"])
 
 
+def _condition_codes_for_tape(mapping: dict[str, list[str]]) -> Column:
+    result = F.array().cast(ArrayType(StringType(), containsNull=False))
+    for tape, codes in mapping.items():
+        result = F.when(
+            F.col("tape") == tape,
+            F.array(*[F.lit(code) for code in codes]),
+        ).otherwise(result)
+    return result
+
+
+def apply_minute_bar_condition_policy(trades_df: DataFrame) -> DataFrame:
+    """Mark whether each trade updates minute-bar price and volume fields.
+
+    The policy implements Alpaca's documented CTA/UTP condition matrix for
+    minute bars. With multiple condition codes, the strictest rule wins.
+    See: https://docs.alpaca.markets/us/docs/market-data-faq
+    """
+    normalized_conditions = F.transform(
+        F.col("conditions"), lambda code: F.upper(F.trim(code))
+    )
+    supported_conditions = _condition_codes_for_tape(_SUPPORTED_CONDITIONS_BY_TAPE)
+    price_only_exclusions = _condition_codes_for_tape(
+        _PRICE_ONLY_EXCLUSIONS_BY_TAPE
+    )
+    unsupported_conditions = F.array_except(
+        normalized_conditions, supported_conditions
+    )
+    fully_excluded = (
+        F.col("tape").isin("A", "B", "C")
+        & (
+            F.size(
+                F.array_intersect(
+                    normalized_conditions,
+                    F.array(
+                        *[
+                            F.lit(code)
+                            for code in _PRICE_AND_VOLUME_EXCLUSIONS
+                        ]
+                    ),
+                )
+            )
+            > 0
+        )
+    )
+    price_excluded = (
+        F.size(F.array_intersect(normalized_conditions, price_only_exclusions)) > 0
+    )
+    supported = F.size(unsupported_conditions) == 0
+
+    return (
+        trades_df.withColumn("normalized_conditions", normalized_conditions)
+        .withColumn("unsupported_conditions", unsupported_conditions)
+        .withColumn("updates_volume", supported & ~fully_excluded)
+        .withColumn(
+            "updates_ohlc",
+            supported & ~fully_excluded & ~price_excluded,
+        )
+    )
+
+
 def aggregate_minute_bars(trades_df: DataFrame) -> DataFrame:
-    """Aggregate normalized trades into deterministic event-time bars."""
+    """Aggregate normalized trades using provider-compatible SIP semantics."""
+    policy_trades = apply_minute_bar_condition_policy(trades_df)
     order_key = F.struct(F.col("event_timestamp"), F.col("event_id"))
-    grouped = trades_df.groupBy(
+    group_columns = [
         "symbol",
         "source",
         "feed",
         F.window("event_timestamp", "1 minute").alias("bar_window"),
-    ).agg(
+    ]
+    price_bars = policy_trades.filter("updates_ohlc").groupBy(*group_columns).agg(
         F.min_by("price", order_key).alias("open"),
         F.max("price").alias("high"),
         F.min("price").alias("low"),
         F.max_by("price", order_key).alias("close"),
+    )
+    volume_bars = policy_trades.filter("updates_volume").groupBy(*group_columns).agg(
         F.sum("size").alias("volume"),
         F.count(F.lit(1)).alias("trade_count"),
-        F.sum(F.col("price") * F.col("size")).alias("notional"),
+        F.sum(
+            F.when(F.col("updates_ohlc"), F.col("price") * F.col("size"))
+            .otherwise(F.lit(0))
+        ).alias("vwap_notional"),
+        F.sum(
+            F.when(F.col("updates_ohlc"), F.col("size")).otherwise(F.lit(0))
+        ).alias("vwap_volume"),
+    )
+    grouped = price_bars.join(
+        volume_bars,
+        on=["symbol", "source", "feed", "bar_window"],
+        how="inner",
     )
     return grouped.select(
         "symbol",
@@ -197,13 +305,15 @@ def aggregate_minute_bars(trades_df: DataFrame) -> DataFrame:
         "volume",
         "trade_count",
         F.when(
-            F.col("volume") > 0,
-            (F.col("notional") / F.col("volume")).cast("decimal(18,6)"),
+            F.col("vwap_volume") > 0,
+            (F.col("vwap_notional") / F.col("vwap_volume")).cast(
+                "decimal(18,6)"
+            ),
         )
         .otherwise(F.lit(None).cast("decimal(18,6)"))
         .alias("vwap"),
         "source",
         "feed",
         F.lit(True).alias("is_final"),
-        F.lit("all_valid_trades_v1").alias("condition_policy"),
+        F.lit(MINUTE_BAR_CONDITION_POLICY).alias("condition_policy"),
     )

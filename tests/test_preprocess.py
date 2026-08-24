@@ -6,6 +6,7 @@ from pyspark.sql import functions as F
 
 from src.preprocess import (
     aggregate_minute_bars,
+    apply_minute_bar_condition_policy,
     parse_market_events,
     prepare_streaming_trades,
     split_valid_invalid,
@@ -148,7 +149,9 @@ class PreprocessTest(unittest.TestCase):
             event["event_id"] = event_id
             event["source_event_id"] = str(len(events) + 1)
             event["event_timestamp"] = timestamp
-            event["payload"].update(i=len(events) + 1, p=price, s=size, t=timestamp)
+            event["payload"].update(
+                i=len(events) + 1, p=price, s=size, c=["@"], t=timestamp
+            )
             events.append(event)
 
         bars = aggregate_minute_bars(self.valid_trades(events))
@@ -163,20 +166,62 @@ class PreprocessTest(unittest.TestCase):
         self.assertEqual(str(row.vwap), "102.000000")
         self.assertEqual(row.timeframe, "1m")
         self.assertTrue(row.is_final)
-        self.assertEqual(row.condition_policy, "all_valid_trades_v1")
+        self.assertEqual(row.condition_policy, "alpaca_sip_minute_v1")
         utc_bar_start = bars.select(
             F.date_format("bar_start", "yyyy-MM-dd'T'HH:mm:ss'Z'").alias("value")
         ).collect()[0].value
         self.assertEqual(utc_bar_start, "2026-08-19T13:30:00Z")
 
-    def test_returns_null_vwap_when_bar_volume_is_zero(self) -> None:
+    def test_rejects_zero_size_trade(self) -> None:
         event = canonical_event()
         event["payload"]["s"] = 0
 
-        row = aggregate_minute_bars(self.valid_trades([event])).collect()[0]
+        parsed = parse_market_events(self.kafka_frame([json.dumps(event)]))
+        valid, invalid = split_valid_invalid(validate_market_trades(parsed, ["NVDA"]))
 
-        self.assertEqual(row.volume, 0)
-        self.assertIsNone(row.vwap)
+        self.assertEqual(valid.count(), 0)
+        self.assertIn("INVALID_SIZE", invalid.collect()[0].reason_codes)
+
+    def test_applies_strictest_sip_condition_to_ohlcv(self) -> None:
+        specs = [
+            ("regular", "2026-08-19T13:30:10Z", 100.0, 10, ["@"]),
+            ("odd-lot", "2026-08-19T13:30:20Z", 50.0, 2, ["I"]),
+            ("official-open", "2026-08-19T13:30:30Z", 200.0, 7, ["Q"]),
+            ("strictest", "2026-08-19T13:30:40Z", 300.0, 3, ["@", "I"]),
+            ("close", "2026-08-19T13:30:50Z", 110.0, 5, ["@"]),
+        ]
+        events = []
+        for index, (name, timestamp, price, size, conditions) in enumerate(specs, 1):
+            event = canonical_event()
+            event["event_id"] = f"sha256:{name}"
+            event["source_event_id"] = str(index)
+            event["event_timestamp"] = timestamp
+            event["payload"].update(
+                i=index, p=price, s=size, c=conditions, t=timestamp
+            )
+            events.append(event)
+
+        row = aggregate_minute_bars(self.valid_trades(events)).collect()[0]
+
+        self.assertEqual(str(row.open), "100.000000")
+        self.assertEqual(str(row.high), "110.000000")
+        self.assertEqual(str(row.low), "100.000000")
+        self.assertEqual(str(row.close), "110.000000")
+        self.assertEqual(row.volume, 20)
+        self.assertEqual(row.trade_count, 4)
+        self.assertEqual(str(row.vwap), "103.333333")
+
+    def test_excludes_unknown_condition_instead_of_silently_including_it(self) -> None:
+        event = canonical_event()
+        event["payload"]["c"] = ["UNKNOWN"]
+
+        row = apply_minute_bar_condition_policy(
+            self.valid_trades([event])
+        ).collect()[0]
+
+        self.assertEqual(row.unsupported_conditions, ["UNKNOWN"])
+        self.assertFalse(row.updates_volume)
+        self.assertFalse(row.updates_ohlc)
 
     def test_rejects_batch_dataframe_at_streaming_state_boundary(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires a streaming DataFrame"):

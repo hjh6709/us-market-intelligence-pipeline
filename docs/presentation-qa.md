@@ -44,6 +44,10 @@ IEX는 미국 전체 거래소 데이터가 아니므로 실시간 결과를 전
 
 58,036건은 2026년 7월 CPI가 발표된 2026-08-12 08:30 ET를 기준으로, NVDA 한 종목을 `[07:30, 09:31) ET` 범위에서 조회해 받은 개별 SIP 체결 레코드입니다. CPI 지표 건수나 하루치 데이터, 체결 수량의 합이 아닙니다. Spark가 이를 거래 발생 시각 기준 1분 OHLCV로 묶었고, `11:30`부터 `13:30 UTC`까지 121개 봉이 됩니다.
 
+## 원본은 58,036건인데 trade_count 합계는 왜 58,034건인가요?
+
+Alpaca는 거래 조건에 따라 1분봉의 가격·거래량·거래 건수에 포함할지를 다르게 정합니다. 원본 중 `Q(Official Open)` 조건을 포함한 2건은 minute bar 갱신 대상이 아니어서 합계에서 제외됐습니다. 같은 정책을 Spark에 구현한 뒤 provider bar와 비교했고, 121개 봉의 OHLC·volume·trade_count·VWAP가 모두 일치했습니다.
+
 ## WebSocket으로 PostgreSQL까지 저장한 결과인가요?
 
 아직 아닙니다. WebSocket 실제 IEX 거래 10건은 Kafka 발행과 재소비까지 확인했습니다. PostgreSQL의 121개 재구성 봉은 2026-08-12 CPI 발표 구간의 Historical SIP Trades API 거래 58,036건을 Kafka에 replay하고 Spark batch로 집계한 결과입니다. 실시간 전체 경로는 실제 발표일에 별도로 검증해야 합니다.

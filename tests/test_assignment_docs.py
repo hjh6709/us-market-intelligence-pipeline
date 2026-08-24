@@ -47,10 +47,12 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("미국 전체 종목의 모든 데이터를 이번 실행에서 한꺼번에 받았다는 뜻은 아니다", assignment)
         self.assertIn("호가, 전체 주문장·미체결 주문", assignment)
         self.assertIn("Producer 58,036건 = Consumer 58,036건", assignment)
-        self.assertIn("입력 58,036건, validation 오류 0건", assignment)
+        self.assertIn("입력 58,036건 → validation 오류 0건", assignment)
         self.assertIn("1분봉 121건", assignment)
-        self.assertIn("`SUM(trade_count)=58,034`", assignment)
-        self.assertIn("원시 체결 레코드 수·체결 수량·하루 거래량이 아니다", assignment)
+        self.assertIn("volume/trade_count 반영 58,034건", assignment)
+        self.assertIn("OHLC/VWAP 가격 형성 반영 8,752건", assignment)
+        self.assertIn("`I(Odd Lot)`", assignment)
+        self.assertIn("OHLC·volume·trade_count·VWAP 불일치 모두 0건", assignment)
 
     def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -79,11 +81,14 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn('"consumer_received_trades": 58036', result)
         self.assertIn('"spark_input_trades": 58036', result)
         self.assertIn('"spark_validation_error_trades": 0', result)
+        self.assertIn('"spark_volume_eligible_trades": 58034', result)
+        self.assertIn('"spark_price_eligible_trades": 8752', result)
         self.assertIn('"spark_output_bars": 121', result)
         self.assertIn('"requested_end": "2026-08-12T13:31:00Z"', result)
         self.assertIn('"provider_bar_rows": 121', result)
         self.assertIn('"provider_bar_trade_count_sum": 58034', result)
         self.assertIn('"provider_bar_timeframe": "1Min"', result)
+        self.assertIn('"provider_replay_ohlc_mismatch_bars": 0', result)
 
         evidence_sql = Path(
             "scripts/evidence/cpi_sip_kafka_spark_evidence.sql"

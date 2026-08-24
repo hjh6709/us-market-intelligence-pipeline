@@ -72,7 +72,7 @@ P0 query pattern과 최소 index 후보는 [MVP 설계 결정](design-decisions.
 Validation:
 
 - symbol은 활성 allowlist에 있어야 한다.
-- price > 0, size >= 0.
+- price > 0, size > 0.
 - timestamp는 parse 가능한 aware timestamp여야 한다.
 - 미래 허용 오차 또는 지나치게 오래된 event는 reason code와 함께 격리한다.
 
@@ -90,16 +90,18 @@ Validation:
   "volume": 12500,
   "trade_count": 240,
   "vwap": 182.31,
-  "source": "alpaca",
-  "feed": "iex",
+  "source": "alpaca_replay",
+  "feed": "sip",
   "is_final": true,
-  "condition_policy": "all_valid_trades_v1",
+  "condition_policy": "alpaca_sip_minute_v1",
   "spark_batch_id": 42,
   "updated_at": "2026-08-13T13:32:00Z"
 }
 ```
 
 Unique key: `(symbol, bar_start, timeframe, source, feed)`.
+
+`alpaca_sip_minute_v1`은 Alpaca의 CTA/UTP sale-condition 표에 따라 각 raw trade가 OHLC 가격 형성 및 volume·trade_count에 반영되는지를 따로 결정한다. 여러 조건이 있으면 가장 엄격한 조건을 사용하며, 알려지지 않은 condition/tape 조합은 조용히 포함하지 않고 집계에서 제외해 별도 건수로 기록한다. VWAP는 가격과 거래량 모두 갱신 가능한 체결만 사용한다.
 
 `is_final`은 configured watermark가 해당 window를 통과해 더 이상 정상 update 대상이 아님을 뜻한다. P0는 append output mode로 watermark를 통과한 final bar만 PostgreSQL에 저장한다. Watermark 안의 late event는 DB에 쓰기 전에 Spark state의 집계에 포함되고, 너무 늦은 event는 별도 metric/DLQ 정책을 따른다. 정상 재시작은 Spark checkpoint에서 복구하며, full historical rebuild는 Kafka retention 안의 raw event 또는 deterministic replay dataset을 사용한다. PostgreSQL bar만으로 raw trades를 완전히 재구성할 수 있다고 가정하지 않는다.
 

@@ -12,6 +12,7 @@ from pyspark.sql import functions as F
 from src.postgres import upsert_market_bars
 from src.preprocess import (
     aggregate_minute_bars,
+    apply_minute_bar_condition_policy,
     parse_market_events,
     split_valid_invalid,
     validate_market_trades,
@@ -56,6 +57,12 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
         invalid_count = invalid.count()
         deduplicated = valid.dropDuplicates(["event_id"])
         deduplicated_count = deduplicated.count()
+        policy_trades = apply_minute_bar_condition_policy(deduplicated).cache()
+        unsupported_count = policy_trades.filter(
+            F.size("unsupported_conditions") > 0
+        ).count()
+        volume_eligible_count = policy_trades.filter("updates_volume").count()
+        price_eligible_count = policy_trades.filter("updates_ohlc").count()
         bars = aggregate_minute_bars(deduplicated).withColumn(
             "source", F.lit("alpaca_replay")
         )
@@ -68,6 +75,12 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             "spark_input_trades": input_count,
             "spark_invalid_trades": invalid_count,
             "spark_valid_unique_trades": deduplicated_count,
+            "spark_unsupported_condition_trades": unsupported_count,
+            "spark_volume_eligible_trades": volume_eligible_count,
+            "spark_price_eligible_trades": price_eligible_count,
+            "spark_condition_excluded_from_trade_count": (
+                deduplicated_count - volume_eligible_count
+            ),
             "spark_output_bars": output_count,
             "postgres_upserted_bars": stored_count,
         }

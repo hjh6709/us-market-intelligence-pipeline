@@ -1,5 +1,5 @@
 {
-  "verified_at": "2026-08-24T16:05:00+09:00",
+  "verified_at": "2026-08-24T18:36:00+09:00",
   "economic_event": "CPI",
   "reference_period": "2026-07",
   "released_at": "2026-08-12T12:30:00Z",
@@ -21,6 +21,14 @@
   "spark_input_trades": 58036,
   "spark_validation_error_trades": 0,
   "spark_valid_unique_trades": 58036,
+  "spark_unsupported_condition_trades": 0,
+  "spark_volume_eligible_trades": 58034,
+  "spark_price_eligible_trades": 8752,
+  "spark_condition_excluded_from_trade_count": 2,
+  "spark_fully_excluded_condition_counts": {
+    "Q": 2
+  },
+  "condition_policy": "alpaca_sip_minute_v1",
   "spark_output_bars": 121,
   "postgres_upserted_bars": 121,
   "provider_bar_source": "alpaca_historical_bars",
@@ -33,7 +41,12 @@
   "provider_bar_trade_count_sum": 58034,
   "provider_bar_trade_count_sum_semantics": "sum_of_trade_count_over_121_provider_generated_one_minute_bars",
   "reconstructed_bar_rows": 121,
-  "reconstructed_bar_trade_count_sum": 58036,
+  "reconstructed_bar_trade_count_sum": 58034,
+  "provider_replay_joined_bars": 121,
+  "provider_replay_ohlc_mismatch_bars": 0,
+  "provider_replay_volume_mismatch_bars": 0,
+  "provider_replay_trade_count_mismatch_bars": 0,
+  "provider_replay_vwap_mismatch_bars": 0,
   "topic": "raw.market-sip.v1",
   "raw_payload_persisted_in_repository": false,
   "credentials_persisted_in_repository": false

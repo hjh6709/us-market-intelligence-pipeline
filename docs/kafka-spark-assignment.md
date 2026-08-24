@@ -165,14 +165,30 @@ KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
 | --- | --- |
 | WebSocket → Kafka | 실제 IEX 거래 10건 수신·발행·재소비 |
 | 2026-08-12 NVDA SIP release-window replay | Producer 58,036건 = Consumer 58,036건 |
-| Spark 처리 | 입력 58,036건, validation 오류 0건, 고유 거래 58,036건 |
-| PostgreSQL | 전체 거래 58,036건 → 1분봉 121건, 중복 key 0건 |
-| Alpaca provider bar 비교 | 같은 `NVDA`·`sip`·`[07:30, 09:31) ET`의 121개 `1Min` bar에서 `SUM(trade_count)=58,034` |
+| Spark 처리 | 입력 58,036건 → validation 오류 0건 → 고유 거래 58,036건 → volume/trade_count 반영 58,034건 → OHLC/VWAP 가격 형성 반영 8,752건 |
+| PostgreSQL | 조건 정책을 적용한 1분봉 121건, 중복 key 0건 |
+| Alpaca provider bar 비교 | 동일한 121개 bar를 행별 비교해 OHLC·volume·trade_count·VWAP 불일치 모두 0건 |
 | 100배속 replay | 1,523건, 169.567 events/s, Consumer·Spark 각 1,523건 |
 
-Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거와 1분 window 집계를 수행한다. 처리 전 58,036건 중 validation 오류와 중복은 모두 0건이다. 발표 전후 121개 분 구간이 모두 저장됐으며 첫 bar는 `11:30 UTC`, 마지막 bar는 `13:30 UTC`다.
+Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, SIP 거래 조건 적용과 1분 window 집계를 수행한다. 처리 전 58,036건 중 validation 오류·중복·지원하지 않는 거래 조건은 모두 0건이다. 발표 전후 121개 분 구간이 모두 저장됐으며 첫 bar는 `11:30 UTC`, 마지막 bar는 `13:30 UTC`다.
 
-`58,034`는 2026-08-12의 동일한 NVDA SIP 조회 구간을 Alpaca Historical Bars API에서 `timeframe=1Min`으로 받아, provider가 만든 121개 bar의 `trade_count`를 합산한 비교값이다. 원시 체결 레코드 수·체결 수량·하루 거래량이 아니다. raw Trades API 58,036행과 provider bar의 `trade_count` 합계 58,034는 집계 정책이 다를 수 있으므로, 현재 확인되지 않은 두 건의 원인을 임의로 단정하거나 숫자를 맞추지 않는다.
+Alpaca의 CTA/UTP sale-condition 규칙은 체결마다 `OHLC 가격 형성`과 `volume/trade_count 반영` 여부를 다르게 정한다. 여러 조건이 있으면 가장 엄격한 조건을 적용한다. 이 규칙을 `alpaca_sip_minute_v1`로 구현한 결과, 원본 58,036행 중 58,034행이 volume/trade_count에 반영되고 8,752행이 OHLC/VWAP 가격 형성에 반영됐다. 제외된 2행은 모두 `Q(Official Open)` 조건을 포함해 provider 규칙상 minute bar의 가격·거래량·거래 건수를 갱신하지 않는 체결이었다.
+
+OHLC/VWAP 반영 건수가 8,752건으로 적은 주된 이유는 이 구간의 체결 다수가 `I(Odd Lot)` 조건을 포함했기 때문이다. Odd Lot 등 특수 조건 체결은 실제 거래이므로 volume·trade_count에는 반영되지만, 대표 시장가격인 open·high·low·close와 VWAP를 왜곡할 수 있어 가격 형성에서는 제외된다. 이번 데이터의 가격 제외 주요 조건 조합은 다음과 같다.
+
+| 거래 조건 조합 | 의미 | OHLC/VWAP | volume/trade_count | 건수 |
+| --- | --- | --- | --- | ---: |
+| `[@, T, I]` | 일반·장외시간·Odd Lot | 제외 | 반영 | 15,417 |
+| `[@, F, T, I]` | 일반·Intermarket Sweep·장외시간·Odd Lot | 제외 | 반영 | 11,887 |
+| `[@, I]` | 일반·Odd Lot | 제외 | 반영 | 10,667 |
+| `[@, 4, I]` | 일반·Derivatively Priced·Odd Lot | 제외 | 반영 | 7,734 |
+| `[@, F, I]` | 일반·Intermarket Sweep·Odd Lot | 제외 | 반영 | 3,422 |
+| 그 밖의 가격 제외 조건 | `C`, `4`, `7`, `V`, `W`, `P` 포함 | 제외 | 대부분 반영 | 155 |
+| `[@, Q]` | 일반·Official Open | 제외 | 제외 | 2 |
+
+`@`는 regular trade, `T`는 extended-hours trade, `F`는 intermarket sweep, `I`는 odd lot, `4`는 derivatively priced, `Q`는 official open을 뜻한다. 조건이 여러 개면 가장 엄격한 규칙이 이긴다. 예를 들어 `T`만 있는 거래는 가격 형성에 반영되지만 `[@, T, I]`는 `I` 때문에 가격에서는 제외된다. 이 분리는 데이터 삭제가 아니라 거래량 측정과 대표 가격 형성의 의미를 각각 보존하는 전처리다.
+
+같은 구간의 Alpaca Historical Bars API 결과와 재구성 결과를 121개 bar별로 비교했으며 OHLC, volume, trade_count, VWAP 불일치는 모두 0건이었다. 따라서 `58,034`는 임의 보정값이 아니라 provider와 동일한 거래 조건 정책을 적용해 얻은 검증된 거래 건수 합계다. 원시 체결 행 수 58,036이나 체결 수량 합계·하루 거래량과는 의미가 다르다. 공식 규칙은 [Alpaca Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)의 bar aggregation 표를 기준으로 했다.
 
 ## 최종 저장 명세
 

@@ -38,19 +38,24 @@
 | Kafka source 입력 | 58,036건 |
 | validation 오류 | 0건 |
 | `event_id` 중복 제거 후 | 58,036건 |
+| 지원하지 않는 거래 조건 | 0건 |
+| volume·trade_count 반영 | 58,034건 |
+| OHLC·VWAP 가격 형성 반영 | 8,752건 |
 | Spark 1분 OHLCV 출력 | 121건 |
 | PostgreSQL upsert | 121건 |
 | 중복 business key | 0건 |
 
-Spark batch는 Kafka의 동일 trace를 읽어 JSON schema parsing, 필수 필드·종목·가격·수량·UTC timestamp 검증, `event_id` 중복 제거, event-time 1분 OHLCV·거래 건수·VWAP 집계를 수행했다. 결과는 기존 Alpaca provider bar를 덮어쓰지 않도록 `source=alpaca_replay`, `feed=sip`로 저장했다.
+Spark batch는 Kafka의 동일 trace를 읽어 JSON schema parsing, 필수 필드·종목·가격·수량·UTC timestamp 검증, `event_id` 중복 제거 후 Alpaca의 CTA/UTP sale-condition 규칙을 적용했다. 거래 조건에 따라 OHLC 가격 형성과 volume·trade_count 반영 여부를 분리하고, 여러 조건이 있으면 가장 엄격한 규칙을 적용한다. 그 뒤 event-time 1분 OHLCV·거래 건수·VWAP를 집계했다. 결과는 기존 Alpaca provider bar를 덮어쓰지 않도록 `source=alpaca_replay`, `feed=sip`로 저장했다.
 
 ## provider bar와 raw replay 비교
 
 | 결과 | 정확한 데이터 정의 | 1분봉 | 거래 건수 합계 |
 | --- | --- | ---: | ---: |
 | Alpaca provider SIP bar | `NVDA`, `feed=sip`, `timeframe=1Min`, `[2026-08-12 11:30, 13:31) UTC`로 받은 bar의 `SUM(trade_count)` | 121 | 58,034 |
-| SIP raw trade Spark 재구성 | 동일 종목·feed·구간의 Historical Trades API 원시 행을 현재 정책으로 1분 집계한 `SUM(trade_count)` | 121 | 58,036 |
+| SIP raw trade Spark 재구성 | 동일 종목·feed·구간의 Historical Trades API 원시 행에 `alpaca_sip_minute_v1`을 적용한 `SUM(trade_count)` | 121 | 58,034 |
 
-따라서 58,034는 하루치 NVDA 거래, 체결 수량의 합이나 원시 API 행 수가 아니다. 지정된 121분에 Alpaca가 만든 121개 1분봉의 거래 건수 필드를 합산한 값이다. 두 건 차이는 숨기거나 임의 보정하지 않는다. provider bar의 `trade_count`는 Alpaca의 봉 생성 정책 결과이고, replay 값은 Historical Trades API에서 받은 모든 원시 행을 현재 프로젝트 규칙으로 집계한 결과다. 거래 조건 코드를 대조하기 전에는 차이의 원인을 확정하지 않는다.
+58,036개의 raw trade 중 `Q(Official Open)` 조건을 포함한 2건은 provider 규칙상 minute bar의 가격·volume·trade_count를 갱신하지 않아 재구성 합계도 58,034건이 됐다. 가격 형성에는 8,752건만 사용되고, 가격에서 제외되더라도 volume에는 포함되는 거래가 존재한다. provider와 replay 121개 bar를 행별 비교한 결과 OHLC·volume·trade_count·VWAP 불일치는 각각 0건이었다. 따라서 숫자를 강제로 맞춘 것이 아니라 공식 집계 규칙을 코드로 구현해 동일 결과를 재현했다.
+
+가격 형성에서 제외되고 volume에는 반영된 거래는 49,282건이다. 그중 대부분은 Odd Lot(`I`) 조건을 포함했다. 주요 조합은 `[@, T, I]` 15,417건, `[@, F, T, I]` 11,887건, `[@, I]` 10,667건, `[@, 4, I]` 7,734건, `[@, F, I]` 3,422건이다. 이는 데이터 손실이 아니라 특수 조건 거래로 OHLC/VWAP가 왜곡되는 것을 막으면서 실제 거래량은 보존하는 provider-compatible 전처리다.
 
 기계 판독용 공개 집계는 [result.json](../evidence/cpi-kafka-spark/result.json)에 있다. 멘토 앞에서 재확인하는 명령은 [실행 증거 안내](../evidence/cpi-kafka-spark/README.md)에 정리했다. API key, 원시 체결 payload, 정확한 가격 행과 로컬 DB는 Git에 포함하지 않는다.

@@ -20,7 +20,7 @@
 - 산출식: 121개 bar의 `SUM(trade_count)`
 - 결과: 58,034건
 
-이 값은 원시 체결 레코드 수나 체결 수량의 합, 하루 거래량이 아니다. Historical Trades API 원시 행 58,036개와는 생성 주체와 집계 정책이 다른 비교 지표다. 두 건의 차이는 거래 조건별 bar 포함 정책을 대조하기 전까지 원인을 확정하지 않는다.
+이 값은 원시 체결 레코드 수나 체결 수량의 합, 하루 거래량이 아니다. Spark가 Alpaca의 거래 조건별 bar 포함 정책을 적용한 결과, raw 58,036행 중 volume·trade_count 반영 대상은 58,034행이었다. provider와 replay 121개 bar의 OHLC·volume·trade_count·VWAP는 모두 일치했다.
 
 ## 공개된 증거
 
@@ -70,9 +70,14 @@ KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
 input 58,036
 → invalid 0
 → unique 58,036
+→ unsupported condition 0
+→ volume/trade_count eligible 58,034
+→ OHLC/VWAP price eligible 8,752
 → 1-minute bars 121
 → PostgreSQL upsert 121
 ```
+
+가격 형성 대상이 8,752건인 이유도 원본 조건 코드로 확인했다. 가격에서는 제외되고 volume에는 반영된 49,282건의 대부분이 `I(Odd Lot)`를 포함한다. 상위 조합은 `[@, T, I]` 15,417건, `[@, F, T, I]` 11,887건, `[@, I]` 10,667건, `[@, 4, I]` 7,734건, `[@, F, I]` 3,422건이다. 조건별 상세 의미와 반영 정책은 [과제 문서](../../kafka-spark-assignment.md#실제-검증-결과)에 정리했다.
 
 ### 5. PostgreSQL 실제 저장 결과
 
@@ -86,8 +91,9 @@ docker compose exec -T postgres \
 
 - `reconstructed_bar_rows=121`
 - `business_keys=121`
-- `reconstructed_trade_count=58036`
+- `reconstructed_trade_count=58034`
 - 같은 구간의 `provider_bar_rows=121`, `provider_bar_trade_count_sum=58034`
+- provider와 replay의 OHLC·volume·trade_count·VWAP mismatch 각각 `0`
 - 시간 범위 `11:30–13:30 UTC`
 - duplicate query `0 rows`
 - 실제 OHLCV 처음·마지막 행
