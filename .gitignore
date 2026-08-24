@@ -8,7 +8,9 @@ airflow-runtime/
 logs/
 __pycache__/
 .pytest_cache/
+.tmp/
 *.py[cod]
+*.pptx.inspect.ndjson
 *.db
 *.sqlite*
 *.dump

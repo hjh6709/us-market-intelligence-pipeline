@@ -13,7 +13,9 @@ Alpaca SIP trade / CPI release-window replay
 → PostgreSQL market_bars
 ```
 
-Kafka에는 이미 집계된 1분봉 121건이 아니라 Historical SIP Trades API에서 받은 원시 체결 58,036건을 넣는다. Spark가 이 체결을 직접 121개 1분봉으로 만든다. Alpaca provider bar와 Spark 재구성 bar는 서로 덮어쓰지 않고 비교한다.
+Kafka에는 이미 집계된 1분봉 121건이 아니라 Historical SIP Trades API에서 `NVDA`, `feed=sip`, `[2026-08-12 11:30:00, 13:31:00) UTC` 조건으로 받은 개별 체결 레코드 58,036건을 넣는다. 이 수치는 SIP 전체 시장 거래량이 아니다. Spark가 이 레코드를 직접 121개 1분봉으로 만든다. Alpaca provider bar와 Spark 재구성 bar는 서로 덮어쓰지 않고 비교한다.
+
+![CPI 발표 구간 SIP 원시 거래 처리 경로](diagrams/cpi-sip-kafka-spark-assignment.png)
 
 ## Kafka 메시지
 
@@ -153,9 +155,9 @@ Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC even
 
 상세 증거:
 
-- [Kafka·Spark 실행 보고서](test-results/2026-08-21-kafka-spark-assignment.md)
 - [CPI 발표 구간 Kafka·Spark 실행 보고서](test-results/2026-08-24-cpi-kafka-spark.md)
+- [실행 증거와 확인 명령](evidence/cpi-kafka-spark/README.md)
+- [선행 Kafka·Spark 실행 보고서](test-results/2026-08-21-kafka-spark-assignment.md)
 - [100배속 replay 보고서](test-results/2026-08-24-replay-load-100x.md)
-- [실제 수집 증거](evidence/actual-ingestion/README.md)
 
 현재 로컬 Kafka는 single broker이므로 복제 기반 고가용성을 제공하지 않는다. 실제 처리량 역시 Spark가 반드시 필요한 규모라는 뜻이 아니라, 과정에서 학습한 schema validation·deduplication·window aggregation을 직접 검증하기 위한 구현이다.

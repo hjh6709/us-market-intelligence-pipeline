@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <style>
+      .title { font: 700 34px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 18px Arial, sans-serif; fill: #5f6b7d; }
+      .stage { font: 700 15px Arial, sans-serif; fill: #536079; letter-spacing: 1px; }
+      .box-title { font: 700 20px Arial, sans-serif; fill: #172033; }
+      .box-copy { font: 400 15px Arial, sans-serif; fill: #46536a; }
+      .metric { font: 700 26px Arial, sans-serif; fill: #1769ff; }
+      .metric-green { font: 700 26px Arial, sans-serif; fill: #079669; }
+      .small { font: 400 13px Arial, sans-serif; fill: #657188; }
+      .note-title { font: 700 16px Arial, sans-serif; fill: #172033; }
+      .note { font: 400 14px Arial, sans-serif; fill: #4d596f; }
+      .lane { fill: #f8faff; stroke: #c5cede; stroke-width: 1.5; }
+      .source { fill: #edf4ff; stroke: #1769ff; stroke-width: 2.5; }
+      .stored { fill: #ebfbf4; stroke: #079669; stroke-width: 2.5; }
+      .process { fill: #f4efff; stroke: #7c3aed; stroke-width: 2.5; }
+      .evidence { fill: #fff8e8; stroke: #d89914; stroke-width: 2.5; }
+      .arrow { stroke: #344056; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#344056"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="#ffffff"/>
+  <text x="54" y="62" class="title">CPI 발표 구간 SIP 원시 거래 처리 경로</text>
+  <text x="54" y="96" class="subtitle">2026-08-12 · NVDA · 발표 전 60분부터 발표 후 60분까지 실제 실행한 4차시 과제 범위</text>
+
+  <g transform="translate(54,142)">
+    <rect width="270" height="540" rx="18" class="lane"/>
+    <text x="135" y="38" text-anchor="middle" class="stage">EVENT &amp; SOURCE</text>
+    <rect x="22" y="72" width="226" height="140" rx="14" class="source"/>
+    <text x="135" y="108" text-anchor="middle" class="box-title">BLS CPI 발표 시각</text>
+    <text x="135" y="140" text-anchor="middle" class="metric">12:30 UTC</text>
+    <text x="135" y="169" text-anchor="middle" class="box-copy">08:30 ET · 기준 이벤트 시각</text>
+    <text x="135" y="192" text-anchor="middle" class="small">[11:30, 13:31) 분석 구간</text>
+
+    <rect x="22" y="246" width="226" height="220" rx="14" class="source"/>
+    <text x="135" y="282" text-anchor="middle" class="box-title">NVDA Historical SIP</text>
+    <text x="135" y="317" text-anchor="middle" class="metric">58,036</text>
+    <text x="135" y="345" text-anchor="middle" class="box-copy">API 체결 레코드 · 6 pages</text>
+    <text x="135" y="378" text-anchor="middle" class="box-copy">첫 체결 11:30:02 UTC</text>
+    <text x="135" y="404" text-anchor="middle" class="box-copy">마지막 13:30:59 UTC</text>
+    <text x="135" y="438" text-anchor="middle" class="small">해당 종목·시간 조건의 반환 건수</text>
+  </g>
+
+  <path d="M324 412 L362 412" class="arrow"/>
+
+  <g transform="translate(362,142)">
+    <rect width="270" height="540" rx="18" class="lane"/>
+    <text x="135" y="38" text-anchor="middle" class="stage">INGESTION &amp; KAFKA</text>
+    <rect x="22" y="72" width="226" height="146" rx="14" class="source"/>
+    <text x="135" y="108" text-anchor="middle" class="box-title">Python Replay</text>
+    <text x="135" y="139" text-anchor="middle" class="box-copy">pagination 완료 후 발행</text>
+    <text x="135" y="166" text-anchor="middle" class="box-copy">공통 event envelope</text>
+    <text x="135" y="193" text-anchor="middle" class="small">key = NVDA · trace_id로 실행 구분</text>
+
+    <rect x="22" y="252" width="226" height="214" rx="14" class="stored"/>
+    <text x="135" y="288" text-anchor="middle" class="box-title">raw.market-sip.v1</text>
+    <text x="135" y="324" text-anchor="middle" class="metric-green">58,036 = 58,036</text>
+    <text x="135" y="352" text-anchor="middle" class="box-copy">Producer = Consumer</text>
+    <text x="135" y="386" text-anchor="middle" class="box-copy">3 partitions · retention 24h</text>
+    <text x="135" y="414" text-anchor="middle" class="box-copy">발행·수신 차이 0</text>
+    <text x="135" y="444" text-anchor="middle" class="small">원시 payload는 Git에 미포함</text>
+  </g>
+
+  <path d="M632 412 L670 412" class="arrow"/>
+
+  <g transform="translate(670,142)">
+    <rect width="270" height="540" rx="18" class="lane"/>
+    <text x="135" y="38" text-anchor="middle" class="stage">SPARK BATCH</text>
+    <rect x="22" y="72" width="226" height="394" rx="14" class="process"/>
+    <text x="135" y="108" text-anchor="middle" class="box-title">전처리·1분 집계</text>
+    <text x="45" y="148" class="box-copy">1. JSON schema parsing</text>
+    <text x="45" y="180" class="box-copy">2. 종목·가격·수량 검증</text>
+    <text x="45" y="212" class="box-copy">3. UTC event time 변환</text>
+    <text x="45" y="244" class="box-copy">4. event_id 중복 제거</text>
+    <text x="45" y="276" class="box-copy">5. 1분 OHLCV·VWAP</text>
+    <line x1="45" y1="302" x2="225" y2="302" stroke="#c9b8f7" stroke-width="1.5"/>
+    <text x="135" y="342" text-anchor="middle" class="metric">58,036</text>
+    <text x="135" y="370" text-anchor="middle" class="box-copy">입력 · 유효 · 고유 거래</text>
+    <text x="135" y="405" text-anchor="middle" class="metric-green">invalid 0</text>
+    <text x="135" y="436" text-anchor="middle" class="small">이미 집계된 봉이 아닌 raw trade 처리</text>
+  </g>
+
+  <path d="M940 412 L978 412" class="arrow"/>
+
+  <g transform="translate(978,142)">
+    <rect width="270" height="540" rx="18" class="lane"/>
+    <text x="135" y="38" text-anchor="middle" class="stage">PROCESSED STORAGE</text>
+    <rect x="22" y="72" width="226" height="250" rx="14" class="stored"/>
+    <text x="135" y="108" text-anchor="middle" class="box-title">PostgreSQL</text>
+    <text x="135" y="146" text-anchor="middle" class="metric-green">121 bars</text>
+    <text x="135" y="176" text-anchor="middle" class="box-copy">market_bars · 1m OHLCV</text>
+    <text x="135" y="207" text-anchor="middle" class="box-copy">11:30–13:30 UTC</text>
+    <text x="135" y="238" text-anchor="middle" class="box-copy">business-key 중복 0</text>
+    <text x="135" y="273" text-anchor="middle" class="small">source=alpaca_replay · feed=sip</text>
+
+    <rect x="22" y="352" width="226" height="114" rx="14" fill="#ffffff" stroke="#8aa0bd" stroke-width="1.5"/>
+    <text x="135" y="386" text-anchor="middle" class="note-title">원천별 결과 분리</text>
+    <text x="135" y="416" text-anchor="middle" class="note">provider bar 58,034</text>
+    <text x="135" y="442" text-anchor="middle" class="note">raw replay 58,036</text>
+  </g>
+
+  <path d="M1248 412 L1286 412" class="arrow"/>
+
+  <g transform="translate(1286,142)">
+    <rect width="260" height="540" rx="18" class="lane"/>
+    <text x="130" y="38" text-anchor="middle" class="stage">EVIDENCE</text>
+    <rect x="20" y="72" width="220" height="394" rx="14" class="evidence"/>
+    <text x="130" y="108" text-anchor="middle" class="box-title">재현 가능한 증거</text>
+    <text x="43" y="152" class="box-copy">• result.json</text>
+    <text x="43" y="188" class="box-copy">• Consumer trace count</text>
+    <text x="43" y="224" class="box-copy">• Spark summary</text>
+    <text x="43" y="260" class="box-copy">• PostgreSQL SQL</text>
+    <text x="43" y="296" class="box-copy">• 실제 OHLCV 6행 확인</text>
+    <line x1="43" y1="322" x2="217" y2="322" stroke="#e8cf91" stroke-width="1.5"/>
+    <text x="130" y="359" text-anchor="middle" class="metric-green">0 loss</text>
+    <text x="130" y="390" text-anchor="middle" class="box-copy">0 invalid · 0 duplicate</text>
+    <text x="130" y="430" text-anchor="middle" class="small">API key·원시 payload 미공개</text>
+  </g>
+
+  <rect x="54" y="724" width="1492" height="112" rx="14" fill="#f7f9fc" stroke="#d3dae6" stroke-width="1.5"/>
+  <text x="82" y="760" class="note-title">이 그림이 말하는 범위</text>
+  <text x="82" y="791" class="note">이번 과제는 한 CPI 발표일의 NVDA를 대상으로 수집 → Kafka → Spark → DB 저장을 실제 검증한 결과입니다.</text>
+  <text x="82" y="818" class="note">12회 CPI × 4종목의 5,320개 provider 1분봉 분석과 실시간 IEX WebSocket 경로는 별도 데이터 경로로 유지합니다.</text>
+</svg>

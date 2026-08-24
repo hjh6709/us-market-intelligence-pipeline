@@ -47,6 +47,8 @@ PostgreSQL market_bars
 
 같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
 
+![CPI 발표 구간 SIP Kafka Spark 처리 경로](docs/diagrams/cpi-sip-kafka-spark-assignment.png)
+
 ## 데이터 출처
 
 | 데이터 | 공식 출처 | 역할 |
@@ -65,7 +67,7 @@ PostgreSQL market_bars
 | Historical SIP 1분봉 | 5,320건 | 재실행 후 동일 건수, 중복 0 |
 | Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
 | Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
-| CPI 구간 SIP raw trade | 58,036건 | Producer·Consumer·Spark 입력 일치, 오류 0 |
+| 2026-08-12 CPI 구간 NVDA Historical SIP 체결 레코드 | 58,036건 | 지정 시간 범위의 Trades API 반환·Producer·Consumer·Spark 입력 일치, 오류 0 |
 | CPI 구간 Spark 재구성 1분봉 | 121건 | 전체 원시 체결 반영, 121분 coverage, 중복 key 0 |
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
@@ -135,14 +137,14 @@ docker compose exec -T postgres \
 2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 발표 전 60분부터 발표 후 60분까지 NVDA의 실제 SIP 원시 체결 전체를 replay했습니다.
 
 ```text
-Alpaca SIP raw trade 58,036건
+NVDA Historical SIP 원시 체결 레코드 58,036건
 → Kafka raw.market-sip.v1
 → Spark batch validation·deduplication·aggregation
 → 1분 OHLCV 121건
 → PostgreSQL market_bars
 ```
 
-첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다. 기존 Alpaca provider SIP bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 저장해 서로 덮어쓰지 않습니다. provider bar의 거래 수 합계는 58,034건이고 원시 Trades API 행은 58,036건이므로, 두 건의 차이를 임의 보정하지 않고 거래 조건 정책의 후속 검증 대상으로 남겼습니다.
+여기서 58,036건은 SIP 전체 시장의 거래량이 아니라, `NVDA`, `feed=sip`, `[11:30:00, 13:31:00) UTC` 조건으로 Historical Trades API가 반환한 개별 체결 레코드 수입니다. 첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다. 기존 Alpaca provider SIP bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 저장해 서로 덮어쓰지 않습니다. provider bar의 `trade_count` 합계는 58,034건이고 원시 Trades API 행은 58,036건이므로, 두 건의 차이를 임의 보정하지 않고 거래 조건 정책의 후속 검증 대상으로 남겼습니다.
 
 ### 4차시 과제 제출 요약
 
