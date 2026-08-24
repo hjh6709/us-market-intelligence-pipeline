@@ -141,6 +141,51 @@ Kafka에는 이미 집계된 1분봉 121건이 아니라 Historical SIP Trades A
 
 Spark의 정본 schema와 validation 규칙은 [데이터 모델](data-model.md)에 있다.
 
+## Spark 전처리·1분봉 집계
+
+Spark는 Kafka에서 받은 58,036개 원시 체결을 단순히 묶는 것이 아니라 다음 순서로 전처리한다. 구현 코드는 [`src/preprocess.py`](../src/preprocess.py), Kafka batch 실행 코드는 [`src/spark_sip_trade_batch.py`](../src/spark_sip_trade_batch.py)에 있다.
+
+| 순서 | 처리 | 실제 적용 내용 | 처리 전 → 처리 후 |
+| ---: | --- | --- | ---: |
+| 1 | JSON schema parsing | 공통 envelope와 Alpaca payload를 명시적 Spark schema로 변환하고 UTC timestamp를 parsing | Kafka 58,036 → parsed 58,036 |
+| 2 | 데이터 품질 검증 | event type·schema version·ID·source/feed·종목 allowlist·거래소·조건·테이프·`price > 0`·`size > 0`·UTC 시각과 envelope/payload 시각 일치 검사 | parsed 58,036 → valid 58,036, invalid 0 |
+| 3 | 중복 제거 | source·feed·종목·provider trade ID·체결 시각으로 만든 결정적 `event_id` 기준 | valid 58,036 → unique 58,036, duplicate 0 |
+| 4 | SIP 거래 조건 적용 | condition/tape 조합별로 OHLC 가격 형성과 volume·trade_count 반영 여부를 분리. 여러 조건이면 가장 엄격한 규칙 적용 | unique 58,036 → volume/count 58,034, OHLC/VWAP 8,752 |
+| 5 | event-time 1분 집계 | 원본 체결 시각으로 1분 window를 만들고 OHLC·volume·trade_count·VWAP 계산 | eligible trades → 121 bars |
+| 6 | PostgreSQL 저장 | `source=alpaca_replay`, `feed=sip`로 provider bar와 분리하고 business key 기준 upsert | 121 bars → 121 rows, duplicate key 0 |
+
+### Validation 실패 처리
+
+한 행에 여러 오류가 있으면 하나만 숨기지 않고 적용되는 reason code를 모두 기록한다. 현재 검사하는 주요 reason은 `MALFORMED_JSON`, `INVALID_EVENT_TYPE`, `UNSUPPORTED_SCHEMA_VERSION`, 누락된 ID·source·feed, 허용되지 않은 종목, 잘못된 거래소·조건·테이프, 0 이하 가격·수량, timezone 없는 시각과 envelope/payload 시각 불일치다. valid와 invalid 행을 분리하며 이번 실행의 invalid는 0건이다.
+
+### 거래 조건에 따른 필드별 반영
+
+Alpaca의 CTA/UTP minute-bar 규칙에 맞춰 하나의 체결이 어떤 필드를 갱신할지 구분한다.
+
+| 분류 | OHLC | volume·trade_count | VWAP | 이번 실행 |
+| --- | --- | --- | --- | ---: |
+| 일반 가격 형성 체결 | 반영 | 반영 | 반영 | 8,752건 |
+| Odd Lot 등 가격 제외 체결 | 제외 | 반영 | 제외 | 49,282건 |
+| `Q(Official Open)` 등 minute-bar 완전 제외 체결 | 제외 | 제외 | 제외 | 2건 |
+| 지원하지 않는 condition/tape 조합 | 제외하고 별도 집계 | 제외하고 별도 집계 | 제외 | 0건 |
+
+따라서 `58,036 → 58,034`는 중복 제거 결과가 아니다. 중복은 0건이고, `Q` 조건을 포함한 2건이 provider의 minute-bar 갱신 대상에서 제외된 결과다. Odd Lot을 포함한 49,282건은 데이터에서 삭제하지 않고 거래량·거래 건수에는 보존하되 대표 가격 형성에서만 제외한다.
+
+### 1분봉 계산 규칙
+
+각 bar는 `symbol`, `source`, `feed`, event-time 1분 window로 묶는다.
+
+| 출력 필드 | 계산 |
+| --- | --- |
+| `open` | OHLC 반영 대상 중 `(event_timestamp, event_id)`가 가장 이른 가격 |
+| `high` / `low` | OHLC 반영 대상 가격의 최댓값 / 최솟값 |
+| `close` | OHLC 반영 대상 중 `(event_timestamp, event_id)`가 가장 늦은 가격 |
+| `volume` | volume 반영 대상의 `SUM(size)` |
+| `trade_count` | volume 반영 대상 행의 `COUNT(*)` |
+| `vwap` | OHLC와 volume에 모두 반영되는 체결의 `SUM(price × size) / SUM(size)` |
+
+같은 시각에 여러 체결이 있어도 `event_id`를 보조 정렬키로 사용해 open과 close를 결정적으로 계산한다. 이 정책 버전은 `condition_policy=alpaca_sip_minute_v1`로 저장한다.
+
 ## 실행
 
 ```bash

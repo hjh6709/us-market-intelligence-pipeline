@@ -75,6 +75,14 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("OHLC/VWAP 가격 형성 반영 8,752건", assignment)
         self.assertIn("`I(Odd Lot)`", assignment)
         self.assertIn("OHLC·volume·trade_count·VWAP 불일치 모두 0건", assignment)
+        self.assertIn("## Spark 전처리·1분봉 집계", assignment)
+        self.assertIn("Kafka 58,036 → parsed 58,036", assignment)
+        self.assertIn("valid 58,036 → unique 58,036, duplicate 0", assignment)
+        self.assertIn("### Validation 실패 처리", assignment)
+        self.assertIn("### 거래 조건에 따른 필드별 반영", assignment)
+        self.assertIn("Odd Lot 등 가격 제외 체결", assignment)
+        self.assertIn("### 1분봉 계산 규칙", assignment)
+        self.assertIn("condition_policy=alpaca_sip_minute_v1", assignment)
 
     def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
