@@ -291,7 +291,7 @@ PostgreSQL에 raw tick을 장기 저장하지 않는다. Spark가 생성한 1분
 | Q6 | 운영자 | component별 pipeline health | `pipeline_status` primary key `(component, instance)` |
 | Q7 | 분석가/운영자 | symbol·기간별 IEX/SIP 차이와 검증 결과 | `market_bar_reconciliations(symbol, bar_start DESC)` |
 | Q8 | 분석가 | event type·기간별 발표와 당시 vintage 조회 | `economic_events(event_type, released_at DESC)` |
-| Q9 | 분석가 | event·symbol·window별 시장 반응과 비교값 조회 | `macro_event_impacts(economic_event_id, symbol, post_window_minutes)` |
+| Q9 | 분석가 | event·symbol·window별 시장 반응과 비교값 조회 | `macro_event_impacts(economic_event_id, symbol, window_name)` |
 
 Business uniqueness:
 

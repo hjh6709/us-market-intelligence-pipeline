@@ -14,34 +14,65 @@ from scripts.evidence.export_actual_market_bars import (
 
 
 class AssignmentDocumentationTest(unittest.TestCase):
-    def test_readme_has_assignment_summary_in_explanation_order(self) -> None:
+    def test_readme_connects_core_cpi_and_kafka_spark_paths(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         headings = [
-            "## 이번 과제 목표",
-            "## 이번 과제 데이터셋",
-            "## 이번 과제 아키텍처",
-            "## 이번 과제 실행 방법",
-            "## 현재 구현 범위",
+            "## 현재 분석 범위",
+            "## 데이터 흐름",
+            "## 데이터 출처",
+            "## 실제 구현 결과",
+            "## 실행 방법",
+            "## 저장 모델",
+            "## CPI 발표 구간 Kafka·Spark 경로",
             "## 다음 단계",
-            "## 고민한 부분과 현재 이슈",
         ]
 
         positions = [readme.index(heading) for heading in headings]
 
         self.assertEqual(positions, sorted(positions))
 
-    def test_readme_separates_live_and_historical_evidence(self) -> None:
+    def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
-
-        self.assertIn("WebSocket → Kafka", readme)
-        self.assertIn("실제 IEX 거래 10건", readme)
-        self.assertIn("Historical REST → Kafka → Spark → PostgreSQL", readme)
-        self.assertIn(
-            "실제 IEX 거래 427건 발행, 그중 174건이 final 1분 봉 3건에 반영",
-            readme,
+        assignment = Path("docs/kafka-spark-assignment.md").read_text(
+            encoding="utf-8"
         )
-        self.assertIn("WebSocket → Kafka → Spark → PostgreSQL", readme)
-        self.assertIn("다음 미국 정규장에 검증", readme)
+
+        self.assertIn("같은 CPI 발표 구간의 raw IEX 체결", readme)
+        self.assertIn("4차시 Kafka·Spark 제출 문서", readme)
+        self.assertIn("실제 IEX 거래 10건", assignment)
+        self.assertIn("Producer 1,576건 = Consumer 1,576건", assignment)
+        self.assertIn("입력 1,576건, validation 오류 0건", assignment)
+        self.assertIn("1분봉 18건", assignment)
+
+    def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+        assignment = Path("docs/kafka-spark-assignment.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("### 4차시 과제 제출 요약", readme)
+        self.assertIn("Producer 1,576건 = Consumer 1,576건", readme)
+        self.assertIn("src.spark_market_processor", readme)
+        self.assertIn("PostgreSQL `market_bars`", readme)
+        self.assertIn("`raw.market.v1`", assignment)
+        self.assertIn("`trace_id`", assignment)
+        self.assertIn("`market.trade.raw`", assignment)
+        self.assertIn("| 필드 | 타입 | 의미 |", assignment)
+        self.assertIn('"event_type": "market.trade.raw"', assignment)
+        self.assertIn("## 최종 저장 명세", assignment)
+        self.assertIn("## 현재 구현과 다음 단계", assignment)
+        self.assertIn("Spark Structured Streaming", assignment)
+        self.assertIn("PostgreSQL market_bars", assignment)
+
+        result = Path("docs/evidence/cpi-kafka-spark/result.json").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"published_trades": 1576', result)
+        self.assertIn('"consumer_received_trades": 1576', result)
+        self.assertIn('"spark_input_trades": 1576', result)
+        self.assertIn('"spark_validation_error_trades": 0', result)
+        self.assertIn('"analysis_target_end": "2026-08-12T13:31:00Z"', result)
+        self.assertIn('"watermark_flush_tail_end": "2026-08-12T13:34:00Z"', result)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")

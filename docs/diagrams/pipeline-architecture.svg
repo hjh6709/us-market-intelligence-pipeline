@@ -116,7 +116,7 @@
     <text x="1408" y="675" text-anchor="middle" class="box-title">Analysis / BI</text>
     <text x="1408" y="704" text-anchor="middle" class="box-copy">경제지표 영향 report</text>
     <text x="1408" y="730" text-anchor="middle" class="box-copy">Streamlit / Dashboard</text>
-    <text x="1408" y="756" text-anchor="middle" class="box-copy">후속 전략·백테스트</text>
+    <text x="1408" y="756" text-anchor="middle" class="box-copy">과거 event-study backtest</text>
   </g>
 
   <path d="M280 717 H370" class="planned-flow"/>

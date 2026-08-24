@@ -7,8 +7,10 @@ from urllib.error import HTTPError
 from src.historical_market_replay import (
     AlpacaHistoricalClient,
     HistoricalTradeError,
+    _replay_delay_seconds,
     fetch_all_trades,
     normalize_historical_trade,
+    parse_args,
     publish_historical_trades,
 )
 
@@ -135,6 +137,33 @@ class HistoricalMarketReplayTest(unittest.TestCase):
         )
         self.assertEqual(payload["S"], "SMH")
         self.assertEqual(payload["t"], "2026-08-19T19:51:23.123456Z")
+
+    def test_calculates_replay_delay_from_event_time_and_speed(self) -> None:
+        first = datetime(2026, 8, 19, 19, 50, tzinfo=UTC)
+        event = datetime(2026, 8, 19, 19, 50, 20, tzinfo=UTC)
+
+        self.assertEqual(
+            _replay_delay_seconds(first, event, speed_multiplier=10, elapsed=1.25),
+            0.75,
+        )
+        self.assertEqual(
+            _replay_delay_seconds(first, event, speed_multiplier=10, elapsed=3),
+            0,
+        )
+
+    def test_cli_keeps_unthrottled_default_and_accepts_load_speed(self) -> None:
+        base = [
+            "--start",
+            "2026-08-19T19:50:00Z",
+            "--end",
+            "2026-08-19T19:56:00Z",
+        ]
+
+        self.assertIsNone(parse_args(base).speed_multiplier)
+        self.assertEqual(
+            parse_args([*base, "--speed-multiplier", "50"]).speed_multiplier,
+            50,
+        )
 
     @staticmethod
     def trade(trade_id: int, timestamp: str) -> dict:

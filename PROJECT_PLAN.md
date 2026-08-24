@@ -2,6 +2,8 @@
 
 기준일: **2026-08-13**
 
+최근 수정: **2026-08-24 멘토 피드백 반영**
+
 최종 발표: **2026-09-12**
 
 과정: **4주, 총 8회**
@@ -36,15 +38,32 @@ BLS/BEA/Federal Reserve official release times
 → PostgreSQL
 ```
 
-이번 MVP의 대표 결과는 경제지표별 발표 전후 반응과 비교 기준을 담은 `macro_event_impact`다. 이상 징후는 반응 구간을 찾는 보조 기능이며 자동 매수·매도 신호가 아니다. 전략·백테스트·위험 관리·paper trading은 Stage A 완료 후 별도 단계에서 구현한다.
+이번 MVP의 대표 결과는 경제지표별 발표 전후 반응과 비교 기준을 담은 `macro_event_impact`다. 과거 발표 구간을 당시 이용 가능했던 데이터로 다시 계산하는 **event-study backtest**는 이번 범위에 포함한다. 이상 징후는 반응 구간을 찾는 보조 기능이며 자동 매수·매도 신호가 아니다. 매수·매도 규칙, 가상 자산 변화, 거래비용을 계산하는 **strategy/portfolio backtest**와 위험 관리·paper trading은 Stage A 완료 후 별도 단계에서 구현한다.
 
 ## 2. Guideline 반영 결정
 
 과정에서 학습·실습한 기술과 이 프로젝트의 구현·증거·제외 사유는 [과정 연계 문서](docs/course-alignment.md)에 별도로 연결한다. 기술을 사용했다는 사실보다 어떤 문제를 해결했고 어떤 실행 증거를 남겼는지를 완료 기준으로 삼는다.
 
+### 2026-08-24 멘토 피드백 반영
+
+- 주제는 유지한다. 현재 발표 기간에 새 경제 이벤트가 없더라도 과거 CPI·고용·FOMC 구간으로 같은 분석을 재현할 수 있다.
+- 사람의 심리를 직접 측정했다고 표현하지 않는다. 별도 심리 데이터가 없으므로 발표 전 가격·거래량 변화는 `pre-event drift/anticipation`, 발표 후 변화는 `observed response`로만 기록한다.
+- historical SIP 1분봉 backfill은 Airflow 배치 경로로 저장한다. raw trade와 구조가 다른 bar를 `raw.market.v1`에 억지로 넣지 않는다.
+- Kafka→Spark 경로의 재현·부하·장애 검증에는 WebSocket과 동일한 raw trade schema의 historical trade 또는 deterministic fixture를 replay한다.
+- Spark의 필요성은 현재의 작은 live 처리량으로 주장하지 않는다. duplicate, out-of-order, late event, checkpoint 재시작, full replay와 배속 부하 결과로 역할을 검증한다.
+
+| 피드백 항목 | 현재 증거 | 상태 |
+| --- | --- | --- |
+| 실제 과거 거래 replay | [SMH IEX 거래 427건을 Kafka→Spark→PostgreSQL로 실행](docs/test-results/2026-08-21-kafka-spark-assignment.md) | 완료 |
+| 중복·순서 역전·late event | [Spark fixture와 checkpoint 재시작 테스트](docs/test-results/2026-08-19-spark-market-processor-smoke.md) | 완료 |
+| DB 장애 후 같은 batch 재처리 | [PostgreSQL rollback·upsert 복구 테스트](docs/test-results/2026-08-20-postgres-market-bars.md) | 완료 |
+| 1x·10x·50x·100x 부하 측정 | [100x·1,523건 파일럿](docs/test-results/2026-08-24-replay-load-100x.md) 완료, 동일 조건 1x·10x·50x와 3회 반복 필요 | 진행 중 |
+| 공식 발표·FRED/ALFRED·SIP backfill | Airflow DAG와 DB schema 필요 | 미구현 |
+| 과거 경제 이벤트 event-study report | 위 batch 데이터가 준비된 뒤 구현 | 미구현 |
+
 ### Spark를 MVP에 포함한다
 
-22개 IEX 종목의 현재 처리량만 보면 Python consumer도 충분할 가능성이 높다. 그러나 이 과정의 목표와 최종 산출물에 Spark 전처리·집계 코드가 명시되어 있으므로 **Spark local mode를 핵심 처리 엔진으로 채택한다.**
+현재 계획한 소수 IEX 종목의 처리량만 보면 Python consumer도 충분할 가능성이 높다. 그러나 이 과정의 목표와 최종 산출물에 Spark 전처리·집계 코드가 명시되어 있으므로 **Spark local mode를 핵심 처리 엔진으로 채택한다.**
 
 Spark의 역할은 작고 명확하게 제한한다.
 
@@ -65,13 +84,13 @@ Kafka source
 1. Kafka Producer + replay dataset
 2. Spark Structured Streaming preprocess/aggregation
 3. PostgreSQL schema + idempotent load
-4. Airflow 공식 발표 일정 + FRED/ALFRED + SIP DAG
-5. Macro release event study
+4. Airflow 공식 발표 일정 + FRED/ALFRED + historical SIP backfill
+5. 과거 발표 구간 event-study backtest
 6. Load test + failure recovery
 7. Technical/anomaly features
 --------------------------------
 8. FastAPI / Streamlit
-9. Point-in-time strategy dataset / backtest
+9. Point-in-time strategy/portfolio backtest
 10. Risk engine / paper trading
 11. News / LLM / Agent / MCP / RAG
 ```
@@ -82,13 +101,13 @@ Kafka source
 
 | ID | 필수 결과 | 검증 가능한 수용 기준 |
 | --- | --- | --- |
-| P0-1 | Kafka 수집 | Alpaca 또는 replay producer가 22개 허용 종목의 provider raw trade payload와 공통 envelope를 `raw.market.v1`에 발행한다. |
+| P0-1 | Kafka 수집 | Alpaca 또는 replay producer가 설정된 허용 종목의 provider raw trade payload와 공통 envelope를 `raw.market.v1`에 발행한다. |
 | P0-2 | Spark 전처리 | Spark가 schema, symbol, timestamp, price, volume을 검증하고 중복/지연 데이터를 정의된 정책으로 처리한다. |
 | P0-3 | Spark 집계 | event-time 1분 window로 OHLCV, VWAP, trade count를 계산한다. |
 | P0-4 | 데이터 저장 | `foreachBatch` sink가 PostgreSQL business key upsert를 수행하며 같은 input replay에도 row 수와 값이 일관된다. |
 | P0-5 | Feature/anomaly | 확정 IEX bar와 IEX 전용 baseline에서 feature를 계산하고 `PRELIMINARY_IEX` alert와 source/feed를 저장한다. |
 | P0-6 | Airflow | 공식 발표 일정, FRED/ALFRED vintage, historical SIP reconciliation DAG가 같은 logical date/window 재실행 시 중복되지 않는다. |
-| P0-7 | 경제지표 영향 분석 | CPI·고용·FOMC의 공식 발표 시각을 기준으로 SIP 발표 전후 수익률·거래량·변동성을 계산하고 평소·시장·섹터·과거 발표와 비교한다. |
+| P0-7 | Event-study backtest | 과거 CPI·고용·FOMC의 공식 발표 시각을 기준으로 SIP 발표 전후 수익률·거래량·변동성을 다시 계산하고 평소·시장·섹터·과거 발표와 비교한다. |
 | P0-8 | 시점 정합성 | 결과마다 공식 출처, `released_at`, 당시 이용 가능한 vintage, market window와 분석 버전을 추적하며 미래 수정값을 섞지 않는다. |
 | P0-9 | Load test | replay 배속별 throughput, Spark processing rate, batch duration, Kafka lag, DB latency, CPU/memory를 기록한다. |
 | P0-10 | Failure recovery | Kafka/Spark/PostgreSQL 중단, duplicate, out-of-order, invalid event 시나리오의 복구 결과가 남는다. |

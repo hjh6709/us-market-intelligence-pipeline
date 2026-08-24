@@ -1,154 +1,197 @@
-# U.S. Macro Impact & Market Data Pipeline
+# U.S. CPI Market Reaction Pipeline
 
-> 실제 미국 주식 거래를 수집·가공·저장하고, 이후 경제지표 발표 전후의 시장 반응을 반복 검증하기 위한 데이터 파이프라인입니다.
+> 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
 
-- 기간: 2026-08-13 ~ 2026-09-12
-- 이번 과제 범위: 실제 데이터 소스 → Ingestion → Data Storage
-- 기술: Alpaca Market Data, Kafka, Spark Structured Streaming, PostgreSQL, Docker Compose
+현재 목표는 자동매매나 가격 예측이 아닙니다. “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값, 전체 시장 분봉과 데이터 coverage를 재현하는 것이 우선입니다.
 
-## 이번 과제 목표
+## 현재 분석 범위
 
-Alpaca의 실제 미국 주식 거래를 Kafka에 원본 이벤트로 보관하고, Spark로 1분 OHLCV를 만든 뒤 PostgreSQL에 중복 없이 저장합니다.
+- CPI 발표: 최근 실제 발표 12회
+- 경제지표: `CPIAUCSL`, `CPILFESL`의 ALFRED 당시 vintage
+- 시장 데이터: Alpaca Historical SIP `1Min` bar
+- 종목: `SPY`, `QQQ`, `SMH`, `NVDA`
+- 분석 window: 발표 전 60분, 발표 후 5·30·60분
+- 저장소: PostgreSQL
+
+2025년 10월 CPI는 실제 발표되지 않아 분석 목록에서 제외했습니다. 전망치 출처는 아직 연결하지 않았으므로 `forecast`와 `surprise`를 임의로 만들지 않습니다.
+
+## 데이터 흐름
 
 ```text
-Alpaca actual trade
-→ Python ingestion
-→ Kafka raw.market.v1
-→ Spark Structured Streaming
-→ PostgreSQL market_bars
+BLS 공식 CPI 발표 시각
+        +
+ALFRED 당시 CPI·근원 CPI vintage
+        +
+Alpaca Historical SIP 1분봉
+        ↓
+검증·UTC 정규화·멱등 upsert
+        ↓
+PostgreSQL
+  ├─ economic_events
+  ├─ macro_observations
+  ├─ market_bars
+  └─ macro_event_impacts
+        ↓
+발표 전후 수익률·거래량·변동성·SPY 상대수익률
+
+같은 BLS CPI 발표 시각
+        +
+Alpaca IEX 실제 체결
+        ↓
+Kafka raw.market.v1
+        ↓
+Spark Structured Streaming
+        ↓
+PostgreSQL market_bars
 ```
 
-장기적으로는 경제지표 발표 당시 공개된 값과 같은 시각의 시장 반응을 연결해 자동매매 전략 연구에 활용합니다. 이번 단계에서는 예측이나 주문보다 신뢰할 수 있는 수집·저장 기반을 먼저 구현합니다.
+Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 Kafka에 넣지 않습니다. 대신 같은 CPI 발표 구간의 raw IEX 체결을 Kafka·Spark로 재생해, 발표 당일 실시간 수집 경로를 과거 데이터로 재현합니다.
 
-## 이번 과제 데이터셋
+## 데이터 출처
 
-| 데이터 | 출처 | 사용 목적 |
+| 데이터 | 공식 출처 | 역할 |
 | --- | --- | --- |
-| 실시간 IEX 거래 | [Alpaca WebSocket](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data) | 장 운영 중 실시간 수집과 Kafka 경로 검증 |
-| 과거 IEX 거래 | [Alpaca Historical Trades](https://docs.alpaca.markets/us/reference/stocktradesingle-1) | 장 종료 후에도 실제 거래로 전체 저장 경로 재현 |
-| 테스트 replay | Alpaca 형식의 고정 fixture | 중복·지연·오류·장애 복구 자동 테스트 |
+| CPI 발표 날짜·시각 | [BLS CPI release schedule·archive](https://www.bls.gov/schedule/news_release/cpi.htm) | 이벤트 기준 시각과 대상 월 |
+| 당시 CPI 값과 revision | [FRED/ALFRED observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 미래 수정값이 섞이지 않는 point-in-time 값 |
+| 발표 구간 실제 체결 | [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle) | Kafka·Spark 실시간 경로의 결정적 replay |
+| 발표 전후 주식시장 | [Alpaca Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars) | SIP 1분 OHLCV·거래 수·VWAP |
 
-수집 필드는 종목, 거래 ID, 거래소, 가격, 수량, 조건과 실제 거래 시각입니다. 무료 IEX는 미국 전체 거래소 데이터가 아니므로 전체 시장의 확정 신호로 사용하지 않습니다. 다음 단계에서 historical SIP와 공식 경제지표·FRED 데이터를 별도로 연결합니다.
+## 실제 구현 결과
 
-## 이번 과제 아키텍처
+| 단계 | 실제 결과 | 품질 확인 |
+| --- | ---: | --- |
+| BLS CPI 이벤트 | 12건 | 공식 시각·미국 동부시간·UTC 보존 |
+| ALFRED 관측값 | 24건 | 결측 0, 중복 0 |
+| Historical SIP 1분봉 | 5,320건 | 재실행 후 동일 건수, 중복 0 |
+| Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
+| Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
+| CPI 구간 IEX raw trade | 1,576건 | Producer·Consumer·Spark 입력 일치, 오류 0 |
+| CPI 구간 IEX 1분봉 | 18건 | 확정 거래 509건 반영, 중복 key 0 |
 
-![전체 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
+`macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
 
-- 실선: 현재 구현된 데이터 경로. 실행 증거 범위는 화살표의 설명으로 구분
-- 점선: Airflow, 경제지표 영향 분석과 BI 등 다음 단계
-- Kafka: 원본 거래 이벤트를 24시간 보관
-- PostgreSQL: 확정된 1분 봉을 business key 기준으로 저장
+상세 결과:
 
-| 기술 | 사용하는 이유 |
-| --- | --- |
-| Kafka | 수집기와 처리기를 분리하고 처리기 중단 후 원본 이벤트를 다시 읽습니다. |
-| Spark Structured Streaming | event-time 1분 집계, 중복 제거, watermark와 checkpoint를 처리합니다. |
-| PostgreSQL | 최종 결과를 SQL로 확인하고 upsert로 재처리 중복을 막습니다. |
-| Docker Compose | Kafka와 PostgreSQL 실행 환경을 로컬에서 재현합니다. |
+- [Historical SIP backfill 결과](docs/test-results/2026-08-24-cpi-sip-backfill.md)
+- [CPI event impact 초기 결과](docs/test-results/2026-08-24-cpi-event-impact.md)
+- [같은 요일·시간 matched baseline 결과](docs/test-results/2026-08-24-cpi-matched-baseline.md)
 
-편집 가능한 원본은 [pipeline-architecture.svg](docs/diagrams/pipeline-architecture.svg), 상세 설계는 [architecture.md](docs/architecture.md)에 있습니다.
+현재 평균 수익률은 선택한 12개 발표 구간의 관측값입니다. 비발표일 비교군과 통계 검정이 아직 없으므로 CPI의 인과 효과나 미래 수익률로 해석하지 않습니다.
 
-## 이번 과제 실행 방법
+## 실행 방법
 
 ### 1. 환경 준비
 
 ```bash
 cp .env.example .env
 uv sync
-docker compose up -d --wait kafka kafka-init postgres
+docker compose up -d --wait postgres
 ```
 
-`.env`에 Alpaca key와 secret을 입력합니다. `.env`, 원본 응답, 실행 로그와 DB 파일은 Git에 포함하지 않습니다.
+`.env`에는 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 입력합니다. 실제 key, 원본 API 응답과 PostgreSQL dump는 Git에 포함하지 않습니다.
 
-### 2. 실제 거래 수집
-
-미국 장 운영 중에는 Spark와 WebSocket Producer를 각각 실행합니다.
+### 2. CPI 데이터 파이프라인 실행
 
 ```bash
-.venv/bin/python -m src.spark_market_processor \
-  --starting-offsets latest --symbols SPY QQQ NVDA --watermark "2 minutes"
+# BLS 발표 목록 + ALFRED 당시 값
+.venv/bin/python -m src.cpi_ingestion
 
-.venv/bin/python -m src.market_producer \
-  --feed iex --symbols SPY QQQ NVDA --max-trades 1000 --timeout 180
+# 발표 전후 Historical SIP 1분봉
+.venv/bin/python -m src.cpi_market_backfill
+
+# 발표 전후 시장 반응 계산
+.venv/bin/python -m src.macro_event_impact
+
+# 발표 1·2·3주 전 같은 요일·동부시각 비교군
+.venv/bin/python -m src.cpi_matched_baseline
 ```
 
-장 종료 후에는 실제 historical trade를 같은 Kafka·Spark 경로로 재생할 수 있습니다.
+모든 단계는 같은 입력으로 다시 실행해도 business key 기준 row 수가 증가하지 않도록 upsert합니다.
+
+### 3. 검증
 
 ```bash
-.venv/bin/python -m src.spark_market_processor \
-  --starting-offsets latest --symbols SMH --watermark "2 minutes" \
-  --checkpoint-root .spark-checkpoints/assignment-historical --timeout 120
+.venv/bin/python -m unittest discover -s tests -v
 
-.venv/bin/python -m src.historical_market_replay \
-  --symbol SMH --start 2026-08-19T19:50:00Z \
-  --end 2026-08-19T19:56:00Z --feed iex
-```
-
-### 3. 저장 결과와 테스트 확인
-
-```bash
 docker compose exec -T postgres \
   psql -U market -d market \
-  -f /dev/stdin < scripts/evidence/actual_ingestion_evidence.sql
-
-.venv/bin/python -m unittest discover -s tests -v
+  -f /dev/stdin < scripts/evidence/cpi_event_impact_summary.sql
 ```
 
-실제 저장된 OHLCV 행을 로컬 CSV로 확인하려면 다음 명령을 실행합니다.
+## 저장 모델
+
+| 테이블 | 저장 내용 | 멱등 key |
+| --- | --- | --- |
+| `economic_events` | CPI 대상 월과 공식 발표 시각 | event type·reference period·release |
+| `macro_observations` | ALFRED 값과 realtime/vintage 기간 | series·observation date·realtime start |
+| `market_bars` | Alpaca SIP 1분봉 | symbol·bar start·timeframe·source·feed |
+| `macro_event_impacts` | 종목별 window 반응과 SPY 비교 | event·symbol·feed·window·analysis version |
+| `macro_event_baseline_impacts` | 동일 요일·시각의 비교 window | event·week offset·symbol·window·version |
+
+상세 schema와 계산 계약은 [데이터 모델](docs/data-model.md), 시스템 경계는 [아키텍처](docs/architecture.md)에 있습니다.
+
+## CPI 발표 구간 Kafka·Spark 경로
+
+2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 NVDA의 실제 IEX 거래를 replay했습니다. 분석 대상은 발표 전 60분부터 정규장 첫 1분이 끝나는 `13:31 UTC`까지이고, `13:31–13:34 UTC`는 마지막 분석 window를 확정하기 위한 watermark 진행용 tail입니다.
+
+```text
+Alpaca IEX raw trade 1,576건
+→ Kafka raw.market.v1
+→ Spark Structured Streaming
+→ 1분 OHLCV
+→ PostgreSQL market_bars
+```
+
+이 경로는 CPI 영향 계산에 사용하는 SIP bar를 대체하지 않습니다. 무료 IEX 체결로 발표 당일 실시간 경로를 재현하고, 더 넓은 시장 범위인 SIP bar는 배치 분석과 사후 검증에 사용합니다. 요청 구간의 첫 IEX 체결은 `12:10 UTC`였으므로 발표 전 60분 전체가 채워졌다고 과장하지 않습니다. PostgreSQL의 마지막 확정 bar는 분석 대상의 마지막 분인 `13:30 UTC`입니다.
+
+### 4차시 과제 제출 요약
+
+| 필수 항목 | 실제 구현 결과 |
+| --- | --- |
+| Kafka Topic | `raw.market.v1`, key=`symbol`, 3 partitions |
+| 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
+| 프로젝트 연결 | 2026-08-12 CPI 발표 구간의 실제 NVDA IEX 체결 |
+| 전송 건수 | Producer 1,576건 = Consumer 1,576건 |
+| Spark 처리 전·후 | 입력 1,576건, 오류 0건, 분석 대상 509건 전부 확정 → 1분봉 18건; tail 1,067건은 미확정 |
+| 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
 ```bash
-.venv/bin/python -m scripts.evidence.export_actual_market_bars
+docker compose up -d --wait kafka kafka-init postgres
+
+.venv/bin/python -m src.spark_market_processor \
+  --starting-offsets latest --symbols NVDA --watermark "2 minutes" \
+  --checkpoint-root .spark-checkpoints/cpi-20260812-nvda --timeout 180
+
+.venv/bin/python -m src.historical_market_replay \
+  --symbol NVDA --start 2026-08-12T11:30:00Z \
+  --end 2026-08-12T13:34:00Z --feed iex \
+  --trace-id cpi-20260812-nvda-001
+
+.venv/bin/python -m src.kafka_trace_consumer \
+  --trace-id cpi-20260812-nvda-001 \
+  --expected-count 1576 --timeout 60
 ```
 
-생성되는 `data/local/actual_market_bars.csv`는 실제 Alpaca 시장 데이터이므로 Git에서 제외합니다. 공개 저장소에는 [합성 스키마 예시](data/sample/market_bars.synthetic.csv), 실제 처리 건수·시간 범위·중복 검사와 재현 코드만 둡니다. 구분 이유는 [데이터 파일 안내](data/README.md)에 적었습니다.
-
-통합 테스트와 증빙 재현 명령은 [문서 안내](docs/README.md)에서 확인할 수 있습니다.
-
-## 현재 구현 범위
-
-- [x] Alpaca WebSocket 실제 거래 수신과 Kafka 발행·재소비
-- [x] Historical Trades API 실제 데이터 replay
-- [x] Kafka symbol key와 24시간 retention
-- [x] Spark schema 검증, 중복 제거, watermark와 1분 OHLCV/VWAP
-- [x] PostgreSQL migration, transaction upsert와 장애 복구 테스트
-- [x] 실제 Historical 거래 → Kafka → Spark → PostgreSQL 통합 실행
-- [ ] WebSocket → Kafka → Spark → PostgreSQL 실시간 전체 경로 증빙
-
-| 검증 경로 | 실제 결과 | 상태 |
-| --- | --- | --- |
-| WebSocket → Kafka | 2026-08-19 실제 IEX 거래 10건 수신·발행·재소비 | 완료 |
-| Historical REST → Kafka → Spark → PostgreSQL | 실제 IEX 거래 427건 발행, 그중 174건이 final 1분 봉 3건에 반영, 중복 key 0건 | 완료 |
-| WebSocket → Kafka → Spark → PostgreSQL | Spark와 Producer를 동시에 실행해 end-to-end로 확인 | 다음 미국 정규장에 검증 |
-
-PostgreSQL의 3개 봉은 WebSocket 10건으로 만든 것이 아닙니다. Historical API의 실제 거래 427건을 Kafka에 발행한 실행에서, watermark를 통과한 174건이 반영된 결과입니다. 자세한 수치는 [실제 수집·저장 결과](docs/test-results/2026-08-20-actual-ingestion.md)에 있습니다.
+전체 메시지 표, JSON 예시, Spark 전처리 내용, 최종 컬럼과 실행 증거는 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)와 [CPI 구간 실행 보고서](docs/test-results/2026-08-24-cpi-kafka-spark.md)에서 확인할 수 있습니다. 현재 구현은 PostgreSQL 저장까지이며 Airflow, API·대시보드와 주문 실행은 다음 단계입니다.
 
 ## 다음 단계
 
-1. 미국 정규장에 WebSocket → PostgreSQL 전체 경로 검증
-2. Airflow로 공식 발표 시각과 FRED/ALFRED 당시 값 수집
-3. Historical SIP로 발표 전후 반응과 평소·시장·섹터 기준 비교
-4. 5분·30분·60분 반응을 조회하는 SQL·BI 결과 작성
+1. 미국 거래일과 주요 경제 발표 calendar로 matched baseline 정제
+2. 장전 반응과 첫 정규장 반응 분리
+3. BLS 발표문의 월간·연간 actual 구조화
+4. 검증 가능한 전망치 출처가 확보되면 surprise 분석 추가
+5. Airflow로 수집·재실행·품질 검사를 자동화
 
-자동 주문은 반복 사례, point-in-time 백테스트와 위험 관리 검증 이후의 별도 단계입니다.
-
-## 고민한 부분과 현재 이슈
-
-- 현재 22종목 규모에는 Python 처리기도 가능하지만 과정 필수 기술과 event-time 처리를 검증하기 위해 Spark를 사용합니다.
-- IEX는 전체 시장이 아니므로 실시간 결과는 예비 신호로만 보고 historical SIP로 사후 확인합니다.
-- 로컬 Kafka는 single broker이므로 복제 기반 고가용성을 제공하지 않습니다.
-- 원본 trade는 Kafka에서 24시간 보관하고 PostgreSQL에는 최종 1분 봉만 저장합니다.
-
-## 문서와 발표 자료
+## 문서
 
 - [문서 전체 안내](docs/README.md)
-- [과제 제출 점검표](docs/submission-checklist.md)
-- [데이터 파일 안내](data/README.md)
-- [4주·8회차 실행 계획](PROJECT_PLAN.md)
-- [실제 실행 증거](docs/evidence/actual-ingestion/README.md)
-- [발표 자료·대본·예상 질문](docs/presentation/README.md)
+- [데이터 소스](docs/data-source-catalog.md)
+- [데이터 수명주기](docs/data-lifecycle.md)
+- [설계 결정](docs/design-decisions.md)
+- [4주 실행 계획](PROJECT_PLAN.md)
 
 ## 면책 및 출처 고지
 
-이 프로젝트는 교육·연구 목적이며 투자 조언이 아닙니다. 현재 구현은 계좌·주문 API를 호출하지 않습니다.
+이 프로젝트는 교육·연구 목적이며 투자 조언이 아닙니다. 계좌·주문 API를 호출하지 않습니다.
 
 This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.

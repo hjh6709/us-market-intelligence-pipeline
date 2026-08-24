@@ -1,0 +1,86 @@
+[
+  {
+    "reference_period": "2025-07",
+    "release_date": "2025-08-12",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_08122025.htm"
+  },
+  {
+    "reference_period": "2025-08",
+    "release_date": "2025-09-11",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_09112025.htm"
+  },
+  {
+    "reference_period": "2025-09",
+    "release_date": "2025-10-24",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_10242025.htm"
+  },
+  {
+    "reference_period": "2025-11",
+    "release_date": "2025-12-18",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_12182025.htm"
+  },
+  {
+    "reference_period": "2025-12",
+    "release_date": "2026-01-13",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_01132026.htm"
+  },
+  {
+    "reference_period": "2026-01",
+    "release_date": "2026-02-13",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_02132026.htm"
+  },
+  {
+    "reference_period": "2026-02",
+    "release_date": "2026-03-11",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_03112026.htm"
+  },
+  {
+    "reference_period": "2026-03",
+    "release_date": "2026-04-10",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_04102026.htm"
+  },
+  {
+    "reference_period": "2026-04",
+    "release_date": "2026-05-12",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_05122026.htm"
+  },
+  {
+    "reference_period": "2026-05",
+    "release_date": "2026-06-10",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_06102026.htm"
+  },
+  {
+    "reference_period": "2026-06",
+    "release_date": "2026-07-14",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_07142026.htm"
+  },
+  {
+    "reference_period": "2026-07",
+    "release_date": "2026-08-12",
+    "release_time": "08:30",
+    "timezone": "America/New_York",
+    "source_url": "https://www.bls.gov/news.release/archives/cpi_08122026.htm"
+  }
+]

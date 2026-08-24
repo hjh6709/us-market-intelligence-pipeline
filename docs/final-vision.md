@@ -4,6 +4,8 @@
 
 기준일: 2026-08-13
 
+최근 수정: 2026-08-24 멘토 피드백 반영
+
 이 문서는 2026년 9월 12일 MVP만이 아니라 프로젝트가 충분히 발전했을 때 도달할 **전체 목표**를 정의한다. 모든 항목을 동시에 구현하겠다는 약속이 아니며, 각 단계는 이전 단계가 검증된 뒤에만 시작한다.
 
 ## 1. 최종 목표
@@ -502,6 +504,7 @@ IEX/replay → Kafka → Spark Structured Streaming → 1m bars → PRELIMINARY_
 Historical SIP (>=15m delayed) → Airflow → reconciliation → confirmed/rejected
 Official release times + FRED/ALFRED vintage + SIP event windows
 → Airflow → macro impact analysis → PostgreSQL
+Historical event windows → event-study backtest → reproducible impact report
 Finalized bars → features/anomaly → PostgreSQL
 Optional: News/LLM and FastAPI/Streamlit
 ```
@@ -516,11 +519,13 @@ Optional: News/LLM and FastAPI/Streamlit
 - feed별 baseline 분리와 IEX→SIP alert 상태 전이
 - CPI·고용·FOMC의 공식 발표 시각, 당시 vintage와 발표 전후 시장 반응 report
 - 평소 같은 시간대·시장·섹터·과거 동일 발표 비교와 표본/coverage 한계
+- 발표 시점·첫 정규장 구간을 분리한 historical event-study backtest
+- raw trade replay에서 duplicate/out-of-order/late event와 checkpoint 복구 결과
 - live와 offline demo
 
 상세 범위는 [4주·8회차 실행 계획](../PROJECT_PLAN.md)에 정의한다.
 
-### Stage B — Strategy hypothesis and point-in-time backtest
+### Stage B — Strategy hypothesis and point-in-time portfolio backtest
 
 선행 조건: Stage A의 economic event, impact, alert, feature schema가 안정됨.
 

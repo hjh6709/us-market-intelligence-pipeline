@@ -4,7 +4,7 @@
 
 이 결과를 WebSocket 실시간 end-to-end 증빙으로 사용하지 않는다. WebSocket 실제 거래는 Kafka까지 별도로 검증했으며, WebSocket → Kafka → Spark → PostgreSQL 전체 실행은 다음 정규장에 확인한다.
 
-2026-08-20 검증 결과는 [테스트 보고서](../../test-results/2026-08-20-actual-ingestion.md)와 [result.json](result.json)에 저장했다. 공개 파일에는 집계 수치만 남기고 API key, secret, 원본 응답은 남기지 않았다.
+2026-08-20 최초 저장 검증 결과는 [테스트 보고서](../../test-results/2026-08-20-actual-ingestion.md)에, 2026-08-21 Producer·Consumer 건수 대조와 Spark 재실행 결과는 [3차시 과제 보고서](../../test-results/2026-08-21-kafka-spark-assignment.md)와 [result.json](result.json)에 저장했다. 공개 파일에는 집계 수치만 남기고 API key, secret, 원본 응답은 남기지 않았다.
 
 ```text
 Alpaca Historical Trades
@@ -29,10 +29,17 @@ Alpaca Historical Trades
 1. Kafka와 PostgreSQL을 시작한다.
 2. 새 checkpoint로 Spark를 먼저 실행한다.
 3. 고정 구간의 실제 거래를 Kafka에 발행한다.
-4. watermark가 지나 final bar가 저장될 때까지 Spark를 실행한다.
-5. SQL로 저장 건수와 중복을 확인한다.
+4. 같은 `trace_id`를 세는 검증 Consumer로 Producer 발행 건수와 수신 건수를 대조한다.
+5. watermark가 지나 final bar가 저장될 때까지 Spark를 실행한다.
+6. SQL로 저장 건수와 중복을 확인한다.
 
-명령은 README의 `2-B. 장 종료 후 실제 historical trade 재생`을 따른다. 저장 확인:
+명령은 README의 `Kafka·Spark 실행 방법`을 따른다. 건수 대조와 저장 확인:
+
+```bash
+.venv/bin/python -m src.kafka_trace_consumer \
+  --trace-id assignment-20260821-smh-001 \
+  --expected-count 427 --timeout 60
+```
 
 ```bash
 docker compose exec -T postgres \
@@ -46,6 +53,9 @@ docker compose exec -T postgres \
 
 - `fetched_trades > 0`
 - `published_trades = fetched_trades`
+- `consumer_received_trades = published_trades`
+- `spark_input_trades = published_trades`
+- `spark_validation_error_trades = 0`
 - `final_bar_rows > 0`
 - `final_bar_rows = business_keys`
 - duplicate query 결과 0행
