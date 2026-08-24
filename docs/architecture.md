@@ -1,8 +1,10 @@
 # Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
-상태: proposed
+상태: CPI vertical slice implemented, orchestration in progress
 
 기준일: 2026-08-13
+
+최근 수정: 2026-08-24 멘토 피드백 반영
 
 범위: 2026-09-12 발표 MVP
 
@@ -17,11 +19,12 @@
 3. 외부 provider 정책 변경이 signal/dashboard까지 전파되지 않아야 한다.
 4. at-least-once 수신과 재실행에서 결과가 중복되지 않아야 한다.
 5. 시장이 닫혔거나 외부 API가 실패해도 결정적 replay로 데모할 수 있어야 한다.
-6. Spark Structured Streaming을 local mode에서 핵심 처리 엔진으로 직접 구현해야 한다.
+6. Kafka·Spark 과제 경로는 실시간 처리 검증으로 보존하되 CPI 배치 분석의 핵심 경로로 과장하지 않아야 한다.
 7. 신호와 이상 징후는 설명 가능하고 데이터 품질 저하를 명시해야 한다.
 8. 무료 IEX 실시간 범위와 15분 지연 SIP 검증 범위를 사용자에게 구분해 보여주고, 서로 다른 feed의 baseline을 섞지 않아야 한다.
-9. 후속 백테스트가 미래 정보를 섞지 않고 당시 이용 가능했던 입력을 재구성할 수 있어야 한다.
+9. Stage A의 과거 event-study backtest와 후속 strategy/portfolio backtest 모두 미래 정보를 섞지 않고 당시 이용 가능했던 입력을 재구성할 수 있어야 한다.
 10. 경제지표 영향은 공식 발표 시각, 당시 이용 가능했던 vintage, 반복 사례와 시장·섹터·시간대 비교 기준으로 검증해야 한다.
+11. historical trade replay와 historical SIP bar backfill은 목적과 schema가 다르므로 서로 다른 ingestion 경로를 사용해야 한다.
 
 ## 2. System boundary
 
@@ -38,15 +41,15 @@ flowchart TB
       GR["Groq LLM (optional)"]
     end
 
-    subgraph Realtime["Realtime path"]
+    subgraph Realtime["Supporting realtime course path"]
       COL["Market collector / replay"]
       K[("Kafka, single broker")]
       SP["Spark Structured Streaming\nvalidation + 1m aggregation"]
       NP["Optional news processor"]
     end
 
-    subgraph Batch["Scheduled path"]
-      AF["Airflow"]
+    subgraph Batch["Core macro batch path"]
+      AF["Python batch now\nAirflow next"]
       MAC["Macro task"]
       IMP["Macro event impact task"]
       REC["SIP reconciliation task"]
@@ -62,7 +65,7 @@ flowchart TB
     end
 
     subgraph FutureTrading["Future automated-trading path — outside Stage A"]
-      ST["Strategy + point-in-time backtest"]
+      ST["Strategy + point-in-time portfolio backtest"]
       RK["Risk engine"]
       PE["Paper execution"]
       LE["Controlled live execution"]
@@ -107,6 +110,8 @@ flowchart TB
 | Streamlit | 현황·근거·제약 표시 | 비즈니스 규칙 재구현 |
 
 구현은 가능한 한 하나의 Python codebase 내부 package로 유지한다. Kafka, Spark, PostgreSQL, Airflow는 실행 프로세스 경계가 필요하지만, 각 논리 컴포넌트를 별도 repository나 독립 microservice로 만들지는 않는다.
+
+Historical 데이터는 용도에 따라 두 경로로 나눈다. WebSocket과 같은 raw trade 계약의 historical trade·fixture는 Kafka→Spark의 replay, 부하와 장애 복구 검증에 사용한다. 이미 집계된 historical SIP 1분봉은 Airflow가 batch backfill해 경제지표 event-study에 사용하며 `raw.market.v1`에 trade처럼 넣지 않는다.
 
 ## 4. Provider boundaries
 
@@ -197,6 +202,8 @@ economic event with official released_at + as-known vintage
 ```
 
 발표 후 `5m/30m/60m`은 초기 비교 window이며 config와 analysis version으로 관리한다. CPI·고용처럼 정규장 전 발표는 extended-hours SIP coverage가 충분할 때만 즉시 반응을 계산한다. 부족하면 첫 정규장 반응으로 분리하고 `PARTIAL_MARKET_COVERAGE`를 표시한다. FOMC처럼 정규장 중 발표는 정규장 기준으로 계산한다.
+
+Stage A에서는 이 과거 발표 구간 재계산을 `event-study backtest`라고 부른다. 가상 자산과 주문을 시뮬레이션하는 strategy/portfolio backtest는 Future Trading 경계에 남긴다. 발표 전 구간은 심리로 단정하지 않고 관측된 pre-event drift로만 기록한다.
 
 ### 7.3 Delayed market reconciliation
 

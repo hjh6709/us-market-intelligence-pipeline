@@ -4,6 +4,8 @@
 
 기준일: 2026-08-13
 
+최근 수정: 2026-08-24 멘토 피드백 반영
+
 이 문서는 경제지표 영향 검증과 자동매매 데이터 기반을 만드는 4주 MVP에서 **무엇을 얼마나 수집하고, 어디에 저장하며, 무엇에 사용하고, 언제 삭제하는지**를 한곳에 정의한다. Stage A 데이터는 후속 전략·백테스트 입력으로 사용할 수 있어야 하지만 실제 주문에는 연결하지 않는다.
 
 ## 1. 수집 범위와 기간
@@ -52,6 +54,24 @@ SIP DAG의 `now-20m`은 무료 historical SIP의 15분 제한에 5분 safety mar
 
 ## 3. Feature와 분석에서 실제로 사용하는 방법
 
+### 과거 데이터 재생과 백테스트의 경계
+
+이번 단계에서 과거 데이터를 쓰는 목적은 두 가지이며 처리 경로를 섞지 않는다.
+
+```text
+파이프라인 검증용 historical trade / fixture
+→ WebSocket과 같은 raw trade schema
+→ Kafka raw.market.v1 → Spark → PostgreSQL
+→ 중복·순서 역전·지연·재시작·배속 부하 검증
+
+경제지표 분석용 historical SIP 1-minute bar
+→ Airflow batch backfill → PostgreSQL
+→ 공식 발표 시각·당시 vintage와 결합
+→ event-study backtest
+```
+
+SIP bar를 raw trade처럼 가장해 Kafka에 넣지 않는다. 반대로 Kafka→Spark의 장애 복구를 검증할 때는 이미 집계된 bar가 아니라 실제와 같은 raw trade 계약을 사용한다. 이번 `event-study backtest`는 과거 발표에 대해 분석 결과가 재현되는지 확인하는 것이며, 가상 예산으로 매수·매도 수익률을 계산하는 strategy/portfolio backtest는 후속 단계다.
+
 ### 경제지표 발표 영향 분석 — 첫 번째 목표
 
 ```text
@@ -65,6 +85,14 @@ SIP DAG의 `now-20m`은 무료 historical SIP의 15분 제한에 5분 safety mar
 ```
 
 초기 event type은 CPI, Employment Situation, FOMC다. 하나의 날짜만으로 “이 지표 때문에 움직였다”고 결론 내리지 않는다. 장전 data coverage가 기준보다 낮으면 `PARTIAL_MARKET_COVERAGE`, 반복 표본이 부족하면 `INSUFFICIENT_EVENT_SAMPLES`로 표시한다.
+
+발표 시점과 장 시작 중 하나만 임의로 고르지 않는다. 데이터가 허용하면 아래 구간을 별도 결과로 저장하고 서로 섞지 않는다.
+
+- 발표 전: `released_at` 이전 60분부터 5분 전까지의 변화
+- 발표 직후: `released_at` 기준 5분·30분·60분 반응
+- 첫 정규장: 해당 발표 뒤 첫 정규장 시작 기준 5분·30분·60분 반응
+
+발표 전 움직임은 관측 가능한 `pre-event drift/anticipation`으로만 표현한다. 사람들의 공포·기대 같은 심리 상태는 별도 설문·뉴스·포지셔닝 데이터가 없으면 결론 내리지 않는다.
 
 ### IEX 실시간 탐지
 

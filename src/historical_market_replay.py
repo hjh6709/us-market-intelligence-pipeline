@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -158,13 +159,44 @@ def publish_historical_trades(
     feed: str,
     trace_id: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    speed_multiplier: float | None = None,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     published = 0
+    first_event_at: datetime | None = None
+    replay_started_at: float | None = None
     for trade in trades:
         payload = normalize_historical_trade(symbol, trade)
+        if speed_multiplier is not None:
+            event_at = _parse_timestamp(payload["t"])
+            if first_event_at is None:
+                first_event_at = event_at
+                replay_started_at = monotonic()
+            else:
+                assert replay_started_at is not None
+                delay = _replay_delay_seconds(
+                    first_event_at,
+                    event_at,
+                    speed_multiplier,
+                    monotonic() - replay_started_at,
+                )
+                if delay:
+                    sleep(delay)
         publisher.publish(build_market_envelope(payload, feed, clock(), trace_id))
         published += 1
     return published
+
+
+def _replay_delay_seconds(
+    first_event_at: datetime,
+    event_at: datetime,
+    speed_multiplier: float,
+    elapsed: float,
+) -> float:
+    """Return how long to wait so event-time gaps follow the requested speed."""
+    target_elapsed = (event_at - first_event_at).total_seconds() / speed_multiplier
+    return max(0.0, target_elapsed - elapsed)
 
 
 def _parse_timestamp(value: str) -> datetime:
@@ -187,6 +219,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--feed", choices=("iex",), default="iex")
     parser.add_argument("--limit", type=int, default=10_000)
     parser.add_argument("--max-pages", type=int, default=10)
+    parser.add_argument(
+        "--trace-id",
+        default=None,
+        help="Optional run identifier used to verify Kafka consumer counts",
+    )
+    parser.add_argument(
+        "--speed-multiplier",
+        type=float,
+        default=None,
+        help="Replay event-time gaps at 1x, 10x, 50x, or 100x; omit for no delay",
+    )
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     return parser.parse_args(argv)
 
@@ -197,6 +240,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise HistoricalTradeError("start must be before end")
     if not 1 <= args.limit <= 10_000 or args.max_pages < 1:
         raise HistoricalTradeError("limit or max-pages is outside the safe range")
+    if args.speed_multiplier is not None and args.speed_multiplier <= 0:
+        raise HistoricalTradeError("speed-multiplier must be positive")
 
     key_id, secret_key = load_credentials(env_path=args.env_file)
     env_values = _read_env_file(args.env_file)
@@ -216,16 +261,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_pages=args.max_pages,
     )
     publisher = KafkaPublisher(bootstrap_servers, topic=topic)
+    trace_id = args.trace_id or f"historical-replay-{uuid.uuid4()}"
+    replay_started_at = time.monotonic()
     try:
         published = publish_historical_trades(
             args.symbol,
             trades,
             publisher,
             feed=args.feed,
-            trace_id=f"historical-replay-{uuid.uuid4()}",
+            trace_id=trace_id,
+            speed_multiplier=args.speed_multiplier,
         )
     finally:
         publisher.close()
+    duration_seconds = time.monotonic() - replay_started_at
+    events_per_second = published / duration_seconds if duration_seconds else 0.0
 
     print(
         json.dumps(
@@ -240,6 +290,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "fetched_trades": len(trades),
                 "published_trades": published,
                 "topic": topic,
+                "trace_id": trace_id,
+                "speed_multiplier": args.speed_multiplier,
+                "duration_seconds": round(duration_seconds, 6),
+                "events_per_second": round(events_per_second, 3),
             },
             ensure_ascii=False,
         )

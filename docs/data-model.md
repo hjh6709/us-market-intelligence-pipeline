@@ -162,19 +162,20 @@ Rules:
   "source": "alpaca",
   "feed": "sip",
   "session_scope": "EXTENDED_HOURS",
-  "pre_window_minutes": 5,
-  "post_window_minutes": 30,
-  "return_pre": -0.001,
-  "return_post": 0.012,
-  "volume_ratio_vs_matched_baseline": 2.4,
-  "realized_volatility_ratio": 1.8,
-  "market_excess_return": 0.004,
-  "sector_excess_return": 0.002,
-  "matched_baseline_version": 1,
-  "coverage_ratio": 0.98,
-  "analysis_version": 1,
-  "interpretation_scope": "OBSERVED_ASSOCIATION",
-  "calculated_at": "2026-08-13T01:00:00Z"
+  "window_name": "POST_30M",
+  "window_start": "2026-08-12T12:30:00Z",
+  "window_end": "2026-08-12T13:00:00Z",
+  "open_price": 100.0,
+  "close_price": 101.2,
+  "return_pct": 1.2,
+  "volume": 24000,
+  "realized_volatility": 0.18,
+  "benchmark_symbol": "SPY",
+  "benchmark_return_pct": 0.8,
+  "market_relative_return_pct": 0.4,
+  "coverage_status": "COMPLETE",
+  "coverage_reason": "bars=30/30;endpoint_lag_minutes=0",
+  "analysis_version": "cpi_sip_v1"
 }
 ```
 
@@ -388,6 +389,7 @@ SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `
 | `macro_observations` | 값과 vintage | series/date/realtime_start |
 | `economic_events` | release event, optional forecast | event_type/reference/released/source |
 | `macro_event_impacts` | 발표 전후 종목별 반응과 baseline/control 비교 | event/symbol/feed/window/analysis_version |
+| `macro_event_baseline_impacts` | 이벤트별 1·2·3주 전 동일 요일·현지시각 비교값 | event/week-offset/symbol/window/baseline-version |
 | `macro_impact_reports` | 동일 발표 유형의 반복 사례 집계와 한계 | event_type/universe/period/analysis_version |
 | `news_articles` (optional) | normalized news와 처리상태 | source/source_article_id, news_hash |
 | `llm_analyses` (optional) | cache/audit | news_hash/prompt/schema/provider/model |

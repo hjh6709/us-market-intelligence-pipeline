@@ -1,8 +1,8 @@
 # API Data Source Catalog
 
-상태: ingestion contract implemented, end-to-end evidence in progress
+상태: market ingestion, CPI point-in-time ingestion and historical SIP backfill implemented
 
-검증일: 2026-08-20
+검증일: 2026-08-24
 
 이 문서는 장기 자동매매 목표의 첫 단계에서 각 API가 **무엇을 제공하는지**, 경제지표 영향 검증 MVP가 **무엇을 가져오고 어디에 사용하는지**를 정의한다. Stage A에서는 경제·시장 데이터만 수집하며 계좌·주문 데이터는 사용하지 않는다.
 
@@ -158,7 +158,9 @@ realtime_start, realtime_end, date, value
 
 `value`는 문자열이며 결측은 `.`으로 올 수 있으므로 `.`을 `null`로 바꾸고 나머지를 Decimal 계열 숫자로 검증한다. `date`는 관측 대상일이지 실제 발표 timestamp가 아니다. FRED release date도 source가 제공한 날짜이며 FRED에서 이용 가능해진 정확한 시각을 보장한다고 가정하지 않는다. 정확한 `released_at`은 공식 기관 일정에서 가져오고, revision 추적을 위해 realtime/vintage 정보를 버리지 않는다.
 
-### 선택한 9개 series
+### 첫 구현과 확장 후보
+
+첫 vertical slice는 CPI 발표 12회에 필요한 `CPIAUCSL`, `CPILFESL`만 수집한다. 아래 나머지 series는 CPI 경로의 시점 정합성·멱등성·시장 window 검증이 끝난 뒤 같은 계약으로 확장하는 후보이며, 현재 수집 완료로 표시하지 않는다.
 
 | Series | 공식 의미 | 빈도·단위 | 프로젝트 활용 |
 | --- | --- | --- | --- |
