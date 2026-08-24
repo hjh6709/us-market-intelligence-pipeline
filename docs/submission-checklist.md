@@ -16,7 +16,7 @@
 | PostgreSQL 저장 코드·스키마 | `src/postgres.py`, `db/migrations/001_market_bars.sql` | 완료 |
 | 최종 컬럼·저장 형식 | README의 PostgreSQL `market_bars` 표 | 완료 |
 | 실제 API → DB 저장 결과 | [CPI 구간 실행 보고서](test-results/2026-08-24-cpi-kafka-spark.md) | 완료 |
-| 저장 결과 재현 | `scripts/evidence/actual_ingestion_evidence.sql` | 완료 |
+| 저장 결과 재현 | `scripts/evidence/cpi_sip_kafka_spark_evidence.sql` | 완료 |
 | 실제 행 로컬 내보내기 | `scripts/evidence/export_actual_market_bars.py` | 완료 |
 | 공개 샘플 데이터 | `data/sample/market_bars.synthetic.csv` | 완료, 합성임을 표시 |
 | WebSocket → DB 실시간 전체 실행 | 다음 미국 정규장 검증 | 미완료·명시 |

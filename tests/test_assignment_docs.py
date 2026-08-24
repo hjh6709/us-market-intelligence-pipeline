@@ -74,6 +74,13 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn('"spark_output_bars": 121', result)
         self.assertIn('"requested_end": "2026-08-12T13:31:00Z"', result)
 
+        evidence_sql = Path(
+            "scripts/evidence/cpi_sip_kafka_spark_evidence.sql"
+        ).read_text(encoding="utf-8")
+        self.assertIn("source = 'alpaca_replay'", evidence_sql)
+        self.assertIn("feed = 'sip'", evidence_sql)
+        self.assertIn("HAVING count(*) > 1", evidence_sql)
+
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")
 
