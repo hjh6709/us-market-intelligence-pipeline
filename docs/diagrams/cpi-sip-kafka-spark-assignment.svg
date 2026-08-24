@@ -25,13 +25,13 @@
 
   <rect width="1600" height="900" fill="#ffffff"/>
   <text x="54" y="62" class="title">CPI 발표 구간 SIP 원시 거래 처리 경로</text>
-  <text x="54" y="96" class="subtitle">2026-08-12 · NVDA · 발표 전 60분부터 발표 후 60분까지 실제 실행한 4차시 과제 범위</text>
+  <text x="54" y="96" class="subtitle">2026년 7월 CPI · 2026-08-12 발표 · NVDA · 07:30~09:31 ET 지정 구간의 실제 실행 결과</text>
 
   <g transform="translate(54,142)">
     <rect width="270" height="540" rx="18" class="lane"/>
     <text x="135" y="38" text-anchor="middle" class="stage">EVENT &amp; SOURCE</text>
     <rect x="22" y="72" width="226" height="140" rx="14" class="source"/>
-    <text x="135" y="108" text-anchor="middle" class="box-title">BLS CPI 발표 시각</text>
+    <text x="135" y="108" text-anchor="middle" class="box-title">2026년 7월 미국 CPI</text>
     <text x="135" y="140" text-anchor="middle" class="metric">12:30 UTC</text>
     <text x="135" y="169" text-anchor="middle" class="box-copy">08:30 ET · 기준 이벤트 시각</text>
     <text x="135" y="192" text-anchor="middle" class="small">[11:30, 13:31) 분석 구간</text>

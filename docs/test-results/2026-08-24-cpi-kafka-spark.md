@@ -1,17 +1,30 @@
 # CPI 발표 구간 SIP Kafka·Spark 전처리·저장 결과
 
 - 검증일: 2026-08-24 KST
-- 경제 이벤트: 2026-08-12 CPI 발표, `08:30 ET(12:30 UTC)`
-- 데이터: Alpaca Historical Trades API의 실제 NVDA SIP 체결
-- 대상 구간: `11:30 UTC` 이상, `13:31 UTC` 미만
+- 경제 이벤트: 2026년 7월 미국 CPI, 2026-08-12 `08:30 ET(12:30 UTC)` 발표
+- 데이터: Alpaca Historical Trades API의 실제 NVDA 개별 체결 레코드
+- 대상 구간: `[07:30, 09:31) ET` = `[11:30, 13:31) UTC`
 - Topic: `raw.market-sip.v1`
 - trace: `cpi-20260812-nvda-sip-001`
+
+## 데이터 계약
+
+| 항목 | 정의 |
+| --- | --- |
+| 조회 조건 | `symbol=NVDA`, `feed=sip`, `start=2026-08-12T11:30:00Z`, `end=2026-08-12T13:31:00Z` |
+| 시간 조건 | 1분 버킷 `T-60`부터 `T+60`까지 포함하도록 조회한 반개구간 `[start, end)`. 정규장 첫 1분 포함 |
+| 원본 grain | Alpaca가 반환한 개별 체결 레코드 한 행 |
+| 레코드 주요 값 | 거래 ID, 거래소, 가격, 수량, 조건, 체결 시각, 테이프 코드 |
+| 58,036의 의미 | 위 조회 조건으로 반환된 행의 수. 거래량·하루치·전체 종목·CPI 지표 건수가 아님 |
+| Kafka key | `symbol=NVDA` |
+| 중복 식별 | source·feed·symbol·provider trade ID·event timestamp 기반 `event_id` |
+| 처리 결과 grain | symbol·event-time 1분별 OHLCV 한 행 |
 
 ## Producer·Consumer
 
 | 항목 | 결과 |
 | --- | ---: |
-| Alpaca SIP 원시 체결 조회 | 58,036건, 6페이지 |
+| NVDA Historical SIP 체결 레코드 조회 | 58,036건, 6페이지 |
 | Kafka 발행 | 58,036건 |
 | Consumer 수신 | 58,036건 |
 | 발행·수신 차이 | 0건 |

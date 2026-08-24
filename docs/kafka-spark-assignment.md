@@ -6,6 +6,19 @@
 
 2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`과 연결되는 NVDA 실제 SIP 체결을 Kafka에 발행하고 Spark batch로 검증·중복 제거·event-time 1분 집계한 뒤 PostgreSQL에 멱등 저장한다.
 
+## 데이터셋 정의
+
+이번 과제는 서로 다른 의미의 데이터를 같은 발표 시각으로 연결한다.
+
+| 데이터셋 | 원천 | 행 단위 | 범위 | 이번 실행 값 |
+| --- | --- | --- | --- | --- |
+| CPI 이벤트 | BLS release archive | CPI 발표 한 번 | 2026년 7월 CPI, 2026-08-12 08:30 ET | 1건 |
+| CPI 관측값 | FRED/ALFRED | series·기준월·vintage별 지수값 | `CPIAUCSL`, `CPILFESL`, 기준월 2026-07, vintage 2026-08-12 | `332.813`, `336.789` |
+| NVDA 시장 원본 | Alpaca Historical Trades API | 개별 체결 레코드 | `symbol=NVDA`, `feed=sip`, `[07:30, 09:31) ET` | 58,036건, 6 pages |
+| NVDA 처리 결과 | Spark → PostgreSQL | event-time 1분 OHLCV | `11:30`~`13:30 UTC` | 121행 |
+
+`58,036건`은 하루치 데이터, CPI 지표 건수, 체결 수량의 합 또는 미국 전체 종목의 거래 건수가 아니다. API가 지정 종목·feed·시간 조건으로 반환한 개별 체결 행의 수다. 한 행의 `s`가 체결 수량이며, 거래량은 `SUM(s)`로 별도 계산한다.
+
 ```text
 Alpaca SIP trade / CPI release-window replay
 → Kafka raw.market-sip.v1
@@ -119,7 +132,7 @@ KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
 | 실행 | 결과 |
 | --- | --- |
 | WebSocket → Kafka | 실제 IEX 거래 10건 수신·발행·재소비 |
-| CPI SIP release-window replay | Producer 58,036건 = Consumer 58,036건 |
+| 2026-08-12 NVDA SIP release-window replay | Producer 58,036건 = Consumer 58,036건 |
 | Spark 처리 | 입력 58,036건, validation 오류 0건, 고유 거래 58,036건 |
 | PostgreSQL | 전체 거래 58,036건 → 1분봉 121건, 중복 key 0건 |
 | 100배속 replay | 1,523건, 169.567 events/s, Consumer·Spark 각 1,523건 |
