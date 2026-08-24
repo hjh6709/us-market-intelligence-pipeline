@@ -150,9 +150,12 @@ KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
 | 2026-08-12 NVDA SIP release-window replay | Producer 58,036건 = Consumer 58,036건 |
 | Spark 처리 | 입력 58,036건, validation 오류 0건, 고유 거래 58,036건 |
 | PostgreSQL | 전체 거래 58,036건 → 1분봉 121건, 중복 key 0건 |
+| Alpaca provider bar 비교 | 같은 `NVDA`·`sip`·`[07:30, 09:31) ET`의 121개 `1Min` bar에서 `SUM(trade_count)=58,034` |
 | 100배속 replay | 1,523건, 169.567 events/s, Consumer·Spark 각 1,523건 |
 
 Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거와 1분 window 집계를 수행한다. 처리 전 58,036건 중 validation 오류와 중복은 모두 0건이다. 발표 전후 121개 분 구간이 모두 저장됐으며 첫 bar는 `11:30 UTC`, 마지막 bar는 `13:30 UTC`다.
+
+`58,034`는 2026-08-12의 동일한 NVDA SIP 조회 구간을 Alpaca Historical Bars API에서 `timeframe=1Min`으로 받아, provider가 만든 121개 bar의 `trade_count`를 합산한 비교값이다. 원시 체결 레코드 수·체결 수량·하루 거래량이 아니다. raw Trades API 58,036행과 provider bar의 `trade_count` 합계 58,034는 집계 정책이 다를 수 있으므로, 현재 확인되지 않은 두 건의 원인을 임의로 단정하거나 숫자를 맞추지 않는다.
 
 ## 최종 저장 명세
 

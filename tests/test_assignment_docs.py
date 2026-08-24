@@ -46,6 +46,8 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("Producer 58,036건 = Consumer 58,036건", assignment)
         self.assertIn("입력 58,036건, validation 오류 0건", assignment)
         self.assertIn("1분봉 121건", assignment)
+        self.assertIn("`SUM(trade_count)=58,034`", assignment)
+        self.assertIn("원시 체결 레코드 수·체결 수량·하루 거래량이 아니다", assignment)
 
     def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -76,6 +78,9 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn('"spark_validation_error_trades": 0', result)
         self.assertIn('"spark_output_bars": 121', result)
         self.assertIn('"requested_end": "2026-08-12T13:31:00Z"', result)
+        self.assertIn('"provider_bar_rows": 121', result)
+        self.assertIn('"provider_bar_trade_count_sum": 58034', result)
+        self.assertIn('"provider_bar_timeframe": "1Min"', result)
 
         evidence_sql = Path(
             "scripts/evidence/cpi_sip_kafka_spark_evidence.sql"

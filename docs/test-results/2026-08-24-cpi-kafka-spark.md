@@ -46,11 +46,11 @@ Spark batch는 Kafka의 동일 trace를 읽어 JSON schema parsing, 필수 필�
 
 ## provider bar와 raw replay 비교
 
-| 결과 | 1분봉 | 거래 건수 합계 |
-| --- | ---: | ---: |
-| Alpaca provider SIP bar | 121 | 58,034 |
-| SIP raw trade Spark 재구성 | 121 | 58,036 |
+| 결과 | 정확한 데이터 정의 | 1분봉 | 거래 건수 합계 |
+| --- | --- | ---: | ---: |
+| Alpaca provider SIP bar | `NVDA`, `feed=sip`, `timeframe=1Min`, `[2026-08-12 11:30, 13:31) UTC`로 받은 bar의 `SUM(trade_count)` | 121 | 58,034 |
+| SIP raw trade Spark 재구성 | 동일 종목·feed·구간의 Historical Trades API 원시 행을 현재 정책으로 1분 집계한 `SUM(trade_count)` | 121 | 58,036 |
 
-두 건 차이는 숨기거나 임의 보정하지 않는다. provider bar의 `trade_count`는 Alpaca의 봉 생성 정책 결과이고, replay 값은 Historical Trades API에서 받은 모든 원시 행을 현재 프로젝트 규칙으로 집계한 결과다. 이후 거래 조건 코드 정책을 명시하고 두 건의 포함 여부를 분석한다.
+따라서 58,034는 하루치 NVDA 거래, 체결 수량의 합이나 원시 API 행 수가 아니다. 지정된 121분에 Alpaca가 만든 121개 1분봉의 거래 건수 필드를 합산한 값이다. 두 건 차이는 숨기거나 임의 보정하지 않는다. provider bar의 `trade_count`는 Alpaca의 봉 생성 정책 결과이고, replay 값은 Historical Trades API에서 받은 모든 원시 행을 현재 프로젝트 규칙으로 집계한 결과다. 거래 조건 코드를 대조하기 전에는 차이의 원인을 확정하지 않는다.
 
 기계 판독용 공개 집계는 [result.json](../evidence/cpi-kafka-spark/result.json)에 있다. 멘토 앞에서 재확인하는 명령은 [실행 증거 안내](../evidence/cpi-kafka-spark/README.md)에 정리했다. API key, 원시 체결 payload, 정확한 가격 행과 로컬 DB는 Git에 포함하지 않는다.

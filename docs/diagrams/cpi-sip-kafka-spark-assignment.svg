@@ -99,8 +99,9 @@
 
     <rect x="22" y="352" width="226" height="114" rx="14" fill="#ffffff" stroke="#8aa0bd" stroke-width="1.5"/>
     <text x="135" y="386" text-anchor="middle" class="note-title">원천별 결과 분리</text>
-    <text x="135" y="416" text-anchor="middle" class="note">provider bar 58,034</text>
-    <text x="135" y="442" text-anchor="middle" class="note">raw replay 58,036</text>
+    <text x="135" y="410" text-anchor="middle" class="note">SIP 1m bars 121</text>
+    <text x="135" y="432" text-anchor="middle" class="note">Σtrade_count 58,034</text>
+    <text x="135" y="454" text-anchor="middle" class="note">raw trade rows 58,036</text>
   </g>
 
   <path d="M1248 412 L1286 412" class="arrow"/>

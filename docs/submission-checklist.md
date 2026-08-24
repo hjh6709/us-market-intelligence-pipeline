@@ -46,6 +46,6 @@ docker compose exec -T postgres \
 
 ## 멘토에게 받을 피드백
 
-- provider bar의 거래 수 합계 58,034건과 raw replay 58,036건의 두 건 차이에 어떤 거래 조건 정책을 적용해야 하는가?
+- 2026-08-12 NVDA SIP `[07:30, 09:31) ET`의 provider 1분봉 121개에서 `SUM(trade_count)=58,034`이고 같은 구간 raw Trades API가 58,036행인 두 건 차이에 어떤 거래 조건 정책을 적용해야 하는가?
 - 현재 검증 규모에서 Spark를 유지할 실익과 Python processor 비교 기준은 무엇이 좋은가?
 - 다음 단계에서 IEX 실시간 예비 신호와 historical SIP 사후 검증을 어떻게 분리하면 좋은가?

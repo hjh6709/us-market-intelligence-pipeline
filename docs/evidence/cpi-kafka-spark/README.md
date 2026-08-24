@@ -12,6 +12,16 @@
 
 체결 수량은 각 원본 행의 `s` 필드이며, 거래량은 `SUM(s)`로 계산한다. 58,036은 `COUNT(record)`다.
 
+## 비교값 58,034건의 정확한 의미
+
+- API: Alpaca Historical Bars API
+- 조회 조건: `NVDA`, `feed=sip`, `timeframe=1Min`, `[2026-08-12T11:30:00Z, 2026-08-12T13:31:00Z)`
+- 반환 결과: provider가 생성한 1분봉 121개
+- 산출식: 121개 bar의 `SUM(trade_count)`
+- 결과: 58,034건
+
+이 값은 원시 체결 레코드 수나 체결 수량의 합, 하루 거래량이 아니다. Historical Trades API 원시 행 58,036개와는 생성 주체와 집계 정책이 다른 비교 지표다. 두 건의 차이는 거래 조건별 bar 포함 정책을 대조하기 전까지 원인을 확정하지 않는다.
+
 ## 공개된 증거
 
 - [result.json](result.json): Producer·Consumer·Spark 처리 건수와 저장 결과
@@ -77,6 +87,7 @@ docker compose exec -T postgres \
 - `reconstructed_bar_rows=121`
 - `business_keys=121`
 - `reconstructed_trade_count=58036`
+- 같은 구간의 `provider_bar_rows=121`, `provider_bar_trade_count_sum=58034`
 - 시간 범위 `11:30–13:30 UTC`
 - duplicate query `0 rows`
 - 실제 OHLCV 처음·마지막 행

@@ -157,7 +157,9 @@ NVDA Historical SIP 원시 체결 레코드 58,036건
 → PostgreSQL market_bars
 ```
 
-여기서 58,036건은 SIP 전체 시장의 거래량이 아니라, `NVDA`, `feed=sip`, `[11:30:00, 13:31:00) UTC` 조건으로 Historical Trades API가 반환한 개별 체결 레코드 수입니다. 첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다. 기존 Alpaca provider SIP bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 저장해 서로 덮어쓰지 않습니다. provider bar의 `trade_count` 합계는 58,034건이고 원시 Trades API 행은 58,036건이므로, 두 건의 차이를 임의 보정하지 않고 거래 조건 정책의 후속 검증 대상으로 남겼습니다.
+여기서 58,036건은 SIP 전체 시장의 거래량이 아니라, `NVDA`, `feed=sip`, `[2026-08-12 11:30:00, 13:31:00) UTC` 조건으로 Historical Trades API가 반환한 **개별 원시 체결 레코드 수**입니다. 첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다.
+
+비교값 `58,034건`은 같은 날짜·종목·feed·시간 범위를 `timeframe=1Min`으로 조회해 Alpaca Historical Bars API가 반환한 **121개 provider bar의 `trade_count`를 모두 더한 값**입니다. 즉 하루 거래량이나 체결 수량의 합이 아니며, 원시 Trades API 행 개수와도 정의가 다릅니다. provider bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 분리 저장했습니다. `58,034`와 `58,036`의 2건 차이는 Alpaca bar의 거래 조건 포함 정책과 우리 raw replay의 현재 전체 행 포함 정책을 대조하기 전까지 원인을 확정하지 않고 후속 검증 대상으로 남깁니다.
 
 ### 4차시 과제 제출 요약
 
