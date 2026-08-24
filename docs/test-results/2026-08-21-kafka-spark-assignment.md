@@ -55,7 +55,7 @@ Spark의 전처리는 JSON schema parsing, 필수 필드 검증, symbol allowlis
 
 ## 3. PostgreSQL 저장 결과
 
-저장 대상은 `market.market_bars`이고 business key는 `(symbol, bar_start, timeframe, source, feed)`다.
+저장 대상은 PostgreSQL 기본 schema의 `market_bars`이고 business key는 `(symbol, bar_start, timeframe, source, feed)`다.
 
 | 확인 항목 | 결과 |
 | --- | ---: |

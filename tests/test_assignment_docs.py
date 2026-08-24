@@ -14,7 +14,7 @@ from scripts.evidence.export_actual_market_bars import (
 
 
 class AssignmentDocumentationTest(unittest.TestCase):
-    def test_readme_leads_with_core_cpi_pipeline(self) -> None:
+    def test_readme_connects_core_cpi_and_kafka_spark_paths(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         headings = [
             "## 현재 분석 범위",
@@ -23,7 +23,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "## 실제 구현 결과",
             "## 실행 방법",
             "## 저장 모델",
-            "## Kafka·Spark 보조 경로",
+            "## CPI 발표 구간 Kafka·Spark 경로",
             "## 다음 단계",
         ]
 
@@ -31,18 +31,18 @@ class AssignmentDocumentationTest(unittest.TestCase):
 
         self.assertEqual(positions, sorted(positions))
 
-    def test_kafka_assignment_is_preserved_outside_core_readme(self) -> None:
+    def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         assignment = Path("docs/kafka-spark-assignment.md").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("CPI 과거 분석의 핵심 입력은 아니며", readme)
-        self.assertIn("Kafka·Spark 과제 문서", readme)
+        self.assertIn("같은 CPI 발표 구간의 raw IEX 체결", readme)
+        self.assertIn("4차시 Kafka·Spark 제출 문서", readme)
         self.assertIn("실제 IEX 거래 10건", assignment)
-        self.assertIn("Producer 427건 = Consumer 427건", assignment)
-        self.assertIn("입력 427건, validation 오류 0건", assignment)
-        self.assertIn("확정 1분봉 3건", assignment)
+        self.assertIn("Producer 1,576건 = Consumer 1,576건", assignment)
+        self.assertIn("입력 1,576건, validation 오류 0건", assignment)
+        self.assertIn("1분봉 18건", assignment)
 
     def test_readme_documents_kafka_spark_assignment_contract(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -51,9 +51,9 @@ class AssignmentDocumentationTest(unittest.TestCase):
         )
 
         self.assertIn("### 4차시 과제 제출 요약", readme)
-        self.assertIn("Producer 427건 = Consumer 427건", readme)
+        self.assertIn("Producer 1,576건 = Consumer 1,576건", readme)
         self.assertIn("src.spark_market_processor", readme)
-        self.assertIn("PostgreSQL `market.market_bars`", readme)
+        self.assertIn("PostgreSQL `market_bars`", readme)
         self.assertIn("`raw.market.v1`", assignment)
         self.assertIn("`trace_id`", assignment)
         self.assertIn("`market.trade.raw`", assignment)
@@ -64,12 +64,12 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("Spark Structured Streaming", assignment)
         self.assertIn("PostgreSQL market_bars", assignment)
 
-        result = Path("docs/evidence/actual-ingestion/result.json").read_text(
+        result = Path("docs/evidence/cpi-kafka-spark/result.json").read_text(
             encoding="utf-8"
         )
-        self.assertIn('"published_trades": 427', result)
-        self.assertIn('"consumer_received_trades": 427', result)
-        self.assertIn('"spark_input_trades": 427', result)
+        self.assertIn('"published_trades": 1576', result)
+        self.assertIn('"consumer_received_trades": 1576', result)
+        self.assertIn('"spark_input_trades": 1576', result)
         self.assertIn('"spark_validation_error_trades": 0', result)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:

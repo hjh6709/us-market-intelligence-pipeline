@@ -1,6 +1,6 @@
 # U.S. CPI Market Reaction Pipeline
 
-> 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결해 반복 가능한 형태로 저장·비교하는 데이터 파이프라인입니다.
+> 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
 
 현재 목표는 자동매매나 가격 예측이 아닙니다. “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값, 전체 시장 분봉과 데이터 coverage를 재현하는 것이 우선입니다.
 
@@ -33,9 +33,19 @@ PostgreSQL
   └─ macro_event_impacts
         ↓
 발표 전후 수익률·거래량·변동성·SPY 상대수익률
+
+같은 BLS CPI 발표 시각
+        +
+Alpaca IEX 실제 체결
+        ↓
+Kafka raw.market.v1
+        ↓
+Spark Structured Streaming
+        ↓
+PostgreSQL market_bars
 ```
 
-Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 Kafka에 넣지 않습니다. Kafka·Spark는 수업 과제와 향후 실시간 처리 검증을 위한 별도 보조 경로입니다.
+Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 Kafka에 넣지 않습니다. 대신 같은 CPI 발표 구간의 raw IEX 체결을 Kafka·Spark로 재생해, 발표 당일 실시간 수집 경로를 과거 데이터로 재현합니다.
 
 ## 데이터 출처
 
@@ -54,6 +64,8 @@ Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 
 | Historical SIP 1분봉 | 5,320건 | 재실행 후 동일 건수, 중복 0 |
 | Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
 | Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
+| CPI 구간 IEX raw trade | 1,576건 | Producer·Consumer·Spark 입력 일치, 오류 0 |
+| CPI 구간 IEX 1분봉 | 18건 | 확정 거래 509건 반영, 중복 key 0 |
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
 
@@ -117,19 +129,19 @@ docker compose exec -T postgres \
 
 상세 schema와 계산 계약은 [데이터 모델](docs/data-model.md), 시스템 경계는 [아키텍처](docs/architecture.md)에 있습니다.
 
-## Kafka·Spark 보조 경로
+## CPI 발표 구간 Kafka·Spark 경로
 
-과정 필수 과제로 다음 경로도 구현·검증했습니다.
+2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 NVDA의 실제 IEX 거래를 발표 전 60분부터 정규장 개장 후 4분까지 조회해 다음 경로를 구현·검증했습니다.
 
 ```text
-Alpaca IEX raw trade
+Alpaca IEX raw trade 1,576건
 → Kafka raw.market.v1
 → Spark Structured Streaming
 → 1분 OHLCV
 → PostgreSQL market_bars
 ```
 
-이 경로는 Kafka 전송, Spark event-time·watermark·dedup, 장애 복구와 배속 replay를 증명합니다. CPI 과거 분석의 핵심 입력은 아니며 현재 결과 계산에도 사용하지 않습니다. 실행법과 증거는 [Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)에 분리했습니다.
+이 경로는 CPI 영향 계산에 사용하는 SIP bar를 대체하지 않습니다. 무료 IEX 체결로 발표 당일 실시간 경로를 재현하고, 더 넓은 시장 범위인 SIP bar는 배치 분석과 사후 검증에 사용합니다. 요청 구간의 첫 IEX 체결은 `12:10 UTC`였으므로 발표 전 60분 전체가 채워졌다고 과장하지 않습니다.
 
 ### 4차시 과제 제출 요약
 
@@ -137,28 +149,29 @@ Alpaca IEX raw trade
 | --- | --- |
 | Kafka Topic | `raw.market.v1`, key=`symbol`, 3 partitions |
 | 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
-| 전송 건수 | Producer 427건 = Consumer 427건 |
-| Spark 처리 전·후 | 입력 427건, validation 오류 0건, 확정 1분봉 3건 |
-| 최종 저장 | PostgreSQL `market.market_bars`, business key 기반 upsert |
+| 프로젝트 연결 | 2026-08-12 CPI 발표 구간의 실제 NVDA IEX 체결 |
+| 전송 건수 | Producer 1,576건 = Consumer 1,576건 |
+| Spark 처리 전·후 | 입력 1,576건, validation 오류 0건, 확정 거래 509건 → 1분봉 18건 |
+| 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
 ```bash
 docker compose up -d --wait kafka kafka-init postgres
 
 .venv/bin/python -m src.spark_market_processor \
-  --starting-offsets latest --symbols SMH --watermark "2 minutes" \
-  --checkpoint-root .spark-checkpoints/assignment-historical --timeout 120
+  --starting-offsets latest --symbols NVDA --watermark "2 minutes" \
+  --checkpoint-root .spark-checkpoints/cpi-20260812-nvda --timeout 180
 
 .venv/bin/python -m src.historical_market_replay \
-  --symbol SMH --start 2026-08-19T19:50:00Z \
-  --end 2026-08-19T19:56:00Z --feed iex \
-  --trace-id assignment-20260821-smh-001
+  --symbol NVDA --start 2026-08-12T11:30:00Z \
+  --end 2026-08-12T13:34:00Z --feed iex \
+  --trace-id cpi-20260812-nvda-001
 
 .venv/bin/python -m src.kafka_trace_consumer \
-  --trace-id assignment-20260821-smh-001 \
-  --expected-count 427 --timeout 60
+  --trace-id cpi-20260812-nvda-001 \
+  --expected-count 1576 --timeout 60
 ```
 
-전체 메시지 표, JSON 예시, Spark 전처리 내용, 최종 컬럼과 실행 증거는 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)에서 확인할 수 있습니다. 현재 구현은 PostgreSQL 저장까지이며 Airflow, API·대시보드와 주문 실행은 다음 단계입니다.
+전체 메시지 표, JSON 예시, Spark 전처리 내용, 최종 컬럼과 실행 증거는 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)와 [CPI 구간 실행 보고서](docs/test-results/2026-08-24-cpi-kafka-spark.md)에서 확인할 수 있습니다. 현재 구현은 PostgreSQL 저장까지이며 Airflow, API·대시보드와 주문 실행은 다음 단계입니다.
 
 ## 다음 단계
 

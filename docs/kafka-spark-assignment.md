@@ -1,19 +1,19 @@
 # Kafka·Spark Supporting Assignment
 
-이 문서는 CPI 과거 분석의 핵심 경로와 별개로 구현한 Kafka·Spark 수업 과제를 보존한다.
+이 문서는 CPI 발표 구간의 실제 IEX 체결을 Kafka·Spark로 재현한 수업 과제를 정리한다.
 
 ## 목적
 
-Alpaca의 실제 IEX 체결을 Kafka에 발행하고 Spark Structured Streaming으로 검증·중복 제거·event-time 1분 집계한 뒤 PostgreSQL에 멱등 저장한다.
+2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`과 연결되는 NVDA 실제 IEX 체결을 Kafka에 발행하고 Spark Structured Streaming으로 검증·중복 제거·event-time 1분 집계한 뒤 PostgreSQL에 멱등 저장한다.
 
 ```text
-Alpaca IEX trade / deterministic replay
+Alpaca IEX trade / CPI release-window replay
 → Kafka raw.market.v1
 → Spark Structured Streaming
 → PostgreSQL market_bars
 ```
 
-이 경로는 CPI event study의 Historical SIP bar를 만들기 위한 경로가 아니다. 실시간 수집과 스트림 처리 기술을 검증하는 보조 경로다.
+raw IEX trade는 발표 당일 실시간 수집 경로를 재현하고, 이미 집계된 Historical SIP bar는 별도 배치 경로에서 CPI 반응 분석과 사후 범위 검증에 사용한다. 서로 다른 feed를 한 데이터처럼 섞거나 SIP bar를 raw trade topic에 넣지 않는다.
 
 ## Kafka 메시지
 
@@ -89,17 +89,17 @@ Spark의 정본 schema와 validation 규칙은 [데이터 모델](data-model.md)
 docker compose up -d --wait kafka kafka-init postgres
 
 .venv/bin/python -m src.spark_market_processor \
-  --starting-offsets latest --symbols SMH --watermark "2 minutes" \
-  --checkpoint-root .spark-checkpoints/assignment-historical --timeout 120
+  --starting-offsets latest --symbols NVDA --watermark "2 minutes" \
+  --checkpoint-root .spark-checkpoints/cpi-20260812-nvda --timeout 180
 
 .venv/bin/python -m src.historical_market_replay \
-  --symbol SMH --start 2026-08-19T19:50:00Z \
-  --end 2026-08-19T19:56:00Z --feed iex \
-  --trace-id assignment-20260821-smh-001
+  --symbol NVDA --start 2026-08-12T11:30:00Z \
+  --end 2026-08-12T13:34:00Z --feed iex \
+  --trace-id cpi-20260812-nvda-001
 
 .venv/bin/python -m src.kafka_trace_consumer \
-  --trace-id assignment-20260821-smh-001 \
-  --expected-count 427 --timeout 60
+  --trace-id cpi-20260812-nvda-001 \
+  --expected-count 1576 --timeout 60
 ```
 
 100배속 replay:
@@ -117,17 +117,19 @@ docker compose up -d --wait kafka kafka-init postgres
 | 실행 | 결과 |
 | --- | --- |
 | WebSocket → Kafka | 실제 IEX 거래 10건 수신·발행·재소비 |
-| Historical replay | Producer 427건 = Consumer 427건 |
-| Spark 처리 | 입력 427건, validation 오류 0건 |
-| PostgreSQL | 확정 1분봉 3건, 중복 key 0건 |
+| CPI release-window replay | Producer 1,576건 = Consumer 1,576건 |
+| Spark 처리 | 입력 1,576건, validation 오류 0건 |
+| PostgreSQL | 확정 거래 509건 → 1분봉 18건, 중복 key 0건 |
 | 100배속 replay | 1,523건, 169.567 events/s, Consumer·Spark 각 1,523건 |
 
-Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, 2분 watermark와 1분 window 집계를 수행한다. 처리 전 427건 중 validation 오류는 0건이며, append mode에서 watermark를 통과해 확정된 거래 174건이 최종 1분봉 3건으로 저장됐다. 나머지 253건은 실행 종료 시점에 아직 watermark를 통과하지 않은 window의 추정치이며 삭제 또는 오류로 계산하지 않는다.
+Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, 2분 watermark와 1분 window 집계를 수행한다. 처리 전 1,576건 중 validation 오류는 0건이며, append mode에서 watermark를 통과해 확정된 거래 509건이 최종 1분봉 18건으로 저장됐다. 나머지 1,067건은 실행 종료 시점에 아직 watermark를 통과하지 않은 window의 추정치이며 삭제 또는 오류로 계산하지 않는다.
+
+요청 범위는 CPI 발표 전 60분부터 정규장 개장 후 4분까지다. 무료 IEX의 첫 실제 체결은 `12:10 UTC`에 나타났으므로 발표 전 60분 전체 coverage가 있다고 주장하지 않는다. 개장 후 4분은 개장 반응을 포함하면서 event-time watermark를 진행시키기 위해 포함했다.
 
 ## 최종 저장 명세
 
 - 저장소: PostgreSQL
-- schema/table: `market.market_bars`
+- schema/table: PostgreSQL 기본 schema의 `market_bars`
 - 저장 단위: symbol별 event-time 1분 OHLCV
 - business key: `(symbol, bar_start, timeframe, source, feed)`
 - 저장 방식: Spark `foreachBatch`의 PostgreSQL upsert
@@ -149,11 +151,12 @@ Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC even
 
 ## 현재 구현과 다음 단계
 
-현재 구현된 범위는 실제·replay 거래의 Kafka 전송, Consumer 건수 검증, Spark 전처리·집계 및 PostgreSQL 저장까지다. Airflow 자동 실행, 실시간 이상 징후 계산, API·대시보드와 주문 실행은 이번 과제 결과가 아니라 후속 범위다.
+현재 구현된 범위는 CPI 발표 구간 실제 거래의 Kafka 전송, Consumer 건수 검증, Spark 전처리·집계 및 PostgreSQL 저장까지다. CPI 발표 일정·ALFRED vintage·SIP bar 배치는 별도 구현되어 같은 발표 시각으로 연결된다. Airflow 자동 실행, 실시간 이상 징후 계산, API·대시보드와 주문 실행은 이번 과제 결과가 아니라 후속 범위다.
 
 상세 증거:
 
 - [Kafka·Spark 실행 보고서](test-results/2026-08-21-kafka-spark-assignment.md)
+- [CPI 발표 구간 Kafka·Spark 실행 보고서](test-results/2026-08-24-cpi-kafka-spark.md)
 - [100배속 replay 보고서](test-results/2026-08-24-replay-load-100x.md)
 - [실제 수집 증거](evidence/actual-ingestion/README.md)
 
