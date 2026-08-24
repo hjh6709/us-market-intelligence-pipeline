@@ -170,64 +170,7 @@ NVDA Historical SIP 원시 체결 레코드 58,036건
 | Spark 처리 전·후 | 입력 58,036건, 오류·중복 0건 → 1분봉 121건 |
 | 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
-#### 데이터·메시지 명세
-
-- Topic: `raw.market-sip.v1`
-- Kafka key: `symbol` (`NVDA`)
-- partitions: `3`
-- retention: `24시간`
-- event type: `market.trade.raw`
-
-| 구간 | 필드 | 타입 | 의미 |
-| --- | --- | --- | --- |
-| envelope | `event_id` | string | source·feed·종목·원본 거래 ID·거래 시각으로 만든 결정적 중복 제거 키 |
-| envelope | `event_type` | string | 이벤트 종류. 현재 `market.trade.raw` |
-| envelope | `schema_version` | integer | 메시지 구조 버전. 현재 `1` |
-| envelope | `source` | string | 데이터 제공처. 현재 `alpaca` |
-| envelope | `feed` | string | 시장 데이터 feed. 이번 실행은 `sip` |
-| envelope | `source_event_id` | string | Alpaca가 제공한 원본 거래 ID |
-| envelope | `event_timestamp` | UTC datetime string | 실제 거래 발생 시각 |
-| envelope | `ingested_at` | UTC datetime string | Producer 수집 시각 |
-| envelope | `trace_id` | string 또는 null | 한 번의 replay 실행을 추적하는 ID |
-| envelope | `payload` | object | 변경하지 않고 보존한 Alpaca 원본 거래 필드 |
-| payload | `T` | string | 메시지 종류. 거래는 `t` |
-| payload | `S` | string | 종목 코드 |
-| payload | `i` | integer | Alpaca 거래 ID |
-| payload | `x` | string | 거래소 코드 |
-| payload | `p` | decimal(18,6) | 체결 가격 |
-| payload | `s` | integer | 체결 수량 |
-| payload | `c` | array(string) | 거래 조건 코드 목록 |
-| payload | `t` | UTC datetime string | 원본 체결 시각 |
-| payload | `z` | string | 테이프 코드 |
-
-아래 메시지는 스키마 설명을 위한 **합성 예시**이며 실제 시장 가격이나 API key가 아닙니다.
-
-```json
-{
-  "event_id": "sha256:example-only",
-  "event_type": "market.trade.raw",
-  "schema_version": 1,
-  "source": "alpaca",
-  "feed": "sip",
-  "source_event_id": "12345",
-  "event_timestamp": "2026-08-12T11:30:02.123456Z",
-  "ingested_at": "2026-08-24T07:05:00.000000Z",
-  "trace_id": "assignment-example",
-  "payload": {
-    "T": "t",
-    "S": "NVDA",
-    "i": 12345,
-    "x": "V",
-    "p": 100.25,
-    "s": 10,
-    "c": ["@"],
-    "t": "2026-08-12T11:30:02.123456Z",
-    "z": "C"
-  }
-}
-```
-
-상세 계약과 Spark validation 규칙은 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)와 [데이터 모델](docs/data-model.md)에 있습니다.
+필드명·타입·의미, Kafka JSON 예시와 Topic 상세는 [4차시 Kafka·Spark 제출 문서의 Kafka 메시지](docs/kafka-spark-assignment.md#kafka-메시지)를 정본으로 관리합니다.
 
 ```bash
 docker compose up -d --wait kafka kafka-init postgres
