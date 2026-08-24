@@ -6,16 +6,27 @@
 
 2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`과 연결되는 NVDA 실제 SIP 체결을 Kafka에 발행하고 Spark batch로 검증·중복 제거·event-time 1분 집계한 뒤 PostgreSQL에 멱등 저장한다.
 
+## 전체 프로젝트에서의 과제 경계
+
+이 문서가 구현·검증하는 범위는 전체 프로젝트 아키텍처의 **B. Kafka·Spark 원시 거래 처리 경로**다.
+
+| 구분 | 처리 경로 | 이 과제에서의 역할 |
+| --- | --- | --- |
+| A. 경제지표 발표 영향 분석 | BLS·ALFRED·Alpaca provider 1분봉 → Python batch → PostgreSQL | CPI 발표 시각과 분석 맥락을 제공. Kafka·Spark 입력이 아님 |
+| B. Kafka·Spark 원시 거래 처리 | Alpaca Historical Trades → Kafka → Spark → PostgreSQL | **이 과제의 실제 구현 범위**. 개별 체결 58,036건을 121개 1분봉으로 집계 |
+
+따라서 CPI 이벤트 1건과 ALFRED 관측값은 `raw.market-sip.v1`에 발행하지 않는다. Kafka에 들어가는 메시지는 NVDA의 개별 SIP 체결뿐이며, Spark도 이 원시 체결만 전처리·집계한다. B에서 만든 `source=alpaca_replay` 121개 봉은 현재 A의 영향 분석 입력을 대체하지 않고, 같은 범위의 provider 121개 봉과 정확성을 비교하는 검증 결과로 분리 저장한다.
+
 ## 데이터셋 정의
 
 이번 과제는 서로 다른 의미의 데이터를 같은 발표 시각으로 연결한다.
 
-| 데이터셋 | 원천 | 행 단위 | 범위 | 이번 실행 값 |
-| --- | --- | --- | --- | --- |
-| CPI 이벤트 | BLS release archive | CPI 발표 한 번 | 2026년 7월 CPI, 2026-08-12 08:30 ET | 1건 |
-| CPI 관측값 | FRED/ALFRED | series·기준월·vintage별 지수값 | `CPIAUCSL`, `CPILFESL`, 기준월 2026-07, vintage 2026-08-12 | `332.813`, `336.789` |
-| NVDA 시장 원본 | Alpaca Historical Trades API | 개별 체결 레코드 | `symbol=NVDA`, `feed=sip`, `[07:30, 09:31) ET` | 58,036건, 6 pages |
-| NVDA 처리 결과 | Spark → PostgreSQL | event-time 1분 OHLCV | `11:30`~`13:30 UTC` | 121행 |
+| 데이터셋 | 원천 | 행 단위 | 범위 | 이번 실행 값 | Kafka·Spark 처리 여부 |
+| --- | --- | --- | --- | --- | --- |
+| CPI 이벤트 | BLS release archive | CPI 발표 한 번 | 2026년 7월 CPI, 2026-08-12 08:30 ET | 1건 | 아니요. 기준 시각으로만 사용 |
+| CPI 관측값 | FRED/ALFRED | series·기준월·vintage별 지수값 | `CPIAUCSL`, `CPILFESL`, 기준월 2026-07, vintage 2026-08-12 | `332.813`, `336.789` | 아니요. 분석 맥락으로만 사용 |
+| NVDA 시장 원본 | Alpaca Historical Trades API | 개별 체결 레코드 | `symbol=NVDA`, `feed=sip`, `[07:30, 09:31) ET` | 58,036건, 6 pages | **예. Kafka 입력·Spark 전처리 대상** |
+| NVDA 처리 결과 | Spark → PostgreSQL | event-time 1분 OHLCV | `11:30`~`13:30 UTC` | 121행 | **예. Spark 출력·DB 저장 대상** |
 
 `58,036건`은 하루치 데이터, CPI 지표 건수, 체결 수량의 합 또는 미국 전체 종목의 거래 건수가 아니다. API가 지정 종목·feed·시간 조건으로 반환한 개별 체결 행의 수다. 한 행의 `s`가 체결 수량이며, 거래량은 `SUM(s)`로 별도 계산한다.
 
