@@ -1,53 +1,43 @@
-# CPI 발표 구간 Kafka·Spark 전처리·저장 결과
+# CPI 발표 구간 SIP Kafka·Spark 전처리·저장 결과
 
 - 검증일: 2026-08-24 KST
 - 경제 이벤트: 2026-08-12 CPI 발표, `08:30 ET(12:30 UTC)`
-- 데이터: Alpaca Historical Trades API의 실제 NVDA IEX 체결
-- 분석 대상: `11:30 UTC` 이상, `13:31 UTC` 미만
-- watermark 진행용 tail: `13:31 UTC` 이상, `13:34 UTC` 미만
-- Topic: `raw.market.v1`
-- trace: `cpi-20260812-nvda-001`
-
-이 실행은 임의 장중 구간이 아니라 현재 프로젝트에서 분석하는 실제 CPI 발표 시각과 동일한 구간을 사용한다. 분석 대상은 발표 전 60분부터 발표 60분 후 정규장 첫 1분까지다. 이후 3분은 마지막 분석 window를 Spark append mode에서 확정하기 위한 watermark 진행용 tail이며 분석 대상에는 포함하지 않는다.
+- 데이터: Alpaca Historical Trades API의 실제 NVDA SIP 체결
+- 대상 구간: `11:30 UTC` 이상, `13:31 UTC` 미만
+- Topic: `raw.market-sip.v1`
+- trace: `cpi-20260812-nvda-sip-001`
 
 ## Producer·Consumer
 
 | 항목 | 결과 |
 | --- | ---: |
-| Alpaca 조회 | 1,576건 |
-| 분석 대상 구간 | 509건 |
-| watermark 진행용 tail | 1,067건 |
-| Kafka 발행 | 1,576건 |
-| Consumer 수신 | 1,576건 |
+| Alpaca SIP 원시 체결 조회 | 58,036건, 6페이지 |
+| Kafka 발행 | 58,036건 |
+| Consumer 수신 | 58,036건 |
 | 발행·수신 차이 | 0건 |
 
-무료 IEX feed에서 요청 구간의 첫 실제 체결은 `12:10 UTC`였다. 따라서 발표 전 60분 전체에 체결이 존재했다고 주장하지 않으며, 이 coverage 한계는 Historical SIP 1분봉과 별도로 비교한다.
+첫 체결은 `11:30:02.284268354 UTC`, 마지막 체결은 `13:30:59.983248061 UTC`다. 발표 전 60분부터 발표 후 60분까지의 121개 1분 구간에 실제 데이터가 모두 존재한다.
 
 ## Spark 전처리·저장
 
 | 처리 단계 | 결과 |
 | --- | ---: |
-| Kafka source 입력 | 1,576건 |
+| Kafka source 입력 | 58,036건 |
 | validation 오류 | 0건 |
-| 분석 대상 확정 bar 반영 거래 | 509건 |
-| 실행 종료 시 미확정 차이 | 1,067건 |
-| PostgreSQL 최종 1분봉 | 18건 |
+| `event_id` 중복 제거 후 | 58,036건 |
+| Spark 1분 OHLCV 출력 | 121건 |
+| PostgreSQL upsert | 121건 |
 | 중복 business key | 0건 |
-| 확정 bar 시간 범위 | `12:10–13:30 UTC` |
 
-Spark는 JSON schema parsing, 필수 필드·종목·가격·수량 검증, UTC event-time 변환, `event_id` 중복 제거, 2분 watermark와 1분 OHLCV·거래 건수·VWAP 집계를 수행했다.
+Spark batch는 Kafka의 동일 trace를 읽어 JSON schema parsing, 필수 필드·종목·가격·수량·UTC timestamp 검증, `event_id` 중복 제거, event-time 1분 OHLCV·거래 건수·VWAP 집계를 수행했다. 결과는 기존 Alpaca provider bar를 덮어쓰지 않도록 `source=alpaca_replay`, `feed=sip`로 저장했다.
 
-`1,576 - 509 = 1,067`은 validation 오류나 유실 건수가 아니다. 이는 watermark를 진행시키기 위해 붙인 tail의 실제 거래 수 1,067건과 정확히 일치한다. 분석 대상 509건은 모두 반영됐고 마지막 `13:30 UTC` bar까지 확정 저장됐다. 정확한 가격 행, 원본 payload, API key와 checkpoint는 Git에 포함하지 않는다.
+## provider bar와 raw replay 비교
 
-## 프로젝트 내 역할
+| 결과 | 1분봉 | 거래 건수 합계 |
+| --- | ---: | ---: |
+| Alpaca provider SIP bar | 121 | 58,034 |
+| SIP raw trade Spark 재구성 | 121 | 58,036 |
 
-```text
-BLS CPI 발표 시각 + ALFRED 당시 값
-                    ↓ 같은 event time
-Alpaca IEX raw trades → Kafka → Spark → IEX 1분봉
-Alpaca SIP 1분봉      → batch analysis → 시장 반응·coverage 비교
-```
+두 건 차이는 숨기거나 임의 보정하지 않는다. provider bar의 `trade_count`는 Alpaca의 봉 생성 정책 결과이고, replay 값은 Historical Trades API에서 받은 모든 원시 행을 현재 프로젝트 규칙으로 집계한 결과다. 이후 거래 조건 코드 정책을 명시하고 두 건의 포함 여부를 분석한다.
 
-IEX 경로는 무료 실시간 수집을 재현하는 예비 관측 경로이고 SIP는 더 넓은 시장 범위의 과거 분석 경로다. 두 feed를 서로 덮어쓰거나 같은 baseline으로 섞지 않는다.
-
-기계 판독용 공개 집계는 [result.json](../evidence/cpi-kafka-spark/result.json)에 있다.
+기계 판독용 공개 집계는 [result.json](../evidence/cpi-kafka-spark/result.json)에 있다. 멘토 앞에서 재확인하는 명령은 [실행 증거 안내](../evidence/cpi-kafka-spark/README.md)에 정리했다. API key, 원시 체결 payload, 정확한 가격 행과 로컬 DB는 Git에 포함하지 않는다.

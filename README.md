@@ -36,16 +36,16 @@ PostgreSQL
 
 같은 BLS CPI 발표 시각
         +
-Alpaca IEX 실제 체결
+Alpaca SIP 원시 체결
         ↓
-Kafka raw.market.v1
+Kafka raw.market-sip.v1
         ↓
-Spark Structured Streaming
+Spark batch
         ↓
 PostgreSQL market_bars
 ```
 
-Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 Kafka에 넣지 않습니다. 대신 같은 CPI 발표 구간의 raw IEX 체결을 Kafka·Spark로 재생해, 발표 당일 실시간 수집 경로를 과거 데이터로 재현합니다.
+같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
 
 ## 데이터 출처
 
@@ -65,8 +65,8 @@ Historical SIP bar는 이미 1분 단위로 집계된 배치 데이터이므로 
 | Historical SIP 1분봉 | 5,320건 | 재실행 후 동일 건수, 중복 0 |
 | Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
 | Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
-| CPI 구간 IEX raw trade | 1,576건 | Producer·Consumer·Spark 입력 일치, 오류 0 |
-| CPI 구간 IEX 1분봉 | 18건 | 확정 거래 509건 반영, 중복 key 0 |
+| CPI 구간 SIP raw trade | 58,036건 | Producer·Consumer·Spark 입력 일치, 오류 0 |
+| CPI 구간 Spark 재구성 1분봉 | 121건 | 전체 원시 체결 반영, 121분 coverage, 중복 key 0 |
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
 
@@ -132,44 +132,44 @@ docker compose exec -T postgres \
 
 ## CPI 발표 구간 Kafka·Spark 경로
 
-2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 NVDA의 실제 IEX 거래를 replay했습니다. 분석 대상은 발표 전 60분부터 정규장 첫 1분이 끝나는 `13:31 UTC`까지이고, `13:31–13:34 UTC`는 마지막 분석 window를 확정하기 위한 watermark 진행용 tail입니다.
+2026-08-12 CPI 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 발표 전 60분부터 발표 후 60분까지 NVDA의 실제 SIP 원시 체결 전체를 replay했습니다.
 
 ```text
-Alpaca IEX raw trade 1,576건
-→ Kafka raw.market.v1
-→ Spark Structured Streaming
-→ 1분 OHLCV
+Alpaca SIP raw trade 58,036건
+→ Kafka raw.market-sip.v1
+→ Spark batch validation·deduplication·aggregation
+→ 1분 OHLCV 121건
 → PostgreSQL market_bars
 ```
 
-이 경로는 CPI 영향 계산에 사용하는 SIP bar를 대체하지 않습니다. 무료 IEX 체결로 발표 당일 실시간 경로를 재현하고, 더 넓은 시장 범위인 SIP bar는 배치 분석과 사후 검증에 사용합니다. 요청 구간의 첫 IEX 체결은 `12:10 UTC`였으므로 발표 전 60분 전체가 채워졌다고 과장하지 않습니다. PostgreSQL의 마지막 확정 bar는 분석 대상의 마지막 분인 `13:30 UTC`입니다.
+첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다. 기존 Alpaca provider SIP bar는 `source=alpaca`, Spark 재구성 bar는 `source=alpaca_replay`로 저장해 서로 덮어쓰지 않습니다. provider bar의 거래 수 합계는 58,034건이고 원시 Trades API 행은 58,036건이므로, 두 건의 차이를 임의 보정하지 않고 거래 조건 정책의 후속 검증 대상으로 남겼습니다.
 
 ### 4차시 과제 제출 요약
 
 | 필수 항목 | 실제 구현 결과 |
 | --- | --- |
-| Kafka Topic | `raw.market.v1`, key=`symbol`, 3 partitions |
+| Kafka Topic | `raw.market-sip.v1`, key=`symbol`, 3 partitions |
 | 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
-| 프로젝트 연결 | 2026-08-12 CPI 발표 구간의 실제 NVDA IEX 체결 |
-| 전송 건수 | Producer 1,576건 = Consumer 1,576건 |
-| Spark 처리 전·후 | 입력 1,576건, 오류 0건, 분석 대상 509건 전부 확정 → 1분봉 18건; tail 1,067건은 미확정 |
+| 프로젝트 연결 | 2026-08-12 CPI 발표 전후 120분의 실제 NVDA SIP 전체 체결 |
+| 전송 건수 | Producer 58,036건 = Consumer 58,036건 |
+| Spark 처리 전·후 | 입력 58,036건, 오류·중복 0건 → 1분봉 121건 |
 | 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
 
 ```bash
 docker compose up -d --wait kafka kafka-init postgres
 
-.venv/bin/python -m src.spark_market_processor \
-  --starting-offsets latest --symbols NVDA --watermark "2 minutes" \
-  --checkpoint-root .spark-checkpoints/cpi-20260812-nvda --timeout 180
-
-.venv/bin/python -m src.historical_market_replay \
+KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.historical_market_replay \
   --symbol NVDA --start 2026-08-12T11:30:00Z \
-  --end 2026-08-12T13:34:00Z --feed iex \
-  --trace-id cpi-20260812-nvda-001
+  --end 2026-08-12T13:31:00Z --feed sip --max-pages 20 \
+  --trace-id cpi-20260812-nvda-sip-001
 
-.venv/bin/python -m src.kafka_trace_consumer \
-  --trace-id cpi-20260812-nvda-001 \
-  --expected-count 1576 --timeout 60
+KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
+  --trace-id cpi-20260812-nvda-sip-001 \
+  --expected-count 58036 --timeout 120
+
+.venv/bin/python -m src.spark_sip_trade_batch \
+  --trace-id cpi-20260812-nvda-sip-001 \
+  --topic raw.market-sip.v1 --symbols NVDA
 ```
 
 전체 메시지 표, JSON 예시, Spark 전처리 내용, 최종 컬럼과 실행 증거는 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)와 [CPI 구간 실행 보고서](docs/test-results/2026-08-24-cpi-kafka-spark.md)에서 확인할 수 있습니다. 현재 구현은 PostgreSQL 저장까지이며 Airflow, API·대시보드와 주문 실행은 다음 단계입니다.

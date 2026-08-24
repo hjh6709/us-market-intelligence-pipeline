@@ -24,7 +24,7 @@ README에는 과제 설명과 실행에 필요한 핵심만 둔다. 세부 계�
 | --- | --- |
 | [test-results/](test-results/) | 실행 날짜별 smoke·통합 테스트 보고서 |
 | [3차시 Kafka·Spark 결과](test-results/2026-08-21-kafka-spark-assignment.md) | Producer·Consumer 427건 대조와 Spark 전처리·저장 결과 |
-| [4차시 CPI 구간 Kafka·Spark 결과](test-results/2026-08-24-cpi-kafka-spark.md) | CPI 발표 구간 NVDA 실제 거래 1,576건의 전송·전처리·저장 결과 |
+| [4차시 CPI 구간 Kafka·Spark 결과](test-results/2026-08-24-cpi-kafka-spark.md) | CPI 발표 구간 NVDA SIP 원시 체결 58,036건의 전송·전처리·저장 결과 |
 | [100x replay 파일럿](test-results/2026-08-24-replay-load-100x.md) | 실제 거래 1,523건의 배속 replay와 Kafka·Spark·DB 결과 |
 | [CPI SIP backfill](test-results/2026-08-24-cpi-sip-backfill.md) | CPI 12회 × 4종목의 Historical SIP 적재·coverage 결과 |
 | [CPI event impact](test-results/2026-08-24-cpi-event-impact.md) | 발표 전후 4개 window 계산·benchmark·한계 |
