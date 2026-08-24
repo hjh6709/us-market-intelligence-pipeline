@@ -1,4 +1,4 @@
-"""Replay actual Alpaca historical IEX trades through the Kafka ingestion path."""
+"""Replay actual Alpaca historical IEX or SIP trades through Kafka."""
 
 from __future__ import annotations
 

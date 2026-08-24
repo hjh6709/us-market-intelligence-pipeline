@@ -32,6 +32,8 @@ Alpaca 주식 데이터에서 이 프로젝트가 사용하는 feed는 IEX와 SI
 
 IEX는 이후 실시간 예비 감지에 사용하고, 같은 시점의 historical SIP를 확보할 수 있게 되면 더 넓은 시장 범위에서 사후 검증한다. IEX와 SIP의 값이나 기준선은 서로 섞지 않고 `feed`를 구분해 저장한다. 상세한 API 선택 근거는 [API 선택 문서](api-selection.md#2-alpaca-market-data)에 정리했다.
 
+공식 근거: [Alpaca Real-time Stock Data](https://docs.alpaca.markets/us/docs/real-time-stock-pricing-data), [Alpaca Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq), [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle)
+
 ```text
 Alpaca SIP trade / CPI release-window replay
 → Kafka raw.market-sip.v1
