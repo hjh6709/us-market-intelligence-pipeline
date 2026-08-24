@@ -17,14 +17,15 @@ class AssignmentDocumentationTest(unittest.TestCase):
     def test_readme_connects_core_cpi_and_kafka_spark_paths(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         headings = [
+            "## 프로젝트 목표",
             "## 현재 분석 범위",
             "## 데이터 흐름",
             "## 데이터 출처",
             "## 실제 구현 결과",
             "## 실행 방법",
             "## 저장 모델",
-            "## CPI 발표 구간 Kafka·Spark 경로",
             "## 다음 단계",
+            "## 구현·과제 증거",
         ]
 
         positions = [readme.index(heading) for heading in headings]
@@ -37,8 +38,8 @@ class AssignmentDocumentationTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("같은 CPI 발표 구간의 SIP 원시 체결 전체", readme)
-        self.assertIn("4차시 Kafka·Spark 제출 문서", readme)
+        self.assertIn("README는 프로젝트 전체 구조와 실행 진입점만 설명", readme)
+        self.assertIn("4차시 Kafka·Spark 과제 문서", readme)
         self.assertIn("실제 IEX 거래 10건", assignment)
         self.assertIn("IEX와 SIP 중 왜 SIP를 사용했는가", assignment)
         self.assertIn("Historical Trades REST API", assignment)
@@ -60,10 +61,9 @@ class AssignmentDocumentationTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("### 4차시 과제 제출 요약", readme)
-        self.assertIn("Producer 58,036건 = Consumer 58,036건", readme)
-        self.assertIn("src.spark_sip_trade_batch", readme)
-        self.assertIn("PostgreSQL `market_bars`", readme)
+        self.assertIn("## 구현·과제 증거", readme)
+        self.assertNotIn("### 4차시 과제 제출 요약", readme)
+        self.assertIn("docs/kafka-spark-assignment.md", readme)
         self.assertIn("`raw.market-sip.v1`", assignment)
         self.assertIn("`trace_id`", assignment)
         self.assertIn("`market.trade.raw`", assignment)

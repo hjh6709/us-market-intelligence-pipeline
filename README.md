@@ -2,20 +2,17 @@
 
 > 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
 
-현재 목표는 자동매매나 가격 예측이 아닙니다. “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값, 전체 시장 분봉과 데이터 coverage를 재현하는 것이 우선입니다.
+장기 목표는 검증 가능한 데이터에 기반한 자동매매 시스템입니다. 다만 현재 단계에서는 주문이나 가격 예측보다, “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값, 전체 시장 분봉과 데이터 coverage를 재현하는 데 집중합니다.
 
-## 이번 실행 데이터가 정확히 무엇인가
+## 프로젝트 목표
 
-`58,036건`은 경제지표 건수나 하루치 주가 데이터가 아닙니다. 2026년 7월 미국 CPI가 발표된 시각을 기준으로, NVDA 한 종목의 지정 구간에서 조회한 **개별 체결 레코드 수**입니다.
+이 프로젝트는 경제지표 발표와 시장 데이터를 수집·처리·저장하고, 같은 입력으로 결과를 다시 계산할 수 있는 데이터 기반을 만드는 것이 목적입니다.
 
-| 데이터 계층 | 한 행의 의미 | 이번 실행의 실제 범위 | 건수·값 |
-| --- | --- | --- | --- |
-| 경제 이벤트 | BLS의 CPI 발표 한 번 | 2026년 7월 CPI, 2026-08-12 08:30 ET(12:30 UTC) 발표 | 1건 |
-| 거시 관측 | 발표일에 알 수 있었던 계절조정 CPI 지수 한 개 | ALFRED vintage `2026-08-12`, `CPIAUCSL`·`CPILFESL`, 기준월 `2026-07-01` | `332.813`, `336.789` |
-| 시장 원본 | NVDA의 개별 체결 한 건 | Alpaca Historical Trades, `feed=sip`, 1분 버킷 `T-60`부터 `T+60`까지 포함하는 `[07:30, 09:31) ET` | 58,036 레코드, 6 API pages |
-| 처리 결과 | NVDA의 event-time 1분 OHLCV 한 행 | `11:30`부터 `13:30 UTC`까지 Spark 집계 후 PostgreSQL 저장 | 121행 |
-
-시장 원본 한 행에는 거래 ID, 종목, 거래소, 체결 가격, 체결 수량, 거래 조건, 체결 시각과 테이프 코드가 들어 있습니다. `58,036`은 이 행의 개수이며 거래량은 각 행의 체결 수량을 합산한 별도 값입니다. SIP는 미국 NMS 거래소들이 통합 테이프에 보고한 체결·호가를 모은 feed지만, feed의 범위와 이번 API 조회 범위는 다릅니다. 이번 숫자는 **미국 전체 종목의 SIP 데이터**가 아니라 `NVDA` 한 종목·`[07:30, 09:31) ET`·체결 endpoint로 제한한 결과입니다. 다른 종목, 구간 밖의 거래, 호가와 주문장 데이터는 포함되지 않습니다.
+- BLS의 공식 발표 일정과 ALFRED의 당시 공개값을 point-in-time 형태로 보존합니다.
+- Alpaca SIP 시장 데이터를 같은 발표 시각에 맞춰 수집합니다.
+- Kafka와 Spark를 통해 원시 거래의 전달·검증·중복 제거·1분 집계를 재현합니다.
+- PostgreSQL에 경제 이벤트, 시장 데이터와 분석 결과를 멱등 저장합니다.
+- 관측 결과는 인과관계나 주문 신호로 단정하지 않고 후속 백테스트 입력으로 제공합니다.
 
 ## 현재 분석 범위
 
@@ -81,7 +78,7 @@ PostgreSQL market_bars
 | Event impact | 192건 | SPY benchmark 누락 0, 중복 0 |
 | Matched baseline | 576건 | 36개 비교 시간창, 재실행 후 동일 건수 |
 | 2026-08-12 CPI 구간 NVDA Historical SIP 체결 레코드 | 58,036건 | 지정 시간 범위의 Trades API 반환·Producer·Consumer·Spark 입력 일치, 오류 0 |
-| CPI 구간 Spark 재구성 1분봉 | 121건 | 전체 원시 체결 반영, 121분 coverage, 중복 key 0 |
+| CPI 구간 Spark 재구성 1분봉 | 121건 | provider OHLC·volume·trade_count·VWAP와 불일치 0, 중복 key 0 |
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
 
@@ -145,54 +142,6 @@ docker compose exec -T postgres \
 
 상세 schema와 계산 계약은 [데이터 모델](docs/data-model.md), 시스템 경계는 [아키텍처](docs/architecture.md)에 있습니다.
 
-## CPI 발표 구간 Kafka·Spark 경로
-
-2026년 7월 CPI의 2026-08-12 발표 시각 `08:30 ET(12:30 UTC)`을 기준으로 1분 버킷 `T-60`부터 `T+60`까지 NVDA의 실제 SIP 원시 체결 전체를 replay했습니다. 원시 timestamp 조회 범위는 `[07:30, 09:31) ET`이며 장전 구간과 정규장 첫 1분을 포함합니다.
-
-```text
-NVDA Historical SIP 원시 체결 레코드 58,036건
-→ Kafka raw.market-sip.v1
-→ Spark batch validation·deduplication·aggregation
-→ 1분 OHLCV 121건
-→ PostgreSQL market_bars
-```
-
-여기서 58,036건은 SIP 전체 시장의 거래량이 아니라, `NVDA`, `feed=sip`, `[2026-08-12 11:30:00, 13:31:00) UTC` 조건으로 Historical Trades API가 반환한 **개별 원시 체결 레코드 수**입니다. 첫 체결은 `11:30:02 UTC`, 마지막 체결은 `13:30:59 UTC`이며 121개 분 구간이 모두 존재합니다.
-
-비교값 `58,034건`은 같은 날짜·종목·feed·시간 범위를 `timeframe=1Min`으로 조회해 Alpaca Historical Bars API가 반환한 **121개 provider bar의 `trade_count`를 모두 더한 값**입니다. Spark에서도 Alpaca의 거래 조건별 bar 집계 규칙을 적용해 raw 58,036행 중 volume·trade_count 반영 대상 58,034행, OHLC·VWAP 가격 형성 대상 8,752행을 구분했습니다. 제외된 2행은 모두 `Q(Official Open)` 조건을 포함한 체결이었습니다. provider bar와 Spark 재구성 bar 121개를 행별 비교한 결과 OHLC·volume·trade_count·VWAP 불일치는 모두 0건이었습니다. 두 결과는 `source=alpaca`와 `source=alpaca_replay`로 분리 저장했습니다.
-
-### 4차시 과제 제출 요약
-
-| 필수 항목 | 실제 구현 결과 |
-| --- | --- |
-| Kafka Topic | `raw.market-sip.v1`, key=`symbol`, 3 partitions |
-| 메시지 명세 | 공통 envelope와 Alpaca payload의 필드·타입·의미·합성 JSON 예시 |
-| 프로젝트 연결 | 2026년 7월 CPI 발표 전후 지정 구간의 NVDA Historical SIP 개별 체결 레코드 |
-| 전송 건수 | Producer 58,036건 = Consumer 58,036건 |
-| Spark 처리 전·후 | 입력 58,036건, 오류·중복·미지원 조건 0건 → volume/trade_count 반영 58,034건 → 1분봉 121건 |
-| 최종 저장 | PostgreSQL `market_bars`, business key 기반 upsert, 중복 0건 |
-
-필드명·타입·의미, Kafka JSON 예시와 Topic 상세는 [4차시 Kafka·Spark 제출 문서의 Kafka 메시지](docs/kafka-spark-assignment.md#kafka-메시지)를 정본으로 관리합니다.
-
-```bash
-docker compose up -d --wait kafka kafka-init postgres
-
-KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.historical_market_replay \
-  --symbol NVDA --start 2026-08-12T11:30:00Z \
-  --end 2026-08-12T13:31:00Z --feed sip --max-pages 20 \
-  --trace-id cpi-20260812-nvda-sip-001
-
-KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
-  --trace-id cpi-20260812-nvda-sip-001 \
-  --expected-count 58036 --timeout 120
-
-.venv/bin/python -m src.spark_sip_trade_batch \
-  --trace-id cpi-20260812-nvda-sip-001 \
-  --topic raw.market-sip.v1 --symbols NVDA
-```
-
-전체 메시지 표, JSON 예시, Spark 전처리 내용, 최종 컬럼과 실행 증거는 [4차시 Kafka·Spark 제출 문서](docs/kafka-spark-assignment.md)와 [CPI 구간 실행 보고서](docs/test-results/2026-08-24-cpi-kafka-spark.md)에서 확인할 수 있습니다. 현재 구현은 PostgreSQL 저장까지이며 Airflow, API·대시보드와 주문 실행은 다음 단계입니다.
-
 ## 다음 단계
 
 1. 미국 거래일과 주요 경제 발표 calendar로 matched baseline 정제
@@ -200,6 +149,15 @@ KAFKA_TOPIC=raw.market-sip.v1 .venv/bin/python -m src.kafka_trace_consumer \
 3. BLS 발표문의 월간·연간 actual 구조화
 4. 검증 가능한 전망치 출처가 확보되면 surprise 분석 추가
 5. Airflow로 수집·재실행·품질 검사를 자동화
+
+## 구현·과제 증거
+
+README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회차별 요구사항, 메시지 명세, 상세 실행 명령과 검증 숫자는 아래 문서에서 관리합니다.
+
+- [4차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
+- [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
+- [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)
+- [과제 제출 체크리스트](docs/submission-checklist.md)
 
 ## 문서
 
