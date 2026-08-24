@@ -33,7 +33,7 @@ Kafka에는 이미 집계된 1분봉 121건이 아니라 Historical SIP Trades A
 | `event_type` | string | 이벤트 종류. 현재 값은 `market.trade.raw` |
 | `schema_version` | integer | 메시지 구조 버전. 현재 값은 `1` |
 | `source` | string | 데이터 제공처. 현재 값은 `alpaca` |
-| `feed` | string | 시장 데이터 범위. 현재 값은 `iex` |
+| `feed` | string | 시장 데이터 범위. 이번 실행 값은 `sip` |
 | `source_event_id` | string | Alpaca가 제공한 원본 거래 ID |
 | `event_timestamp` | UTC datetime string | 실제 거래가 발생한 시각 |
 | `ingested_at` | UTC datetime string | Producer가 메시지를 수집한 시각 |
@@ -64,18 +64,18 @@ Kafka에는 이미 집계된 1분봉 121건이 아니라 Historical SIP Trades A
   "source": "alpaca",
   "feed": "sip",
   "source_event_id": "12345",
-  "event_timestamp": "2026-08-19T19:50:00.123456Z",
-  "ingested_at": "2026-08-21T01:00:00.000000Z",
+  "event_timestamp": "2026-08-12T11:30:02.123456Z",
+  "ingested_at": "2026-08-24T07:05:00.000000Z",
   "trace_id": "assignment-example",
   "payload": {
     "T": "t",
-    "S": "SMH",
+    "S": "NVDA",
     "i": 12345,
     "x": "V",
     "p": 100.25,
     "s": 10,
     "c": ["@"],
-    "t": "2026-08-19T19:50:00.123456Z",
+    "t": "2026-08-12T11:30:02.123456Z",
     "z": "C"
   }
 }
@@ -144,7 +144,7 @@ Spark는 JSON schema parsing, 필수값·종목·가격·수량 검증, UTC even
 | `source`·`feed` | text | 데이터 제공처와 시장 범위 |
 | `is_final` | boolean | 완료된 과거 구간의 확정 bar 여부 |
 | `condition_policy` | text | 집계에 적용한 거래 조건 정책 버전 |
-| `spark_batch_id` | bigint | 저장한 Spark micro-batch ID |
+| `spark_batch_id` | bigint | 저장 실행 식별값. 이번 batch 실행은 `0` |
 | `updated_at` | timestamptz | 마지막 upsert 시각 |
 
 ## 현재 구현과 다음 단계
