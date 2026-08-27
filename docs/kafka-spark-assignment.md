@@ -1,4 +1,4 @@
-# Kafka·Spark Supporting Assignment
+# 3차시 Kafka·Spark 과제
 
 이 문서는 CPI 발표 구간에 지정한 NVDA의 실제 SIP 체결을 Kafka·Spark로 재현한 수업 과제를 정리한다.
 

@@ -1,4 +1,4 @@
-# 4차시 Kafka·Spark 과제 제출 점검표
+# 3차시 Kafka·Spark 과제 제출 점검표
 
 과제의 필수 범위는 Kafka 이벤트 100건 이상 전송, Producer·Consumer 건수 대조, Spark 전처리와 최종 저장이다. 분석·BI는 다음 단계다.
 
