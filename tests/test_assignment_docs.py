@@ -48,6 +48,12 @@ class AssignmentDocumentationTest(unittest.TestCase):
         )
         self.assertIn("NVDA에서 실제로 발생한 개별 체결 한 건", readme)
         self.assertIn("Spark 1분 집계 121행", readme)
+        self.assertIn("### C. Airflow 입력값 변경 실행", readme)
+        self.assertIn("NVDA 4,688건과 SPY 3,307건", readme)
+        self.assertIn("uv sync --extra airflow", readme)
+        self.assertIn("airflow dags test market_sip_replay_pipeline", readme)
+        self.assertIn("Airflow schedule과 누락 구간 자동 backfill·알림 추가", readme)
+        self.assertNotIn("Airflow로 수집·재실행·품질 검사를 자동화", readme)
 
     def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")

@@ -2,25 +2,35 @@
 
 > 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
 
-장기 목표는 검증 가능한 데이터에 기반한 자동매매 시스템입니다. 다만 현재 단계에서는 주문이나 가격 예측보다, “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값, 전체 시장 분봉과 데이터 coverage를 재현하는 데 집중합니다.
+장기 목표는 검증 가능한 데이터에 기반한 자동매매 시스템입니다. 다만 현재 단계에서는 주문이나 가격 예측보다, “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값과 SIP 1분봉을 정확히 재현하는 데 집중합니다.
+
+## 30초 요약
+
+1. BLS와 ALFRED에서 **CPI가 언제, 어떤 값으로 발표됐는지** 가져옵니다.
+2. 같은 시각의 `SPY`, `QQQ`, `SMH`, `NVDA` 주가를 Alpaca SIP 데이터로 가져옵니다.
+3. 발표 전후 가격·거래량·변동성이 평소와 달랐는지 계산해 PostgreSQL에 저장합니다.
+4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
+5. Airflow 과제에서는 같은 10분 구간을 입력값으로 받아 NVDA 4,688건과 SPY 3,307건을 각각 Kafka·Spark·PostgreSQL까지 자동 실행했습니다.
+
+검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
 ## 프로젝트 목표
 
 이 프로젝트는 경제지표 발표와 시장 데이터를 수집·처리·저장하고, 같은 입력으로 결과를 다시 계산할 수 있는 데이터 기반을 만드는 것이 목적입니다.
 
-- BLS의 공식 발표 일정과 ALFRED의 당시 공개값을 point-in-time 형태로 보존합니다.
+- BLS의 공식 발표 일정과 ALFRED의 당시 공개값을 당시 시점 기준(point-in-time)으로 보존합니다.
 - Alpaca SIP 시장 데이터를 같은 발표 시각에 맞춰 수집합니다.
 - Kafka와 Spark를 통해 원시 거래의 전달·검증·중복 제거·1분 집계를 재현합니다.
-- PostgreSQL에 경제 이벤트, 시장 데이터와 분석 결과를 멱등 저장합니다.
+- PostgreSQL에 경제 이벤트, 시장 데이터와 분석 결과를 같은 입력으로 다시 실행해도 중복되지 않게 저장합니다.
 - 관측 결과는 인과관계나 주문 신호로 단정하지 않고 후속 백테스트 입력으로 제공합니다.
 
 ## 현재 분석 범위
 
 - CPI 발표: 최근 실제 발표 12회
-- 경제지표: `CPIAUCSL`, `CPILFESL`의 ALFRED 당시 vintage
+- 경제지표: `CPIAUCSL`, `CPILFESL`의 ALFRED 당시 공개본(vintage)
 - 시장 데이터: Alpaca Historical SIP `1Min` bar
 - 종목: `SPY`, `QQQ`, `SMH`, `NVDA`
-- 분석 window: 발표 전 60분, 발표 후 5·30·60분
+- 분석 구간: 발표 전 60분, 발표 후 5·30·60분
 - 저장소: PostgreSQL
 
 2025년 10월 CPI는 실제 발표되지 않아 분석 목록에서 제외했습니다. 전망치 출처는 아직 연결하지 않았으므로 `forecast`와 `surprise`를 임의로 만들지 않습니다.
@@ -32,11 +42,11 @@
 ```text
 BLS 공식 CPI 발표 시각
         +
-ALFRED 당시 CPI·근원 CPI vintage
+ALFRED 당시 공개된 CPI·근원 CPI 값
         +
 Alpaca Historical SIP 1분봉
         ↓
-검증·UTC 정규화·멱등 upsert
+검증·UTC 시각 통일·중복 없는 저장
         ↓
 PostgreSQL
   ├─ economic_events
@@ -59,13 +69,15 @@ PostgreSQL market_bars
 
 같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
 
+현재 `market_sip_replay_pipeline` Airflow DAG가 `ticker`, `start`, `end`, `feed` 입력값을 받아 원시 체결 수집부터 Kafka 전달 확인, Spark 집계와 PostgreSQL 저장 검증까지 순서대로 실행합니다.
+
 ## 데이터 출처
 
 | 데이터 | 공식 출처 | 역할 |
 | --- | --- | --- |
 | CPI 발표 날짜·시각 | [BLS CPI release schedule·archive](https://www.bls.gov/schedule/news_release/cpi.htm) | 이벤트 기준 시각과 대상 월 |
-| 당시 CPI 값과 revision | [FRED/ALFRED observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 미래 수정값이 섞이지 않는 point-in-time 값 |
-| 발표 구간 실제 체결 | [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle) | Kafka·Spark 실시간 경로의 결정적 replay |
+| 당시 CPI 값과 수정 이력 | [FRED/ALFRED observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 나중에 수정된 값이 섞이지 않은 당시 공개값 |
+| 발표 구간 실제 체결 | [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle) | 과거 체결을 Kafka·Spark에 다시 흘려보내는 재생(replay) 입력 |
 | 발표 전후 주식시장 | [Alpaca Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars) | SIP 1분 OHLCV·거래 수·VWAP |
 
 ## 실제 구현 결과
@@ -79,8 +91,8 @@ PostgreSQL market_bars
 | BLS CPI 이벤트 | CPI 공식 발표 한 번 | 최근 실제 발표 12회 | 12행 |
 | ALFRED 관측값 | 발표 당시 알려진 지수 한 개 | 12회 × CPI·근원 CPI 2개 | 24행 |
 | Historical SIP 1분봉 | 종목 한 개의 1분 OHLCV | 12회 발표 구간 × `SPY`, `QQQ`, `SMH`, `NVDA` | 5,320행 |
-| Event impact | 발표 한 번·종목·분석 window의 반응 | 12회 × 4종목 × 4개 window | 192행 |
-| Matched baseline | 발표일과 비교할 과거 동일 요일·시각 반응 | 12회 × 4종목 × 4개 window × 3주 | 576행 |
+| 발표 반응 결과 | 발표 한 번·종목·분석 구간의 반응 | 12회 × 4종목 × 4개 분석 구간 | 192행 |
+| 평소 비교 구간 | 발표일과 비교할 과거 동일 요일·시각 반응 | 12회 × 4종목 × 4개 분석 구간 × 3주 | 576행 |
 
 Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 이미 집계된 1분봉 전체**입니다. 거래가 없던 분은 임의로 생성하지 않았기 때문에 이론상 최대 행 수보다 적습니다.
 
@@ -104,13 +116,24 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 같은 날짜·종목·시간 범위의 provider 121행과 비교해 정확성을 검증합니다.
 ```
 
-`macro_event_impacts`는 `12회 × 4종목 × 4개 window`입니다. 데이터가 충분한 결과는 163건, 장전 거래가 희소한 partial coverage 결과는 29건입니다. 특히 SMH는 거래가 없는 분을 임의로 채우지 않았으므로 complete와 partial 결과를 분리해서 해석해야 합니다.
+`macro_event_impacts`는 `12회 × 4종목 × 4개 분석 구간`입니다. 필요한 분봉이 모두 있는 결과는 163건, 일부 분봉이 부족한 결과는 29건입니다. 특히 SMH는 장전 거래가 없는 분을 임의로 채우지 않았으므로 두 결과를 나눠 해석해야 합니다.
+
+### C. Airflow 입력값 변경 실행
+
+하나의 DAG에서 `ticker`, `start`, `end`, `feed`를 입력받아 기존 수집·Kafka 검증·Spark 집계·PostgreSQL 검증을 순서대로 실행합니다. 같은 10분 구간에서 ticker만 바꾼 실제 결과는 다음과 같습니다.
+
+| ticker | SIP 원시 체결 | Kafka 발행·수신 | Spark 1분봉 | DAG 상태 |
+| --- | ---: | ---: | ---: | --- |
+| NVDA | 4,688 | 4,688 / 4,688 | 10 | success |
+| SPY | 3,307 | 3,307 / 3,307 | 10 | success |
+
+상세 입력값과 실행 명령은 [5차시 Airflow 과제 문서](docs/airflow-assignment.md), 저장된 실제 1분봉 샘플은 [PostgreSQL 조회 결과](docs/evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있습니다.
 
 상세 결과:
 
 - [Historical SIP backfill 결과](docs/test-results/2026-08-24-cpi-sip-backfill.md)
 - [CPI event impact 초기 결과](docs/test-results/2026-08-24-cpi-event-impact.md)
-- [같은 요일·시간 matched baseline 결과](docs/test-results/2026-08-24-cpi-matched-baseline.md)
+- [발표 1·2·3주 전 같은 요일·시간 비교 결과](docs/test-results/2026-08-24-cpi-matched-baseline.md)
 
 현재 평균 수익률은 선택한 12개 발표 구간의 관측값입니다. 비발표일 비교군과 통계 검정이 아직 없으므로 CPI의 인과 효과나 미래 수익률로 해석하지 않습니다.
 
@@ -120,8 +143,8 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 
 ```bash
 cp .env.example .env
-uv sync
-docker compose up -d --wait postgres
+uv sync --extra airflow
+docker compose up -d --wait postgres kafka kafka-init
 ```
 
 `.env`에는 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 입력합니다. 실제 key, 원본 API 응답과 PostgreSQL dump는 Git에 포함하지 않습니다.
@@ -142,9 +165,23 @@ docker compose up -d --wait postgres
 .venv/bin/python -m src.cpi_matched_baseline
 ```
 
-모든 단계는 같은 입력으로 다시 실행해도 business key 기준 row 수가 증가하지 않도록 upsert합니다.
+모든 단계는 같은 입력으로 다시 실행해도 고유 식별값(business key) 기준으로 행이 중복되지 않도록 갱신하거나 추가(upsert)합니다.
 
-### 3. 검증
+### 3. Airflow 자동화 실행
+
+```bash
+export AIRFLOW_HOME="$PWD/airflow-runtime"
+export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+
+.venv/bin/airflow db migrate
+.venv/bin/airflow dags test market_sip_replay_pipeline \
+  -c '{"ticker":"NVDA","start":"2026-08-12T12:25:00Z","end":"2026-08-12T12:35:00Z","feed":"sip"}'
+```
+
+`ticker`를 `SPY`로 바꾸면 코드를 수정하지 않고 같은 파이프라인을 다시 실행할 수 있습니다. 전체 입력값과 두 실행 결과는 [5차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
+
+### 4. 검증
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -168,11 +205,11 @@ docker compose exec -T postgres \
 
 ## 다음 단계
 
-1. 미국 거래일과 주요 경제 발표 calendar로 matched baseline 정제
+1. 미국 거래일과 주요 경제 발표 일정을 반영해 평소 비교 구간 정제
 2. 장전 반응과 첫 정규장 반응 분리
 3. BLS 발표문의 월간·연간 actual 구조화
 4. 검증 가능한 전망치 출처가 확보되면 surprise 분석 추가
-5. Airflow로 수집·재실행·품질 검사를 자동화
+5. Airflow schedule과 누락 구간 자동 backfill·알림 추가
 
 ## 구현·과제 증거
 
@@ -192,6 +229,16 @@ README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회
 - [데이터 수명주기](docs/data-lifecycle.md)
 - [설계 결정](docs/design-decisions.md)
 - [4주 실행 계획](PROJECT_PLAN.md)
+
+### 자주 쓰는 용어
+
+| 용어 | 이 프로젝트에서의 뜻 |
+| --- | --- |
+| SIP | 미국 여러 NMS 거래소가 통합 테이프에 보고한 거래·호가 데이터. 이번에는 그중 NVDA 한 종목의 지정 시간대 체결만 조회 |
+| IEX | IEX 거래소 범위의 데이터. 무료 실시간 연결 시험에 사용 |
+| replay | 과거 실제 체결을 Kafka에 다시 넣어 같은 처리 흐름을 재현하는 것 |
+| 1분봉 | 1분 동안의 시가·고가·저가·종가·거래량을 한 행으로 묶은 데이터 |
+| ALFRED vintage | 지금 수정된 값이 아니라 특정 날짜 당시 공개돼 있던 경제지표 값 |
 
 ## 면책 및 출처 고지
 
