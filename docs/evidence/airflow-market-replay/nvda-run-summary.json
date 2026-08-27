@@ -1,0 +1,37 @@
+{
+  "dag_id": "market_sip_replay_pipeline",
+  "run_id": "manual__2026-08-27T05:56:14.969871+00:00",
+  "state": "success",
+  "config": {
+    "ticker": "NVDA",
+    "start": "2026-08-12T12:25:00Z",
+    "end": "2026-08-12T12:35:00Z",
+    "feed": "sip",
+    "trace_id": "airflow-market-replay-77f555fb22342402"
+  },
+  "replay": {
+    "topic": "raw.market-sip.v1",
+    "pages": 1,
+    "fetched_trades": 4688,
+    "published_trades": 4688
+  },
+  "consumer": {
+    "expected_count": 4688,
+    "consumer_received": 4688,
+    "scanned_messages": 4688
+  },
+  "spark": {
+    "spark_input_trades": 4688,
+    "spark_invalid_trades": 0,
+    "spark_valid_unique_trades": 4688,
+    "spark_volume_eligible_trades": 4688,
+    "spark_price_eligible_trades": 824,
+    "spark_output_bars": 10,
+    "postgres_upserted_bars": 10
+  },
+  "postgres": {
+    "source": "alpaca_replay",
+    "expected_bars": 10,
+    "stored_bars": 10
+  }
+}

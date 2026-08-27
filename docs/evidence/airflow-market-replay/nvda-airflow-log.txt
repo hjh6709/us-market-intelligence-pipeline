@@ -1,0 +1,9 @@
+DAG: market_sip_replay_pipeline
+Run: manual__2026-08-27T05:56:14.969871+00:00
+
+validate_run_config state=success ticker=NVDA start=2026-08-12T12:25:00Z end=2026-08-12T12:35:00Z feed=sip
+replay_trades_to_kafka state=success fetched_trades=4688 published_trades=4688 topic=raw.market-sip.v1
+verify_kafka_delivery state=success expected_count=4688 consumer_received=4688 scanned_messages=4688
+build_minute_bars_with_spark state=success spark_input_trades=4688 invalid=0 unique=4688 output_bars=10 postgres_upserted_bars=10
+verify_stored_result state=success expected_bars=10 stored_bars=10
+DagRun state=success
