@@ -1,8 +1,9 @@
 Captured: 2026-08-27
 DAG: market_sip_replay_pipeline
 
-Run A: manual__2026-08-27T07:30:57.734232+00:00
+Run A: manual__2026-08-27T07:56:50.333255+00:00
 Params: tickers=[SPY, QQQ, SMH, NVDA]
+Window: [2026-08-12T11:30:00Z, 2026-08-12T13:31:00Z)
 State: success
 
 validate_run_config[-1] success
@@ -13,8 +14,9 @@ verify_stored_result[0..3] success
 
 Map index: 0=SPY, 1=QQQ, 2=SMH, 3=NVDA
 
-Run B: manual__2026-08-27T07:32:54.583401+00:00
+Run B: manual__2026-08-27T07:58:07.693993+00:00
 Params: tickers=[SPY, QQQ]
+Window: [2026-08-12T11:30:00Z, 2026-08-12T13:31:00Z)
 State: success
 
 validate_run_config[-1] success

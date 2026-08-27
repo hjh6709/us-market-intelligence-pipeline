@@ -51,7 +51,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("### C. Airflow 다종목 자동화 실행", readme)
         self.assertIn("Dynamic Task Mapping", readme)
         self.assertIn('"tickers":["SPY","QQQ","SMH","NVDA"]', readme)
-        self.assertIn("원시 체결 15,069건과 1분봉 40행", readme)
+        self.assertIn("원시 체결 118,118건과 1분봉 472행", readme)
         self.assertIn("uv sync --extra airflow", readme)
         self.assertIn("airflow dags test market_sip_replay_pipeline", readme)
         self.assertIn("Airflow schedule과 누락 구간 자동 backfill·알림 추가", readme)
@@ -140,18 +140,28 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "docs/evidence/airflow-market-replay/README.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("Dynamic Task Mapping", assignment)
+        self.assertIn(
+            "# 4차시 과제 — 지금 만든 작업을 Airflow로 자동화하기",
+            assignment,
+        )
+        self.assertIn(
+            "[`dags/market_replay_pipeline.py`](../dags/market_replay_pipeline.py)",
+            assignment,
+        )
+        self.assertIn("한 번의 DAG 실행에 종목 목록", assignment)
         self.assertIn('`tickers=[SPY, QQQ, SMH, NVDA]`', assignment)
-        self.assertIn("15,069 / 15,069", assignment)
-        self.assertIn("40 / 40", assignment)
-        self.assertIn("map_index 0·1·2·3", assignment)
+        self.assertIn("**118,118**", assignment)
+        self.assertIn("총 472개의 1분봉", assignment)
+        self.assertIn("2026-08-12T11:30:00Z", assignment)
+        self.assertIn("2026-08-12T13:31:00Z", assignment)
+        self.assertNotIn("10분 구간", assignment)
         self.assertIn('`tickers=[SPY, QQQ]`', assignment)
         self.assertNotIn('"ticker":"NVDA"', assignment)
         self.assertNotIn("ticker만 SPY로 변경", assignment)
 
-        self.assertIn("manual__2026-08-27T07:30:57.734232+00:00", evidence)
-        self.assertIn("manual__2026-08-27T07:32:54.583401+00:00", evidence)
-        self.assertIn("3,307 | 6,143 | 931 | 4,688 | 15,069", evidence)
+        self.assertIn("manual__2026-08-27T07:56:50.333255+00:00", evidence)
+        self.assertIn("manual__2026-08-27T07:58:07.693993+00:00", evidence)
+        self.assertIn("21,270 | 27,638 | 11,174 | 58,036 | 118,118", evidence)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")

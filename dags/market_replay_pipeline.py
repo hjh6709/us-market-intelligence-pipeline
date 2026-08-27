@@ -44,13 +44,13 @@ def _log_summary(summary: dict) -> None:
             title="Tickers",
         ),
         "start": Param(
-            "2026-08-12T12:25:00Z",
+            "2026-08-12T11:30:00Z",
             type="string",
             format="date-time",
             title="Start time (UTC)",
         ),
         "end": Param(
-            "2026-08-12T12:35:00Z",
+            "2026-08-12T13:31:00Z",
             type="string",
             format="date-time",
             title="End time (UTC)",
