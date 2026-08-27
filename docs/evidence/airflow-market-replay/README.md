@@ -33,6 +33,7 @@ Producer가 확인한 Kafka offset 범위를 Consumer와 Spark에 전달해 각 
 - [`spy-run-summary.json`](spy-run-summary.json): ticker만 변경한 SPY 실행 입력과 단계별 실제 건수
 - [`nvda-airflow-log.txt`](nvda-airflow-log.txt): NVDA의 정제된 Airflow task 로그
 - [`spy-airflow-log.txt`](spy-airflow-log.txt): SPY의 정제된 Airflow task 로그
+- [`postgres-result.txt`](postgres-result.txt): PostgreSQL에서 다시 조회한 집계와 실제 1분봉 샘플 4행
 
 Airflow 전체 로그와 메타데이터 DB는 `airflow-runtime/` 아래에 있으며 Git에서 제외한다. 이 폴더에는 API key, DB 비밀번호, 원시 거래 payload가 없는 작은 결과만 포함한다.
 
@@ -45,3 +46,10 @@ SPY    | 10   | 2026-08-12 12:25:00+00 | 2026-08-12 12:34:00+00 | 3307
 ```
 
 `trade_count_sum`은 저장된 열 개 1분봉의 `trade_count` 합계다. 원시 거래 파일이나 개별 체결 payload를 저장소에 복사한 값이 아니다.
+
+동일한 조회는 [`airflow_market_replay_results.sql`](../../../scripts/evidence/airflow_market_replay_results.sql)로 재현할 수 있다.
+
+```bash
+docker compose exec -T postgres psql -U market -d market -f - \
+  < scripts/evidence/airflow_market_replay_results.sql
+```
