@@ -1,5 +1,9 @@
 import json
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import src.kafka_trace_consumer as trace_consumer
 
 from src.kafka_trace_consumer import (
     KafkaTraceConsumerError,
@@ -23,12 +27,16 @@ class FakeConsumer:
     def __init__(self, messages) -> None:
         self.messages = list(messages)
         self.topics = []
+        self.closed = False
 
     def subscribe(self, topics) -> None:
         self.topics = topics
 
     def poll(self, _timeout):
         return self.messages.pop(0) if self.messages else None
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class AdvancingClock:
@@ -94,6 +102,48 @@ class KafkaTraceConsumerTest(unittest.TestCase):
                 timeout_seconds=5,
                 monotonic=AdvancingClock(),
             )
+
+    def test_callable_run_returns_delivery_summary(self) -> None:
+        if not hasattr(trace_consumer, "run"):
+            self.fail("Kafka trace consumer does not expose a callable run function")
+        consumer = FakeConsumer(
+            [
+                FakeMessage({"trace_id": "airflow-run"}),
+                FakeMessage({"trace_id": "airflow-run"}),
+            ]
+        )
+        args = trace_consumer.parse_args(
+            [
+                "--trace-id",
+                "airflow-run",
+                "--expected-count",
+                "2",
+                "--timeout",
+                "5",
+                "--env-file",
+                str(Path(".env")),
+            ]
+        )
+
+        with (
+            patch.object(trace_consumer, "_read_env_file", return_value={"KAFKA_TOPIC": "raw.market-sip.v1"}),
+            patch.object(trace_consumer, "Consumer", return_value=consumer),
+            patch.object(trace_consumer.time, "monotonic", new=AdvancingClock()),
+        ):
+            summary = trace_consumer.run(args)
+
+        self.assertEqual(
+            summary,
+            {
+                "step": "consumer_count",
+                "topic": "raw.market-sip.v1",
+                "trace_id": "airflow-run",
+                "expected_count": 2,
+                "consumer_received": 2,
+                "scanned_messages": 2,
+            },
+        )
+        self.assertTrue(consumer.closed)
 
 
 if __name__ == "__main__":

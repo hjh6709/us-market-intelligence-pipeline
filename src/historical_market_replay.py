@@ -234,8 +234,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv)
+def run(args: argparse.Namespace) -> dict[str, Any]:
+    """Replay one bounded historical trade window and return a log-safe summary."""
     if _parse_timestamp(args.start) >= _parse_timestamp(args.end):
         raise HistoricalTradeError("start must be before end")
     if not 1 <= args.limit <= 10_000 or args.max_pages < 1:
@@ -277,28 +277,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     duration_seconds = time.monotonic() - replay_started_at
     events_per_second = published / duration_seconds if duration_seconds else 0.0
 
-    print(
-        json.dumps(
-            {
-                "step": "summary",
-                "source": "alpaca_historical_trades",
-                "feed": args.feed,
-                "symbol": args.symbol,
-                "start": args.start,
-                "end": args.end,
-                "pages": pages,
-                "fetched_trades": len(trades),
-                "published_trades": published,
-                "topic": topic,
-                "trace_id": trace_id,
-                "speed_multiplier": args.speed_multiplier,
-                "duration_seconds": round(duration_seconds, 6),
-                "events_per_second": round(events_per_second, 3),
-            },
-            ensure_ascii=False,
-        )
-    )
-    return 0 if published else 2
+    return {
+        "step": "summary",
+        "source": "alpaca_historical_trades",
+        "feed": args.feed,
+        "symbol": args.symbol,
+        "start": args.start,
+        "end": args.end,
+        "pages": pages,
+        "fetched_trades": len(trades),
+        "published_trades": published,
+        "topic": topic,
+        "trace_id": trace_id,
+        "speed_multiplier": args.speed_multiplier,
+        "duration_seconds": round(duration_seconds, 6),
+        "events_per_second": round(events_per_second, 3),
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    summary = run(parse_args(argv))
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0 if summary["published_trades"] else 2
 
 
 if __name__ == "__main__":

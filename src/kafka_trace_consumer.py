@@ -65,8 +65,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv)
+def run(args: argparse.Namespace) -> dict[str, int | str]:
+    """Count one trace and return a log-safe delivery summary."""
     env_values = _read_env_file(args.env_file)
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS") or env_values.get(
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
@@ -93,20 +93,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         consumer.close()
 
-    print(
-        json.dumps(
-            {
-                "step": "consumer_count",
-                "topic": topic,
-                "trace_id": args.trace_id,
-                "expected_count": args.expected_count,
-                "consumer_received": matched,
-                "scanned_messages": scanned,
-            },
-            ensure_ascii=False,
-        )
-    )
-    return 0 if matched == args.expected_count else 2
+    return {
+        "step": "consumer_count",
+        "topic": topic,
+        "trace_id": args.trace_id,
+        "expected_count": args.expected_count,
+        "consumer_received": matched,
+        "scanned_messages": scanned,
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    summary = run(parse_args(argv))
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0 if summary["consumer_received"] == summary["expected_count"] else 2
 
 
 if __name__ == "__main__":
