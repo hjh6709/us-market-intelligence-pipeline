@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -18,6 +19,19 @@ def load_dag_module():
 
 
 class MarketReplayDagTest(unittest.TestCase):
+    def test_ci_installs_project_and_airflow_before_importing_dag(self) -> None:
+        project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+        workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+        lockfile = Path("uv.lock").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "apache-airflow==3.3.0",
+            project["project"]["optional-dependencies"]["airflow"],
+        )
+        self.assertIn("uv sync --frozen --extra airflow", workflow)
+        self.assertIn('source = { editable = "." }', lockfile)
+        self.assertIn('name = "apache-airflow"', lockfile)
+
     def test_editable_install_exposes_src_package_outside_repository(self) -> None:
         environment = os.environ.copy()
         environment.pop("PYTHONPATH", None)

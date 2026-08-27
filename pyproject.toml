@@ -14,5 +14,10 @@ dependencies = [
     "websockets>=15,<16",
 ]
 
+[project.optional-dependencies]
+airflow = [
+    "apache-airflow==3.3.0",
+]
+
 [tool.setuptools]
 packages = ["src"]
