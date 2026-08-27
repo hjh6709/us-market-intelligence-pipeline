@@ -14,7 +14,7 @@ from src.airflow_market_replay import (
     build_consumer_args,
     build_replay_args,
     build_spark_args,
-    validate_run_config,
+    validate_run_configs,
     verify_spark_result,
     verify_stored_result as verify_postgres_result,
 )
@@ -35,11 +35,13 @@ def _log_summary(summary: dict) -> None:
     max_active_runs=1,
     default_args={"retries": 1, "retry_delay": timedelta(seconds=30)},
     params={
-        "ticker": Param(
-            "NVDA",
-            type="string",
-            pattern=r"^[A-Z][A-Z0-9.-]{0,9}$",
-            title="Ticker",
+        "tickers": Param(
+            ["SPY", "QQQ", "SMH", "NVDA"],
+            type="array",
+            items={"type": "string", "pattern": r"^[A-Z][A-Z0-9.-]{0,9}$"},
+            minItems=1,
+            uniqueItems=True,
+            title="Tickers",
         ),
         "start": Param(
             "2026-08-12T12:25:00Z",
@@ -59,15 +61,20 @@ def _log_summary(summary: dict) -> None:
 )
 def build_market_sip_replay_pipeline():
     @task(task_id="validate_run_config")
-    def validate_task() -> dict:
+    def validate_task() -> list[dict]:
         context = get_current_context()
-        config = validate_run_config(
+        configs = validate_run_configs(
             context["params"],
             run_id=context["run_id"],
         )
-        summary = asdict(config)
-        _log_summary({"step": "validated_config", **summary})
-        return summary
+        summaries = [asdict(config) for config in configs]
+        _log_summary(
+            {
+                "step": "validated_configs",
+                "tickers": [config.ticker for config in configs],
+            }
+        )
+        return summaries
 
     @task(task_id="replay_trades_to_kafka")
     def replay_task(config_values: dict) -> dict:
@@ -128,10 +135,10 @@ def build_market_sip_replay_pipeline():
         }
 
     validated = validate_task()
-    replayed = replay_task(validated)
-    delivered = consumer_task(replayed)
-    processed = spark_task(delivered)
-    postgres_task(processed)
+    replayed = replay_task.expand(config_values=validated)
+    delivered = consumer_task.expand(replay_bundle=replayed)
+    processed = spark_task.expand(delivery_bundle=delivered)
+    postgres_task.expand(spark_bundle=processed)
 
 
 market_sip_replay_pipeline = build_market_sip_replay_pipeline()

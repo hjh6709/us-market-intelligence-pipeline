@@ -53,7 +53,11 @@ class MarketReplayDagTest(unittest.TestCase):
 
         self.assertEqual(dag.dag_id, "market_sip_replay_pipeline")
         self.assertIsNone(dag.schedule)
-        self.assertEqual(set(dag.params), {"ticker", "start", "end", "feed"})
+        self.assertEqual(set(dag.params), {"tickers", "start", "end", "feed"})
+        self.assertEqual(
+            dag.params["tickers"],
+            ["SPY", "QQQ", "SMH", "NVDA"],
+        )
         self.assertEqual(
             set(dag.task_ids),
             {
@@ -75,6 +79,9 @@ class MarketReplayDagTest(unittest.TestCase):
         for upstream_id, downstream_id in zip(expected_chain, expected_chain[1:]):
             upstream = dag.get_task(upstream_id)
             self.assertEqual(upstream.downstream_task_ids, {downstream_id})
+
+        for task_id in expected_chain[1:]:
+            self.assertEqual(type(dag.get_task(task_id)).__name__, "DecoratedMappedOperator")
 
 
 if __name__ == "__main__":

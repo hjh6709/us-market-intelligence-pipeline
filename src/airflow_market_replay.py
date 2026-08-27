@@ -32,12 +32,33 @@ class MarketReplayConfig:
     trace_id: str
 
 
+def validate_run_configs(
+    params: Mapping[str, Any],
+    *,
+    run_id: str,
+) -> list[MarketReplayConfig]:
+    """Validate a multi-symbol DAG run and build one config per ticker."""
+    tickers = params.get("tickers")
+    if not isinstance(tickers, list) or not tickers:
+        raise ValueError("tickers must be a non-empty list")
+    if len(tickers) != len(set(tickers)):
+        raise ValueError("tickers must not contain duplicates")
+
+    return [
+        validate_run_config(
+            {**params, "ticker": ticker},
+            run_id=run_id,
+        )
+        for ticker in tickers
+    ]
+
+
 def validate_run_config(
     params: Mapping[str, Any],
     *,
     run_id: str,
 ) -> MarketReplayConfig:
-    """Validate one manual DAG run and derive its stable Kafka trace ID."""
+    """Validate one symbol config and derive its stable Kafka trace ID."""
     ticker = str(params.get("ticker", "")).strip()
     if not TICKER_PATTERN.fullmatch(ticker):
         raise ValueError("ticker must be a valid uppercase market symbol")

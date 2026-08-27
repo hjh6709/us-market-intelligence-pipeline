@@ -48,8 +48,10 @@ class AssignmentDocumentationTest(unittest.TestCase):
         )
         self.assertIn("NVDA에서 실제로 발생한 개별 체결 한 건", readme)
         self.assertIn("Spark 1분 집계 121행", readme)
-        self.assertIn("### C. Airflow 입력값 변경 실행", readme)
-        self.assertIn("NVDA 4,688건과 SPY 3,307건", readme)
+        self.assertIn("### C. Airflow 다종목 자동화 실행", readme)
+        self.assertIn("Dynamic Task Mapping", readme)
+        self.assertIn('"tickers":["SPY","QQQ","SMH","NVDA"]', readme)
+        self.assertIn("원시 체결 15,069건과 1분봉 40행", readme)
         self.assertIn("uv sync --extra airflow", readme)
         self.assertIn("airflow dags test market_sip_replay_pipeline", readme)
         self.assertIn("Airflow schedule과 누락 구간 자동 backfill·알림 추가", readme)
@@ -131,6 +133,25 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("source = 'alpaca_replay'", evidence_sql)
         self.assertIn("feed = 'sip'", evidence_sql)
         self.assertIn("HAVING count(*) > 1", evidence_sql)
+
+    def test_airflow_assignment_documents_multi_symbol_mapped_run(self) -> None:
+        assignment = Path("docs/airflow-assignment.md").read_text(encoding="utf-8")
+        evidence = Path(
+            "docs/evidence/airflow-market-replay/README.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Dynamic Task Mapping", assignment)
+        self.assertIn('`tickers=[SPY, QQQ, SMH, NVDA]`', assignment)
+        self.assertIn("15,069 / 15,069", assignment)
+        self.assertIn("40 / 40", assignment)
+        self.assertIn("map_index 0·1·2·3", assignment)
+        self.assertIn('`tickers=[SPY, QQQ]`', assignment)
+        self.assertNotIn('"ticker":"NVDA"', assignment)
+        self.assertNotIn("ticker만 SPY로 변경", assignment)
+
+        self.assertIn("manual__2026-08-27T07:30:57.734232+00:00", evidence)
+        self.assertIn("manual__2026-08-27T07:32:54.583401+00:00", evidence)
+        self.assertIn("3,307 | 6,143 | 931 | 4,688 | 15,069", evidence)
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")

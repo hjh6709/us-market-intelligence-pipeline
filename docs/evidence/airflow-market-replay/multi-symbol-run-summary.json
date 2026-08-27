@@ -1,0 +1,31 @@
+{
+  "captured_at": "2026-08-27",
+  "source": "local Airflow task logs and PostgreSQL verification",
+  "run_a": {
+    "run_id": "manual__2026-08-27T07:30:57.734232+00:00",
+    "params": {
+      "tickers": ["SPY", "QQQ", "SMH", "NVDA"],
+      "start": "2026-08-12T12:25:00Z",
+      "end": "2026-08-12T12:35:00Z",
+      "feed": "sip"
+    },
+    "state": "success",
+    "symbols": {
+      "SPY": {"published": 3307, "consumed": 3307, "spark_input": 3307, "validation_errors": 0, "duplicates": 0, "price_eligible": 1788, "stored_bars": 10},
+      "QQQ": {"published": 6143, "consumed": 6143, "spark_input": 6143, "validation_errors": 0, "duplicates": 0, "price_eligible": 2561, "stored_bars": 10},
+      "SMH": {"published": 931, "consumed": 931, "spark_input": 931, "validation_errors": 0, "duplicates": 0, "price_eligible": 315, "stored_bars": 10},
+      "NVDA": {"published": 4688, "consumed": 4688, "spark_input": 4688, "validation_errors": 0, "duplicates": 0, "price_eligible": 824, "stored_bars": 10}
+    }
+  },
+  "run_b": {
+    "run_id": "manual__2026-08-27T07:32:54.583401+00:00",
+    "params": {
+      "tickers": ["SPY", "QQQ"],
+      "start": "2026-08-12T12:25:00Z",
+      "end": "2026-08-12T12:35:00Z",
+      "feed": "sip"
+    },
+    "state": "success",
+    "purpose": "verify that the same DAG accepts a changed ticker list without code changes"
+  }
+}
