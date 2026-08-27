@@ -1,9 +1,9 @@
 DAG: market_sip_replay_pipeline
-Run: manual__2026-08-27T05:56:49.007589+00:00
+Run: manual__2026-08-27T06:33:18.770183+00:00
 
 validate_run_config state=success ticker=SPY start=2026-08-12T12:25:00Z end=2026-08-12T12:35:00Z feed=sip
-replay_trades_to_kafka state=success fetched_trades=3307 published_trades=3307 topic=raw.market-sip.v1
-verify_kafka_delivery state=success expected_count=3307 consumer_received=3307 scanned_messages=7995
+replay_trades_to_kafka state=success fetched_trades=3307 published_trades=3307 topic=raw.market-sip.v1 partition=1 offset_start=75407 offset_end_exclusive=78714
+verify_kafka_delivery state=success expected_count=3307 consumer_received=3307 scanned_messages=3307 bounded_offsets=true
 build_minute_bars_with_spark state=success spark_input_trades=3307 invalid=0 unique=3307 output_bars=10 postgres_upserted_bars=10
 verify_stored_result state=success expected_bars=10 stored_bars=10
 DagRun state=success

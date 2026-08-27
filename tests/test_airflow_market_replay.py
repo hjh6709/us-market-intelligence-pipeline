@@ -17,7 +17,7 @@ class AirflowMarketReplayConfigTest(unittest.TestCase):
 
         config = target.validate_run_config(
             {
-                "ticker": "spy",
+                "ticker": "SPY",
                 "start": "2026-08-12T12:25:00Z",
                 "end": "2026-08-12T12:35:00Z",
                 "feed": "sip",
@@ -29,6 +29,20 @@ class AirflowMarketReplayConfigTest(unittest.TestCase):
         self.assertEqual(config.start, "2026-08-12T12:25:00Z")
         self.assertEqual(config.end, "2026-08-12T12:35:00Z")
         self.assertEqual(config.feed, "sip")
+
+    def test_rejects_lowercase_ticker_consistently_with_dag_schema(self) -> None:
+        target = load_target()
+
+        with self.assertRaisesRegex(ValueError, "ticker"):
+            target.validate_run_config(
+                {
+                    "ticker": "spy",
+                    "start": "2026-08-12T12:25:00Z",
+                    "end": "2026-08-12T12:35:00Z",
+                    "feed": "sip",
+                },
+                run_id="manual__lowercase",
+            )
 
     def test_rejects_invalid_ticker(self) -> None:
         target = load_target()
@@ -152,6 +166,14 @@ class AirflowMarketReplayStageTest(unittest.TestCase):
             "trace_id": self.config.trace_id,
             "published_trades": 321,
             "topic": "raw.market-sip.v1",
+            "offset_ranges": [
+                {
+                    "topic": "raw.market-sip.v1",
+                    "partition": 2,
+                    "start": 100,
+                    "end": 421,
+                }
+            ],
         }
         consumer_args = self.target.build_consumer_args(
             replay_summary,
@@ -167,9 +189,35 @@ class AirflowMarketReplayStageTest(unittest.TestCase):
         self.assertEqual(replay_args.trace_id, self.config.trace_id)
         self.assertEqual(consumer_args.expected_count, 321)
         self.assertEqual(consumer_args.topic, "raw.market-sip.v1")
+        self.assertEqual(consumer_args.offset_ranges, replay_summary["offset_ranges"])
         self.assertEqual(spark_args.symbols, ["SPY"])
         self.assertEqual(spark_args.topic, "raw.market-sip.v1")
         self.assertEqual(spark_args.trace_id, self.config.trace_id)
+        self.assertEqual(spark_args.offset_ranges, replay_summary["offset_ranges"])
+
+    def test_fails_when_spark_stage_loses_or_rejects_delivered_trades(self) -> None:
+        good = {
+            "published_trades": 100,
+            "consumer_received": 100,
+            "spark_input_trades": 100,
+            "spark_invalid_trades": 0,
+            "spark_valid_unique_trades": 100,
+            "spark_output_bars": 10,
+            "postgres_upserted_bars": 10,
+        }
+
+        self.target.verify_spark_result(good)
+        for field, bad_value in (
+            ("consumer_received", 99),
+            ("spark_input_trades", 99),
+            ("spark_invalid_trades", 1),
+            ("spark_valid_unique_trades", 99),
+            ("postgres_upserted_bars", 9),
+        ):
+            broken = {**good, field: bad_value}
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(RuntimeError, "integrity"):
+                    self.target.verify_spark_result(broken)
 
     def test_verifies_postgres_count_for_requested_symbol_and_window(self) -> None:
         connection = FakeConnection(("SPY", 10))

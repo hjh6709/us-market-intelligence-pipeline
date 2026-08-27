@@ -38,7 +38,7 @@ def validate_run_config(
     run_id: str,
 ) -> MarketReplayConfig:
     """Validate one manual DAG run and derive its stable Kafka trace ID."""
-    ticker = str(params.get("ticker", "")).strip().upper()
+    ticker = str(params.get("ticker", "")).strip()
     if not TICKER_PATTERN.fullmatch(ticker):
         raise ValueError("ticker must be a valid uppercase market symbol")
 
@@ -107,6 +107,7 @@ def build_consumer_args(
         trace_id=str(replay_summary["trace_id"]),
         expected_count=published,
         topic=str(replay_summary["topic"]),
+        offset_ranges=replay_summary["offset_ranges"],
         timeout=timeout_seconds,
         env_file=env_file,
     )
@@ -129,7 +130,25 @@ def build_spark_args(
         or env_values.get(
             "DATABASE_URL", "postgresql://market:market@localhost:55432/market"
         ),
+        offset_ranges=replay_summary["offset_ranges"],
     )
+
+
+def verify_spark_result(summary: Mapping[str, Any]) -> None:
+    """Fail a DAG run when records diverge between Kafka, Spark, and storage."""
+    published = int(summary["published_trades"])
+    received = int(summary["consumer_received"])
+    spark_input = int(summary["spark_input_trades"])
+    invalid = int(summary["spark_invalid_trades"])
+    unique = int(summary["spark_valid_unique_trades"])
+    output_bars = int(summary["spark_output_bars"])
+    stored_bars = int(summary["postgres_upserted_bars"])
+    if not (
+        published == received == spark_input == unique
+        and invalid == 0
+        and output_bars == stored_bars
+    ):
+        raise RuntimeError("pipeline integrity counts did not match")
 
 
 def verify_stored_result(

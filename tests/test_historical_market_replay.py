@@ -46,6 +46,9 @@ class RecordingPublisher:
     def __init__(self) -> None:
         self.envelopes = []
         self.closed = False
+        self.offset_ranges = [
+            {"topic": "raw.market-sip.v1", "partition": 1, "start": 20, "end": 21}
+        ]
 
     def publish(self, envelope) -> None:
         self.envelopes.append(envelope)
@@ -223,6 +226,14 @@ class HistoricalMarketReplayTest(unittest.TestCase):
                 "speed_multiplier": None,
                 "duration_seconds": 2.0,
                 "events_per_second": 0.5,
+                "offset_ranges": [
+                    {
+                        "topic": "raw.market-sip.v1",
+                        "partition": 1,
+                        "start": 20,
+                        "end": 21,
+                    }
+                ],
             },
         )
         self.assertTrue(publisher.closed)

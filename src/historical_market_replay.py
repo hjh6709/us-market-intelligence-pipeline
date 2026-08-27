@@ -293,6 +293,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "speed_multiplier": args.speed_multiplier,
         "duration_seconds": round(duration_seconds, 6),
         "events_per_second": round(events_per_second, 3),
+        "offset_ranges": publisher.offset_ranges,
     }
 
 

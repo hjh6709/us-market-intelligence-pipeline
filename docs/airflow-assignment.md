@@ -62,7 +62,7 @@ Kafka 원시 메시지를 Airflow XCom에 넣지는 않는다. XCom에는 ticker
 | PostgreSQL 저장 확인 | 10 | 10 |
 | DAG 상태 | success | success |
 
-`scanned_messages`는 Consumer가 공통 토픽에서 대상 trace를 찾기 위해 읽은 전체 메시지 수다. SPY 실행에서는 먼저 들어간 NVDA 메시지를 포함해 7,995건을 훑고, 그중 SPY trace 3,307건을 확인했다. 따라서 SPY 원본 건수는 7,995건이 아니라 3,307건이다.
+Producer는 Kafka가 실제로 저장한 파티션과 시작·종료 offset을 실행 요약에 남긴다. Consumer와 Spark는 토픽 전체가 아니라 이 범위만 읽는다. 따라서 NVDA 실행은 4,688건을 발행하고 4,688건만 스캔했으며, 뒤이어 실행한 SPY도 앞선 NVDA 데이터를 다시 읽지 않고 SPY의 3,307건만 스캔했다. 재시도하더라도 해당 시도의 offset 범위만 처리하므로 이전 시도의 부분 발행이 현재 실행에 섞이지 않는다.
 
 실제 실행 요약과 정제된 로그는 [Airflow 실행 증거](evidence/airflow-market-replay/README.md)에 있다.
 
@@ -128,6 +128,6 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 ## 현재 구현과 다음 단계
 
-현재 구현된 것은 수동으로 입력값을 넣어 실행하는 하나의 DAG, 일시적 실패에 대한 1회 retry, 실행별 trace 분리, Kafka 건수 검사와 PostgreSQL 저장 검사까지다.
+현재 구현된 것은 수동으로 입력값을 넣어 실행하는 하나의 DAG, 일시적 실패에 대한 1회 retry, 실행별 trace와 Kafka offset 범위 분리, Producer·Consumer·Spark 단계별 건수 검사와 PostgreSQL 저장 검사까지다. 발행·수신·Spark 입력·유효 고유 건수가 다르거나 validation 오류가 하나라도 있으면 DAG를 실패시킨다.
 
 아직 구현하지 않은 것은 정기 schedule, 거래일 달력과 연결한 자동 구간 선택, 누락 분 탐지 후 자동 backfill, 실패 알림이다. 다음 단계에서는 Airflow가 미수집 구간을 찾고 동일 DAG를 backfill하도록 확장하되, 이번 결과와 계획을 구분한다.

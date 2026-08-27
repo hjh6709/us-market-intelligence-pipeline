@@ -12,9 +12,18 @@ from src.kafka_trace_consumer import (
 
 
 class FakeMessage:
-    def __init__(self, value: dict | bytes, error=None) -> None:
+    def __init__(
+        self,
+        value: dict | bytes,
+        error=None,
+        *,
+        partition: int = 0,
+        offset: int = 0,
+    ) -> None:
         self._value = value if isinstance(value, bytes) else json.dumps(value).encode()
         self._error = error
+        self._partition = partition
+        self._offset = offset
 
     def value(self) -> bytes:
         return self._value
@@ -22,15 +31,21 @@ class FakeMessage:
     def error(self):
         return self._error
 
+    def partition(self) -> int:
+        return self._partition
+
+    def offset(self) -> int:
+        return self._offset
+
 
 class FakeConsumer:
     def __init__(self, messages) -> None:
         self.messages = list(messages)
-        self.topics = []
+        self.assignments = []
         self.closed = False
 
-    def subscribe(self, topics) -> None:
-        self.topics = topics
+    def assign(self, assignments) -> None:
+        self.assignments = assignments
 
     def poll(self, _timeout):
         return self.messages.pop(0) if self.messages else None
@@ -58,18 +73,19 @@ class KafkaTraceConsumerTest(unittest.TestCase):
                 "2",
                 "--topic",
                 "raw.market-sip.v1",
+                "--offset-ranges",
+                '[{"topic":"raw.market-sip.v1","partition":0,"start":0,"end":2}]',
             ]
         )
 
         self.assertEqual(args.topic, "raw.market-sip.v1")
 
-    def test_counts_only_matching_trace_and_stops_at_expected_count(self) -> None:
+    def test_counts_only_messages_inside_the_published_offset_range(self) -> None:
         consumer = FakeConsumer(
             [
-                FakeMessage({"trace_id": "older"}),
-                FakeMessage({"trace_id": "assignment-run"}),
-                FakeMessage({"trace_id": "assignment-run"}),
-                FakeMessage({"trace_id": "assignment-run"}),
+                FakeMessage({"trace_id": "assignment-run"}, partition=2, offset=41),
+                FakeMessage({"trace_id": "assignment-run"}, partition=2, offset=42),
+                FakeMessage({"trace_id": "assignment-run"}, partition=2, offset=43),
             ]
         )
 
@@ -78,12 +94,40 @@ class KafkaTraceConsumerTest(unittest.TestCase):
             topic="raw.market.v1",
             trace_id="assignment-run",
             expected_count=2,
+            offset_ranges=[
+                {"topic": "raw.market.v1", "partition": 2, "start": 41, "end": 43}
+            ],
             timeout_seconds=5,
             monotonic=AdvancingClock(),
         )
 
-        self.assertEqual((matched, scanned), (2, 3))
-        self.assertEqual(consumer.topics, ["raw.market.v1"])
+        self.assertEqual((matched, scanned), (2, 2))
+        self.assertEqual(len(consumer.assignments), 1)
+        self.assertEqual(consumer.assignments[0].partition, 2)
+        self.assertEqual(consumer.assignments[0].offset, 41)
+
+    def test_counts_extra_same_trace_record_within_bounded_range(self) -> None:
+        consumer = FakeConsumer(
+            [
+                FakeMessage({"trace_id": "assignment-run"}, offset=10),
+                FakeMessage({"trace_id": "assignment-run"}, offset=11),
+                FakeMessage({"trace_id": "assignment-run"}, offset=12),
+            ]
+        )
+
+        matched, scanned = count_trace_messages(
+            consumer,
+            topic="raw.market.v1",
+            trace_id="assignment-run",
+            expected_count=2,
+            offset_ranges=[
+                {"topic": "raw.market.v1", "partition": 0, "start": 10, "end": 13}
+            ],
+            timeout_seconds=5,
+            monotonic=AdvancingClock(),
+        )
+
+        self.assertEqual((matched, scanned), (3, 3))
 
     def test_ignores_malformed_json_and_returns_partial_count_on_timeout(self) -> None:
         consumer = FakeConsumer(
@@ -96,9 +140,12 @@ class KafkaTraceConsumerTest(unittest.TestCase):
         matched, scanned = count_trace_messages(
             consumer,
             topic="raw.market.v1",
-            trace_id="assignment-run",
-            expected_count=2,
-            timeout_seconds=0.5,
+                trace_id="assignment-run",
+                expected_count=2,
+                offset_ranges=[
+                    {"topic": "raw.market.v1", "partition": 0, "start": 0, "end": 2}
+                ],
+                timeout_seconds=0.5,
             monotonic=AdvancingClock(),
         )
 
@@ -113,6 +160,9 @@ class KafkaTraceConsumerTest(unittest.TestCase):
                 topic="raw.market.v1",
                 trace_id="assignment-run",
                 expected_count=1,
+                offset_ranges=[
+                    {"topic": "raw.market.v1", "partition": 0, "start": 0, "end": 1}
+                ],
                 timeout_seconds=5,
                 monotonic=AdvancingClock(),
             )
@@ -132,6 +182,8 @@ class KafkaTraceConsumerTest(unittest.TestCase):
                 "airflow-run",
                 "--expected-count",
                 "2",
+                "--offset-ranges",
+                '[{"topic":"raw.market-sip.v1","partition":0,"start":0,"end":2}]',
                 "--timeout",
                 "5",
                 "--env-file",
@@ -155,6 +207,14 @@ class KafkaTraceConsumerTest(unittest.TestCase):
                 "expected_count": 2,
                 "consumer_received": 2,
                 "scanned_messages": 2,
+                "offset_ranges": [
+                    {
+                        "topic": "raw.market-sip.v1",
+                        "partition": 0,
+                        "start": 0,
+                        "end": 2,
+                    }
+                ],
             },
         )
         self.assertTrue(consumer.closed)

@@ -25,6 +25,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--trace-id", required=True)
     parser.add_argument("--topic", default="raw.market-sip.v1")
     parser.add_argument("--symbols", nargs="+", default=["NVDA"])
+    parser.add_argument("--offset-ranges", required=True)
     parser.add_argument(
         "--bootstrap-servers",
         default=_load_setting("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
@@ -38,14 +39,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> dict[str, int | str]:
+    offset_ranges = (
+        json.loads(args.offset_ranges)
+        if isinstance(args.offset_ranges, str)
+        else args.offset_ranges
+    )
+    assignment, starting_offsets, ending_offsets = _spark_offset_json(
+        args.topic, offset_ranges
+    )
     spark = create_market_spark("cpi-sip-trade-batch")
     try:
         kafka = (
             spark.read.format("kafka")
             .option("kafka.bootstrap.servers", args.bootstrap_servers)
-            .option("subscribe", args.topic)
-            .option("startingOffsets", "earliest")
-            .option("endingOffsets", "latest")
+            .option("assign", assignment)
+            .option("startingOffsets", starting_offsets)
+            .option("endingOffsets", ending_offsets)
             .option("failOnDataLoss", "true")
             .load()
             .select("value", "topic", "partition", "offset", "timestamp")
@@ -86,6 +95,26 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
         }
     finally:
         spark.stop()
+
+
+def _spark_offset_json(topic: str, offset_ranges) -> tuple[str, str, str]:
+    starts = {}
+    ends = {}
+    partitions = []
+    for item in offset_ranges:
+        if item["topic"] != topic:
+            raise ValueError("offset range topic does not match Spark topic")
+        partition = str(int(item["partition"]))
+        partitions.append(int(item["partition"]))
+        starts[partition] = int(item["start"])
+        ends[partition] = int(item["end"])
+    if not starts:
+        raise ValueError("offset_ranges must not be empty")
+    return (
+        json.dumps({topic: partitions}, separators=(",", ":")),
+        json.dumps({topic: starts}, separators=(",", ":")),
+        json.dumps({topic: ends}, separators=(",", ":")),
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

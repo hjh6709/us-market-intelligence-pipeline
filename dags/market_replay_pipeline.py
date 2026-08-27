@@ -15,6 +15,7 @@ from src.airflow_market_replay import (
     build_replay_args,
     build_spark_args,
     validate_run_config,
+    verify_spark_result,
     verify_stored_result as verify_postgres_result,
 )
 
@@ -98,6 +99,13 @@ def build_market_sip_replay_pipeline():
 
         config = MarketReplayConfig(**delivery_bundle["config"])
         spark_summary = run(build_spark_args(config, delivery_bundle["replay"]))
+        verify_spark_result(
+            {
+                **delivery_bundle["replay"],
+                **delivery_bundle["consumer"],
+                **spark_summary,
+            }
+        )
         _log_summary(spark_summary)
         return {**delivery_bundle, "spark": spark_summary}
 

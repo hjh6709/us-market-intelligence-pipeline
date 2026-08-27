@@ -25,7 +25,7 @@
 | PostgreSQL 검증 행 | 10 | 10 |
 | DAG 최종 상태 | success | success |
 
-Kafka Consumer의 `scanned_messages`는 토픽에서 해당 trace를 찾기 위해 훑은 전체 메시지 수다. 두 번째 SPY 실행에서는 앞선 NVDA 메시지도 같은 공통 토픽에 있었기 때문에 7,995건을 읽어 그중 SPY trace 3,307건을 확인했다. 이는 SPY 데이터가 7,995건이라는 뜻이 아니다.
+Producer가 확인한 Kafka offset 범위를 Consumer와 Spark에 전달해 각 실행이 쓴 범위만 읽었다. NVDA는 offset `70719` 이상 `75407` 미만의 4,688건, SPY는 `75407` 이상 `78714` 미만의 3,307건이다. 따라서 두 번째 SPY 실행은 앞선 NVDA 메시지를 다시 훑지 않았고 `scanned_messages`도 3,307건으로 수신 건수와 같다.
 
 ## 제출 파일
 
