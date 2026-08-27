@@ -217,6 +217,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--feed", choices=("iex", "sip"), default="iex")
+    parser.add_argument("--topic", default=None)
     parser.add_argument("--limit", type=int, default=10_000)
     parser.add_argument("--max-pages", type=int, default=10)
     parser.add_argument(
@@ -248,7 +249,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS") or env_values.get(
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
     )
-    topic = os.environ.get("KAFKA_TOPIC") or env_values.get(
+    topic = args.topic or os.environ.get("KAFKA_TOPIC") or env_values.get(
         "KAFKA_TOPIC", DEFAULT_TOPIC
     )
     trades, pages = fetch_all_trades(

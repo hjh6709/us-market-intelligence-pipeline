@@ -172,6 +172,10 @@ class HistoricalMarketReplayTest(unittest.TestCase):
             50,
         )
         self.assertEqual(parse_args([*base, "--feed", "sip"]).feed, "sip")
+        self.assertEqual(
+            parse_args([*base, "--topic", "raw.market-sip.v1"]).topic,
+            "raw.market-sip.v1",
+        )
 
     def test_callable_run_returns_replay_summary_without_printing(self) -> None:
         if not hasattr(historical_replay, "run"):

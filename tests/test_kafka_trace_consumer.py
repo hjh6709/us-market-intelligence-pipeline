@@ -49,6 +49,20 @@ class AdvancingClock:
 
 
 class KafkaTraceConsumerTest(unittest.TestCase):
+    def test_cli_accepts_explicit_topic(self) -> None:
+        args = trace_consumer.parse_args(
+            [
+                "--trace-id",
+                "airflow-run",
+                "--expected-count",
+                "2",
+                "--topic",
+                "raw.market-sip.v1",
+            ]
+        )
+
+        self.assertEqual(args.topic, "raw.market-sip.v1")
+
     def test_counts_only_matching_trace_and_stops_at_expected_count(self) -> None:
         consumer = FakeConsumer(
             [

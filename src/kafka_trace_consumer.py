@@ -60,6 +60,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trace-id", required=True)
     parser.add_argument("--expected-count", type=int, required=True)
+    parser.add_argument("--topic", default=None)
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     return parser.parse_args(argv)
@@ -71,7 +72,7 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS") or env_values.get(
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
     )
-    topic = os.environ.get("KAFKA_TOPIC") or env_values.get(
+    topic = args.topic or os.environ.get("KAFKA_TOPIC") or env_values.get(
         "KAFKA_TOPIC", DEFAULT_TOPIC
     )
     consumer = Consumer(
