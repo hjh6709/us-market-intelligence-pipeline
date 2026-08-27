@@ -36,10 +36,33 @@ class KafkaPublisher:
         self.topic = topic
         self._producer = producer if producer is not None else Producer(config)
         self._delivery_errors: list[str] = []
+        self._delivered_offsets: list[tuple[str, int, int]] = []
 
-    def _on_delivery(self, error: Any, _message: Any) -> None:
+    def _on_delivery(self, error: Any, message: Any) -> None:
         if error is not None:
             self._delivery_errors.append(str(error))
+            return
+        self._delivered_offsets.append(
+            (message.topic(), int(message.partition()), int(message.offset()))
+        )
+
+    @property
+    def offset_ranges(self) -> list[dict[str, int | str]]:
+        """Return inclusive-start/exclusive-end ranges confirmed by Kafka."""
+        ranges: dict[tuple[str, int], list[int]] = {}
+        for topic, partition, offset in self._delivered_offsets:
+            bounds = ranges.setdefault((topic, partition), [offset, offset + 1])
+            bounds[0] = min(bounds[0], offset)
+            bounds[1] = max(bounds[1], offset + 1)
+        return [
+            {
+                "topic": topic,
+                "partition": partition,
+                "start": bounds[0],
+                "end": bounds[1],
+            }
+            for (topic, partition), bounds in sorted(ranges.items())
+        ]
 
     def publish(self, envelope: Mapping[str, Any]) -> None:
         symbol = str(envelope["payload"]["S"])

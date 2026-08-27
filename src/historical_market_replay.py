@@ -217,6 +217,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--feed", choices=("iex", "sip"), default="iex")
+    parser.add_argument("--topic", default=None)
     parser.add_argument("--limit", type=int, default=10_000)
     parser.add_argument("--max-pages", type=int, default=10)
     parser.add_argument(
@@ -234,8 +235,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = parse_args(argv)
+def run(args: argparse.Namespace) -> dict[str, Any]:
+    """Replay one bounded historical trade window and return a log-safe summary."""
     if _parse_timestamp(args.start) >= _parse_timestamp(args.end):
         raise HistoricalTradeError("start must be before end")
     if not 1 <= args.limit <= 10_000 or args.max_pages < 1:
@@ -248,7 +249,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS") or env_values.get(
         "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
     )
-    topic = os.environ.get("KAFKA_TOPIC") or env_values.get(
+    topic = args.topic or os.environ.get("KAFKA_TOPIC") or env_values.get(
         "KAFKA_TOPIC", DEFAULT_TOPIC
     )
     trades, pages = fetch_all_trades(
@@ -277,28 +278,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     duration_seconds = time.monotonic() - replay_started_at
     events_per_second = published / duration_seconds if duration_seconds else 0.0
 
-    print(
-        json.dumps(
-            {
-                "step": "summary",
-                "source": "alpaca_historical_trades",
-                "feed": args.feed,
-                "symbol": args.symbol,
-                "start": args.start,
-                "end": args.end,
-                "pages": pages,
-                "fetched_trades": len(trades),
-                "published_trades": published,
-                "topic": topic,
-                "trace_id": trace_id,
-                "speed_multiplier": args.speed_multiplier,
-                "duration_seconds": round(duration_seconds, 6),
-                "events_per_second": round(events_per_second, 3),
-            },
-            ensure_ascii=False,
-        )
-    )
-    return 0 if published else 2
+    return {
+        "step": "summary",
+        "source": "alpaca_historical_trades",
+        "feed": args.feed,
+        "symbol": args.symbol,
+        "start": args.start,
+        "end": args.end,
+        "pages": pages,
+        "fetched_trades": len(trades),
+        "published_trades": published,
+        "topic": topic,
+        "trace_id": trace_id,
+        "speed_multiplier": args.speed_multiplier,
+        "duration_seconds": round(duration_seconds, 6),
+        "events_per_second": round(events_per_second, 3),
+        "offset_ranges": publisher.offset_ranges,
+    }
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    summary = run(parse_args(argv))
+    print(json.dumps(summary, ensure_ascii=False))
+    return 0 if summary["published_trades"] else 2
 
 
 if __name__ == "__main__":

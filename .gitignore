@@ -1,5 +1,6 @@
 .DS_Store
 .env*
+*.egg-info/
 !.env.example
 .venv/
 .worktrees/

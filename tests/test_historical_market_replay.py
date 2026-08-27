@@ -3,6 +3,9 @@ import json
 import unittest
 from datetime import UTC, datetime
 from urllib.error import HTTPError
+from unittest.mock import patch
+
+import src.historical_market_replay as historical_replay
 
 from src.historical_market_replay import (
     AlpacaHistoricalClient,
@@ -42,9 +45,16 @@ class RecordingOpener:
 class RecordingPublisher:
     def __init__(self) -> None:
         self.envelopes = []
+        self.closed = False
+        self.offset_ranges = [
+            {"topic": "raw.market-sip.v1", "partition": 1, "start": 20, "end": 21}
+        ]
 
     def publish(self, envelope) -> None:
         self.envelopes.append(envelope)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class HistoricalMarketReplayTest(unittest.TestCase):
@@ -165,6 +175,68 @@ class HistoricalMarketReplayTest(unittest.TestCase):
             50,
         )
         self.assertEqual(parse_args([*base, "--feed", "sip"]).feed, "sip")
+        self.assertEqual(
+            parse_args([*base, "--topic", "raw.market-sip.v1"]).topic,
+            "raw.market-sip.v1",
+        )
+
+    def test_callable_run_returns_replay_summary_without_printing(self) -> None:
+        if not hasattr(historical_replay, "run"):
+            self.fail("historical replay does not expose a callable run function")
+        args = parse_args(
+            [
+                "--symbol",
+                "SPY",
+                "--start",
+                "2026-08-12T12:25:00Z",
+                "--end",
+                "2026-08-12T12:35:00Z",
+                "--feed",
+                "sip",
+                "--trace-id",
+                "airflow-market-replay-test",
+            ]
+        )
+        trades = [self.trade(1, "2026-08-12T12:25:01Z")]
+        publisher = RecordingPublisher()
+
+        with (
+            patch.object(historical_replay, "load_credentials", return_value=("id", "secret")),
+            patch.object(historical_replay, "_read_env_file", return_value={"KAFKA_TOPIC": "raw.market-sip.v1"}),
+            patch.object(historical_replay, "fetch_all_trades", return_value=(trades, 1)),
+            patch.object(historical_replay, "KafkaPublisher", return_value=publisher),
+            patch.object(historical_replay.time, "monotonic", side_effect=[100.0, 102.0]),
+        ):
+            summary = historical_replay.run(args)
+
+        self.assertEqual(
+            summary,
+            {
+                "step": "summary",
+                "source": "alpaca_historical_trades",
+                "feed": "sip",
+                "symbol": "SPY",
+                "start": "2026-08-12T12:25:00Z",
+                "end": "2026-08-12T12:35:00Z",
+                "pages": 1,
+                "fetched_trades": 1,
+                "published_trades": 1,
+                "topic": "raw.market-sip.v1",
+                "trace_id": "airflow-market-replay-test",
+                "speed_multiplier": None,
+                "duration_seconds": 2.0,
+                "events_per_second": 0.5,
+                "offset_ranges": [
+                    {
+                        "topic": "raw.market-sip.v1",
+                        "partition": 1,
+                        "start": 20,
+                        "end": 21,
+                    }
+                ],
+            },
+        )
+        self.assertTrue(publisher.closed)
 
     @staticmethod
     def trade(trade_id: int, timestamp: str) -> dict:

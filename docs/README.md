@@ -15,6 +15,7 @@ README에는 과제 설명과 실행에 필요한 핵심만 둔다. 세부 계�
 | [course-alignment.md](course-alignment.md) | 과정 기술과 구현·증거의 연결 |
 | [api-selection.md](api-selection.md) | 무료 API 비교와 Alpaca 선택 근거 |
 | [kafka-spark-assignment.md](kafka-spark-assignment.md) | CPI 발표 구간을 재현한 Kafka·Spark 과제 실행법·증거 |
+| [airflow-assignment.md](airflow-assignment.md) | 기존 Kafka·Spark 경로를 ticker·날짜 입력값으로 실행하는 Airflow 과제 |
 
 4주 일정과 회차별 완료 기준은 [PROJECT_PLAN.md](../PROJECT_PLAN.md)에 있다.
 

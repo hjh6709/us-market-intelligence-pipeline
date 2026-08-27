@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "for-my-stock"
 version = "0.1.0"
@@ -9,3 +13,11 @@ dependencies = [
     "pyspark==4.2.0",
     "websockets>=15,<16",
 ]
+
+[project.optional-dependencies]
+airflow = [
+    "apache-airflow==3.3.0",
+]
+
+[tool.setuptools]
+packages = ["src"]

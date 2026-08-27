@@ -27,19 +27,40 @@ class RecordingProducer:
         self.attempts = 0
         self.poll_calls = []
         self.records = []
+        self.next_offset = 41
 
     def produce(self, topic, *, key, value, on_delivery) -> None:
         self.attempts += 1
         if self.attempts <= self.buffer_failures:
             raise BufferError("queue full")
         self.records.append({"topic": topic, "key": key, "value": value})
-        on_delivery(self.delivery_error, None)
+        on_delivery(
+            self.delivery_error,
+            DeliveryMessage(topic, partition=2, offset=self.next_offset),
+        )
+        self.next_offset += 1
 
     def poll(self, timeout) -> None:
         self.poll_calls.append(timeout)
 
     def flush(self, timeout) -> int:
         return self.remaining
+
+
+class DeliveryMessage:
+    def __init__(self, topic: str, *, partition: int, offset: int) -> None:
+        self._topic = topic
+        self._partition = partition
+        self._offset = offset
+
+    def topic(self) -> str:
+        return self._topic
+
+    def partition(self) -> int:
+        return self._partition
+
+    def offset(self) -> int:
+        return self._offset
 
 
 class KafkaPublisherTest(unittest.TestCase):
@@ -96,6 +117,19 @@ class KafkaPublisherTest(unittest.TestCase):
 
         with self.assertRaisesRegex(KafkaDeliveryError, "1 message"):
             publisher.close()
+
+    def test_reports_exact_written_offset_ranges_after_delivery(self) -> None:
+        recorder = RecordingProducer()
+        publisher = KafkaPublisher("localhost:9092", producer=recorder)
+
+        publisher.publish(ENVELOPE)
+        publisher.publish(ENVELOPE)
+        publisher.close()
+
+        self.assertEqual(
+            publisher.offset_ranges,
+            [{"topic": "raw.market.v1", "partition": 2, "start": 41, "end": 43}],
+        )
 
 
 if __name__ == "__main__":

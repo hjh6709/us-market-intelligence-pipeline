@@ -1,0 +1,43 @@
+{
+  "dag_id": "market_sip_replay_pipeline",
+  "run_id": "manual__2026-08-27T06:33:18.770183+00:00",
+  "state": "success",
+  "config": {
+    "ticker": "SPY",
+    "start": "2026-08-12T12:25:00Z",
+    "end": "2026-08-12T12:35:00Z",
+    "feed": "sip",
+    "trace_id": "airflow-market-replay-a739d87c476ee4e1"
+  },
+  "replay": {
+    "topic": "raw.market-sip.v1",
+    "pages": 1,
+    "fetched_trades": 3307,
+    "published_trades": 3307,
+    "offset_ranges": [
+      {"topic": "raw.market-sip.v1", "partition": 1, "start": 75407, "end": 78714}
+    ]
+  },
+  "consumer": {
+    "expected_count": 3307,
+    "consumer_received": 3307,
+    "scanned_messages": 3307,
+    "offset_ranges": [
+      {"topic": "raw.market-sip.v1", "partition": 1, "start": 75407, "end": 78714}
+    ]
+  },
+  "spark": {
+    "spark_input_trades": 3307,
+    "spark_invalid_trades": 0,
+    "spark_valid_unique_trades": 3307,
+    "spark_volume_eligible_trades": 3307,
+    "spark_price_eligible_trades": 1788,
+    "spark_output_bars": 10,
+    "postgres_upserted_bars": 10
+  },
+  "postgres": {
+    "source": "alpaca_replay",
+    "expected_bars": 10,
+    "stored_bars": 10
+  }
+}

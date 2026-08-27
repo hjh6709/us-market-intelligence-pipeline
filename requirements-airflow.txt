@@ -1,0 +1,2 @@
+# Install with the official constraint matching the active Python minor version.
+apache-airflow==3.3.0
