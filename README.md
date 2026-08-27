@@ -131,7 +131,7 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 
 첫 실행의 네 종목 합계는 원시 체결 15,069건과 1분봉 40행입니다. 형식 오류와 중복은 모든 종목에서 0건이었고 DAG 최종 상태도 `success`였습니다.
 
-상세 입력값과 실행 명령은 [5차시 Airflow 과제 문서](docs/airflow-assignment.md), 저장된 실제 1분봉 샘플은 [PostgreSQL 조회 결과](docs/evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있습니다.
+상세 입력값과 실행 명령은 [4차시 Airflow 과제 문서](docs/airflow-assignment.md), 저장된 실제 1분봉 샘플은 [PostgreSQL 조회 결과](docs/evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있습니다.
 
 상세 결과:
 
@@ -183,7 +183,7 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
   -c '{"tickers":["SPY","QQQ","SMH","NVDA"],"start":"2026-08-12T12:25:00Z","end":"2026-08-12T12:35:00Z","feed":"sip"}'
 ```
 
-`tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [5차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
+`tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [4차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
 
 ### 4. 검증
 
@@ -220,7 +220,7 @@ docker compose exec -T postgres \
 README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회차별 요구사항, 메시지 명세, 상세 실행 명령과 검증 숫자는 아래 문서에서 관리합니다.
 
 - [4차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
-- [5차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
+- [4차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
 - [다종목 Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
 - [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)

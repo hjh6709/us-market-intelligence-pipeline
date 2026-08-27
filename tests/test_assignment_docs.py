@@ -140,11 +140,18 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "docs/evidence/airflow-market-replay/README.md"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("Dynamic Task Mapping", assignment)
+        self.assertIn(
+            "# 4차시 과제 — 지금 만든 작업을 Airflow로 자동화하기",
+            assignment,
+        )
+        self.assertIn(
+            "[`dags/market_replay_pipeline.py`](../dags/market_replay_pipeline.py)",
+            assignment,
+        )
+        self.assertIn("한 번의 DAG 실행에 종목 목록", assignment)
         self.assertIn('`tickers=[SPY, QQQ, SMH, NVDA]`', assignment)
-        self.assertIn("15,069 / 15,069", assignment)
-        self.assertIn("40 / 40", assignment)
-        self.assertIn("map_index 0·1·2·3", assignment)
+        self.assertIn("**15,069**", assignment)
+        self.assertIn("총 40개의 1분봉", assignment)
         self.assertIn('`tickers=[SPY, QQQ]`', assignment)
         self.assertNotIn('"ticker":"NVDA"', assignment)
         self.assertNotIn("ticker만 SPY로 변경", assignment)
