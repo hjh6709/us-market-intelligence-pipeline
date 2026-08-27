@@ -1,5 +1,8 @@
 import importlib
 import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +18,21 @@ def load_dag_module():
 
 
 class MarketReplayDagTest(unittest.TestCase):
+    def test_editable_install_exposes_src_package_outside_repository(self) -> None:
+        environment = os.environ.copy()
+        environment.pop("PYTHONPATH", None)
+        with tempfile.TemporaryDirectory() as outside_repository:
+            result = subprocess.run(
+                [sys.executable, "-c", "import src.airflow_market_replay"],
+                cwd=outside_repository,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_exposes_parameterized_manual_dag_with_ordered_pipeline_tasks(self) -> None:
         module = load_dag_module()
         dag = module.market_sip_replay_pipeline
