@@ -1,0 +1,23 @@
+Command:
+docker compose exec -T postgres psql -U market -d market -f - \
+  < scripts/evidence/airflow_market_replay_results.sql
+
+Captured: 2026-08-27 (Asia/Seoul)
+Source: local PostgreSQL market.market_bars
+
+ symbol | bars |       first_bar        |        last_bar        | trade_count_sum
+--------+------+------------------------+------------------------+-----------------
+ NVDA   |   10 | 2026-08-12 12:25:00+00 | 2026-08-12 12:34:00+00 |            4688
+ SPY    |   10 | 2026-08-12 12:25:00+00 | 2026-08-12 12:34:00+00 |            3307
+(2 rows)
+
+ symbol |       bar_start        |    open    |    high    |    low     |   close    | volume | trade_count |    vwap    |    source     | feed
+--------+------------------------+------------+------------+------------+------------+--------+-------------+------------+---------------+-----
+ NVDA   | 2026-08-12 12:25:00+00 | 219.320000 | 219.350000 | 219.240000 | 219.300000 |   4248 |          99 | 219.296341 | alpaca_replay | sip
+ NVDA   | 2026-08-12 12:26:00+00 | 219.380000 | 219.540000 | 219.380000 | 219.433900 |   4712 |         144 | 219.413731 | alpaca_replay | sip
+ SPY    | 2026-08-12 12:25:00+00 | 772.669000 | 772.710000 | 772.620000 | 772.690000 |   4863 |          71 | 772.673848 | alpaca_replay | sip
+ SPY    | 2026-08-12 12:26:00+00 | 772.700000 | 772.900000 | 772.640000 | 772.900000 |   4275 |          57 | 772.749684 | alpaca_replay | sip
+(4 rows)
+
+This file contains a small SQL result captured from the local database.
+It does not contain API keys, database passwords, or raw trade payloads.

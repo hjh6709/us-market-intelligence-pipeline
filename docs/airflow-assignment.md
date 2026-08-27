@@ -65,6 +65,7 @@ Kafka 원시 메시지를 Airflow XCom에 넣지는 않는다. XCom에는 ticker
 Producer는 Kafka가 실제로 저장한 파티션과 시작·종료 offset을 실행 요약에 남긴다. Consumer와 Spark는 토픽 전체가 아니라 이 범위만 읽는다. 따라서 NVDA 실행은 4,688건을 발행하고 4,688건만 스캔했으며, 뒤이어 실행한 SPY도 앞선 NVDA 데이터를 다시 읽지 않고 SPY의 3,307건만 스캔했다. 재시도하더라도 해당 시도의 offset 범위만 처리하므로 이전 시도의 부분 발행이 현재 실행에 섞이지 않는다.
 
 실제 실행 요약과 정제된 로그는 [Airflow 실행 증거](evidence/airflow-market-replay/README.md)에 있다.
+PostgreSQL의 집계와 실제 1분봉 샘플은 [DB 조회 결과](evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있다.
 
 ## 저장 위치와 형식
 
