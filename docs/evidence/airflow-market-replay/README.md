@@ -19,6 +19,10 @@
 - run ID: `manual__2026-08-27T07:56:50.333255+00:00`
 - DAG 최종 상태: `success`
 
+![실행 A의 Airflow 성공 화면](airflow-run-a-four-symbols.png)
+
+실행 상태와 종목별 mapped task가 모두 초록색이므로 입력 검사부터 PostgreSQL 저장 확인까지 한 번의 DAG run에서 완료됐음을 확인할 수 있다. 맵 인덱스 `0·1·2·3`은 입력 순서대로 `SPY·QQQ·SMH·NVDA`다.
+
 | 항목 | SPY | QQQ | SMH | NVDA | 합계 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Alpaca 수집 체결 | 21,270 | 27,638 | 11,174 | 58,036 | 118,118 |
@@ -42,6 +46,10 @@
 - DAG 최종 상태: `success`
 - validation 1개와 mapped task 8개 모두 `success`
 
+![실행 B의 입력값 변경과 성공 화면](airflow-run-b-changed-input.png)
+
+Airflow 실행 상세의 `구성`에는 `tickers=[SPY, QQQ]`가 표시된다. 코드 파일을 수정한 것이 아니라 DAG 실행 입력만 변경했고, 왼쪽 Grid에서 두 종목에 대한 수집·Kafka·Spark·저장 검증 단계가 모두 성공한 것을 확인할 수 있다.
+
 Producer가 확인한 Kafka offset 범위를 Consumer와 Spark에 전달해 각 mapped task가 쓴 범위만 읽었다. 실행 A에서 SPY는 partition 1의 `[102302, 123572)`, QQQ는 partition 1의 `[123572, 151210)`, SMH는 partition 2의 `[931, 12105)`, NVDA는 partition 1의 `[151210, 209246)`를 처리했다. 공통 토픽을 사용하지만 trace ID와 offset 범위를 함께 사용하므로 종목과 실행이 섞이지 않는다.
 
 121분은 조회 시간 구간의 수다. 모든 종목에 반드시 121개 봉이 생기는 것은 아니다. provider 호환 거래 조건을 적용한 Spark 결과에서 봉을 만들 수 없는 분은 0값으로 채우지 않았다. 이 때문에 SPY는 2개 분, SMH는 10개 분이 비어 있으며 QQQ와 NVDA는 121개 분이 모두 존재한다.
@@ -61,6 +69,8 @@ payload의 소문자 `i`는 trade ID이며 Odd Lot 분류가 아니다. Odd Lot�
 
 ## 제출 파일
 
+- [`airflow-run-a-four-symbols.png`](airflow-run-a-four-symbols.png): 네 종목 mapped task가 성공한 실제 Airflow UI
+- [`airflow-run-b-changed-input.png`](airflow-run-b-changed-input.png): 입력값을 `SPY·QQQ`로 바꾼 실제 Airflow UI
 - [`multi-symbol-run-summary.json`](multi-symbol-run-summary.json): 실행 A·B 입력, run ID와 단계별 실제 건수
 - [`multi-symbol-task-states.txt`](multi-symbol-task-states.txt): 두 DAG run의 mapped task 상태
 - [`postgres-result.txt`](postgres-result.txt): PostgreSQL에서 다시 조회한 네 종목 집계와 실제 1분봉 샘플 8행
