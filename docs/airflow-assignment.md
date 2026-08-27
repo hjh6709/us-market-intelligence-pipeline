@@ -85,9 +85,9 @@ Spark 결과 수와 DB 저장 수 확인
 
 `[07:30, 09:31)`은 121개의 **예상 분 구간**이다. 그러나 한 분 안에 체결이 있더라도 시가·고가·저가·종가를 계산할 수 있는 체결이 하나도 없으면 유효한 1분봉을 만들 수 없다.
 
-PostgreSQL의 예상 121개 시각과 실제 저장 시각을 대조한 뒤, 비어 있는 분의 Alpaca SIP 원시 체결과 Alpaca 제공 1분봉을 다시 조회했다. 아래 시각은 모두 2026년 8월 12일 미국 동부시간(ET) 기준이다.
+PostgreSQL의 예상 121개 시각과 실제 저장 시각을 대조한 뒤, 비어 있는 분의 Alpaca SIP 원시 체결과 Alpaca 1분봉 API를 다시 조회했다. 아래 시각은 모두 2026년 8월 12일 미국 동부시간(ET) 기준이다. 마지막 열은 저장 결과가 아니라 Spark 결과가 provider와 같은지를 확인한 **외부 교차 검증 결과**다.
 
-| 종목 | 비어 있는 분(ET) | 원시 체결 | 거래량·거래 건수 반영 | OHLC·VWAP 가격 반영 | Alpaca 제공 1분봉 |
+| 종목 | 비어 있는 분(ET) | 원시 체결 | 거래량·거래 건수 반영 | OHLC·VWAP 가격 반영 | Alpaca 1분봉 API 교차 확인(저장 아님) |
 | --- | --- | ---: | ---: | ---: | --- |
 | SPY | 07:33 | 9 | 9 | 0 | 없음 |
 | SPY | 07:37 | 31 | 31 | 0 | 없음 |
@@ -102,9 +102,13 @@ PostgreSQL의 예상 121개 시각과 실제 저장 시각을 대조한 뒤, 비
 | SMH | 08:21 | 2 | 2 | 0 | 없음 |
 | SMH | 08:22 | 3 | 3 | 0 | 없음 |
 
-12개 분의 모든 체결에 `I`(Odd Lot) 조건이 포함돼 있었다. 이 체결은 거래량과 거래 건수에는 반영되지만 OHLC와 VWAP 가격 계산에서는 제외된다. 따라서 SPY의 두 분에는 원시 체결 40건, SMH의 열 분에는 36건이 있었지만 가격을 만들 수 있는 체결은 각각 0건이었다.
+여기서 Alpaca payload의 소문자 `i` 필드는 개별 체결을 식별하는 **trade ID**다. Odd Lot을 뜻하는 값은 `c`(trade conditions) 배열 안의 대문자 `I`다. `I`는 우리가 수량을 보고 새로 붙인 분류가 아니라, 거래소가 SIP에 보고한 sale condition을 Alpaca가 원시 체결에 전달한 값이다. Odd Lot은 표준 거래단위인 round lot보다 작은 체결이며, 미국 주식에서는 일반적으로 100주 미만을 말한다.
 
-Spark는 가격 체결이 없는 분을 0원이나 직전 가격으로 채우지 않았다. Alpaca 제공 1분봉에도 동일하게 존재하지 않았다. 따라서 SPY 119개와 SMH 111개는 수집 실패가 아니라 provider 규칙에 따른 **정상 공백**이다. 반대로 Alpaca 제공 봉은 있는데 Spark 또는 PostgreSQL에만 없다면 파이프라인 누락으로 판단해야 한다.
+[CTA CTS 명세](https://www.ctaplan.com/publicdocs/ctaplan/CTS_Pillar_Input_Specification.pdf)·[UTP feed 명세](https://www.utpplan.com/DOC/UtpBinaryOutputSpec_3.0.pdf)와 [Alpaca Market Data FAQ](https://docs.alpaca.markets/us/docs/market-data-faq)는 `I`를 Odd Lot Trade로 정의한다. Alpaca의 봉 계산 규칙에서는 `I` 조건 체결이 거래량에는 반영되지만 open·high·low·close 가격은 갱신하지 않는다. 여러 조건이 함께 있으면 가장 엄격한 조건을 적용한다.
+
+이번 12개 분의 모든 체결에는 `c` 배열 안에 대문자 `I`가 포함돼 있었다. 따라서 SPY의 두 분에는 원시 체결 40건, SMH의 열 분에는 36건이 있었지만 OHLC와 VWAP 가격을 만들 수 있는 체결은 각각 0건이었다.
+
+Spark는 가격 체결이 없는 분을 0원이나 직전 가격으로 채우지 않았다. 교차 확인한 Alpaca 1분봉 API에도 동일한 분이 존재하지 않았다. 따라서 SPY 119개와 SMH 111개는 수집 실패가 아니라 provider 규칙에 따른 **정상 공백**이다. 반대로 Alpaca 1분봉 API에는 봉이 있는데 Spark 또는 PostgreSQL에만 없다면 파이프라인 누락으로 판단해야 한다.
 
 ### 실행 B — 종목 목록 변경
 
