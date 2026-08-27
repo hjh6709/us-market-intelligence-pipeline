@@ -10,7 +10,7 @@
 2. 같은 시각의 `SPY`, `QQQ`, `SMH`, `NVDA` 주가를 Alpaca SIP 데이터로 가져옵니다.
 3. 발표 전후 가격·거래량·변동성이 평소와 달랐는지 계산해 PostgreSQL에 저장합니다.
 4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
-5. Airflow 과제에서는 같은 10분 구간을 입력값으로 받아 NVDA 4,688건과 SPY 3,307건을 각각 Kafka·Spark·PostgreSQL까지 자동 실행했습니다.
+5. Airflow 과제에서는 한 번의 DAG 실행으로 `SPY`, `QQQ`, `SMH`, `NVDA`를 각각 독립 처리해 총 15,069건을 Kafka·Spark·PostgreSQL까지 자동 실행했습니다.
 
 검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
@@ -69,7 +69,7 @@ PostgreSQL market_bars
 
 같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
 
-현재 `market_sip_replay_pipeline` Airflow DAG가 `ticker`, `start`, `end`, `feed` 입력값을 받아 원시 체결 수집부터 Kafka 전달 확인, Spark 집계와 PostgreSQL 저장 검증까지 순서대로 실행합니다.
+현재 `market_sip_replay_pipeline` Airflow DAG는 `tickers`, `start`, `end`, `feed`를 입력받습니다. `tickers` 목록의 각 종목에는 Dynamic Task Mapping으로 독립된 수집 → Kafka 검증 → Spark 집계 → PostgreSQL 검증 작업이 만들어집니다. 따라서 네 종목을 한 번의 DAG 실행으로 처리하면서도 종목별 실패 지점과 재실행 범위를 구분할 수 있습니다.
 
 ## 데이터 출처
 
@@ -118,14 +118,18 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 
 `macro_event_impacts`는 `12회 × 4종목 × 4개 분석 구간`입니다. 필요한 분봉이 모두 있는 결과는 163건, 일부 분봉이 부족한 결과는 29건입니다. 특히 SMH는 장전 거래가 없는 분을 임의로 채우지 않았으므로 두 결과를 나눠 해석해야 합니다.
 
-### C. Airflow 입력값 변경 실행
+### C. Airflow 다종목 자동화 실행
 
-하나의 DAG에서 `ticker`, `start`, `end`, `feed`를 입력받아 기존 수집·Kafka 검증·Spark 집계·PostgreSQL 검증을 순서대로 실행합니다. 같은 10분 구간에서 ticker만 바꾼 실제 결과는 다음과 같습니다.
+하나의 DAG에서 `tickers`, `start`, `end`, `feed`를 입력받아 종목별 수집·Kafka 검증·Spark 집계·PostgreSQL 검증을 실행합니다. 첫 실행에는 프로젝트의 네 종목을 함께 넣었고, 두 번째 실행에서는 코드를 바꾸지 않고 목록을 `SPY`, `QQQ`로 줄여 입력값 변경 실행도 확인했습니다.
 
-| ticker | SIP 원시 체결 | Kafka 발행·수신 | Spark 1분봉 | DAG 상태 |
+| ticker | SIP 원시 체결 | Kafka 발행·수신 | Spark 1분봉 | 종목별 작업 상태 |
 | --- | ---: | ---: | ---: | --- |
-| NVDA | 4,688 | 4,688 / 4,688 | 10 | success |
 | SPY | 3,307 | 3,307 / 3,307 | 10 | success |
+| QQQ | 6,143 | 6,143 / 6,143 | 10 | success |
+| SMH | 931 | 931 / 931 | 10 | success |
+| NVDA | 4,688 | 4,688 / 4,688 | 10 | success |
+
+첫 실행의 네 종목 합계는 원시 체결 15,069건과 1분봉 40행입니다. 형식 오류와 중복은 모든 종목에서 0건이었고 DAG 최종 상태도 `success`였습니다.
 
 상세 입력값과 실행 명령은 [5차시 Airflow 과제 문서](docs/airflow-assignment.md), 저장된 실제 1분봉 샘플은 [PostgreSQL 조회 결과](docs/evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있습니다.
 
@@ -176,10 +180,10 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 .venv/bin/airflow db migrate
 .venv/bin/airflow dags test market_sip_replay_pipeline \
-  -c '{"ticker":"NVDA","start":"2026-08-12T12:25:00Z","end":"2026-08-12T12:35:00Z","feed":"sip"}'
+  -c '{"tickers":["SPY","QQQ","SMH","NVDA"],"start":"2026-08-12T12:25:00Z","end":"2026-08-12T12:35:00Z","feed":"sip"}'
 ```
 
-`ticker`를 `SPY`로 바꾸면 코드를 수정하지 않고 같은 파이프라인을 다시 실행할 수 있습니다. 전체 입력값과 두 실행 결과는 [5차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
+`tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [5차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
 
 ### 4. 검증
 
@@ -217,7 +221,7 @@ README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회
 
 - [4차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
 - [5차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
-- [NVDA·SPY Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
+- [다종목 Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
 - [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)
 - [과제 제출 체크리스트](docs/submission-checklist.md)

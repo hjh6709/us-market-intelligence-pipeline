@@ -7,7 +7,7 @@ SELECT
 FROM market_bars
 WHERE source = 'alpaca_replay'
   AND feed = 'sip'
-  AND symbol IN ('NVDA', 'SPY')
+  AND symbol IN ('SPY', 'QQQ', 'SMH', 'NVDA')
   AND bar_start >= TIMESTAMPTZ '2026-08-12 12:25:00+00'
   AND bar_start < TIMESTAMPTZ '2026-08-12 12:35:00+00'
 GROUP BY symbol
@@ -28,7 +28,7 @@ SELECT
 FROM market_bars
 WHERE source = 'alpaca_replay'
   AND feed = 'sip'
-  AND symbol IN ('NVDA', 'SPY')
+  AND symbol IN ('SPY', 'QQQ', 'SMH', 'NVDA')
   AND bar_start >= TIMESTAMPTZ '2026-08-12 12:25:00+00'
   AND bar_start < TIMESTAMPTZ '2026-08-12 12:27:00+00'
 ORDER BY symbol, bar_start;

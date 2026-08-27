@@ -12,6 +12,41 @@ def load_target():
 
 
 class AirflowMarketReplayConfigTest(unittest.TestCase):
+    def test_builds_one_run_config_per_requested_ticker(self) -> None:
+        target = load_target()
+
+        configs = target.validate_run_configs(
+            {
+                "tickers": ["SPY", "QQQ", "SMH", "NVDA"],
+                "start": "2026-08-12T12:25:00Z",
+                "end": "2026-08-12T12:35:00Z",
+                "feed": "sip",
+            },
+            run_id="manual__multi-symbol",
+        )
+
+        self.assertEqual(
+            [config.ticker for config in configs],
+            ["SPY", "QQQ", "SMH", "NVDA"],
+        )
+        self.assertEqual(len({config.trace_id for config in configs}), 4)
+
+    def test_rejects_empty_or_duplicate_ticker_list(self) -> None:
+        target = load_target()
+        base = {
+            "start": "2026-08-12T12:25:00Z",
+            "end": "2026-08-12T12:35:00Z",
+            "feed": "sip",
+        }
+
+        for tickers in ([], ["SPY", "SPY"]):
+            with self.subTest(tickers=tickers):
+                with self.assertRaisesRegex(ValueError, "tickers"):
+                    target.validate_run_configs(
+                        {**base, "tickers": tickers},
+                        run_id="manual__invalid-list",
+                    )
+
     def test_accepts_ticker_feed_and_timezone_aware_window(self) -> None:
         target = load_target()
 
