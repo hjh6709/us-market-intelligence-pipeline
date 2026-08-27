@@ -2,30 +2,34 @@
   "captured_at": "2026-08-27",
   "source": "local Airflow task logs and PostgreSQL verification",
   "run_a": {
-    "run_id": "manual__2026-08-27T07:30:57.734232+00:00",
+    "run_id": "manual__2026-08-27T07:56:50.333255+00:00",
     "params": {
       "tickers": ["SPY", "QQQ", "SMH", "NVDA"],
-      "start": "2026-08-12T12:25:00Z",
-      "end": "2026-08-12T12:35:00Z",
+      "start": "2026-08-12T11:30:00Z",
+      "end": "2026-08-12T13:31:00Z",
       "feed": "sip"
     },
     "state": "success",
     "symbols": {
-      "SPY": {"published": 3307, "consumed": 3307, "spark_input": 3307, "validation_errors": 0, "duplicates": 0, "price_eligible": 1788, "stored_bars": 10},
-      "QQQ": {"published": 6143, "consumed": 6143, "spark_input": 6143, "validation_errors": 0, "duplicates": 0, "price_eligible": 2561, "stored_bars": 10},
-      "SMH": {"published": 931, "consumed": 931, "spark_input": 931, "validation_errors": 0, "duplicates": 0, "price_eligible": 315, "stored_bars": 10},
-      "NVDA": {"published": 4688, "consumed": 4688, "spark_input": 4688, "validation_errors": 0, "duplicates": 0, "price_eligible": 824, "stored_bars": 10}
+      "SPY": {"published": 21270, "consumed": 21270, "spark_input": 21270, "validation_errors": 0, "duplicates": 0, "volume_eligible": 21268, "price_eligible": 9789, "stored_bars": 119},
+      "QQQ": {"published": 27638, "consumed": 27638, "spark_input": 27638, "validation_errors": 0, "duplicates": 0, "volume_eligible": 27636, "price_eligible": 11890, "stored_bars": 121},
+      "SMH": {"published": 11174, "consumed": 11174, "spark_input": 11174, "validation_errors": 0, "duplicates": 0, "volume_eligible": 11172, "price_eligible": 4116, "stored_bars": 111},
+      "NVDA": {"published": 58036, "consumed": 58036, "spark_input": 58036, "validation_errors": 0, "duplicates": 0, "volume_eligible": 58034, "price_eligible": 8752, "stored_bars": 121}
     }
   },
   "run_b": {
-    "run_id": "manual__2026-08-27T07:32:54.583401+00:00",
+    "run_id": "manual__2026-08-27T07:58:07.693993+00:00",
     "params": {
       "tickers": ["SPY", "QQQ"],
-      "start": "2026-08-12T12:25:00Z",
-      "end": "2026-08-12T12:35:00Z",
+      "start": "2026-08-12T11:30:00Z",
+      "end": "2026-08-12T13:31:00Z",
       "feed": "sip"
     },
     "state": "success",
-    "purpose": "verify that the same DAG accepts a changed ticker list without code changes"
+    "purpose": "verify that the same DAG accepts a changed ticker list without code changes",
+    "symbols": {
+      "SPY": {"published": 21270, "consumed": 21270, "spark_input": 21270, "validation_errors": 0, "duplicates": 0, "stored_bars": 119},
+      "QQQ": {"published": 27638, "consumed": 27638, "spark_input": 27638, "validation_errors": 0, "duplicates": 0, "stored_bars": 121}
+    }
   }
 }

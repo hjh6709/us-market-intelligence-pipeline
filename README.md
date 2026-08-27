@@ -10,7 +10,7 @@
 2. 같은 시각의 `SPY`, `QQQ`, `SMH`, `NVDA` 주가를 Alpaca SIP 데이터로 가져옵니다.
 3. 발표 전후 가격·거래량·변동성이 평소와 달랐는지 계산해 PostgreSQL에 저장합니다.
 4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
-5. Airflow 과제에서는 한 번의 DAG 실행으로 `SPY`, `QQQ`, `SMH`, `NVDA`를 각각 독립 처리해 총 15,069건을 Kafka·Spark·PostgreSQL까지 자동 실행했습니다.
+5. Airflow 과제에서는 같은 121분 구간을 `SPY`, `QQQ`, `SMH`, `NVDA`로 확장해 총 118,118건을 한 DAG에서 처리하고 472개 1분봉을 저장했습니다.
 
 검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
@@ -124,12 +124,12 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 
 | ticker | SIP 원시 체결 | Kafka 발행·수신 | Spark 1분봉 | 종목별 작업 상태 |
 | --- | ---: | ---: | ---: | --- |
-| SPY | 3,307 | 3,307 / 3,307 | 10 | success |
-| QQQ | 6,143 | 6,143 / 6,143 | 10 | success |
-| SMH | 931 | 931 / 931 | 10 | success |
-| NVDA | 4,688 | 4,688 / 4,688 | 10 | success |
+| SPY | 21,270 | 21,270 / 21,270 | 119 | success |
+| QQQ | 27,638 | 27,638 / 27,638 | 121 | success |
+| SMH | 11,174 | 11,174 / 11,174 | 111 | success |
+| NVDA | 58,036 | 58,036 / 58,036 | 121 | success |
 
-첫 실행의 네 종목 합계는 원시 체결 15,069건과 1분봉 40행입니다. 형식 오류와 중복은 모든 종목에서 0건이었고 DAG 최종 상태도 `success`였습니다.
+첫 실행의 네 종목 합계는 원시 체결 118,118건과 1분봉 472행입니다. 형식 오류와 중복은 모든 종목에서 0건이었고 DAG 최종 상태도 `success`였습니다. NVDA는 지난 과제와 동일한 `58,036건 → 121행`을 재현했습니다. SPY와 SMH는 provider 호환 거래 조건을 적용한 뒤 봉을 만들 수 없는 분을 임의로 채우지 않아 각각 119행과 111행입니다.
 
 상세 입력값과 실행 명령은 [4차시 Airflow 과제 문서](docs/airflow-assignment.md), 저장된 실제 1분봉 샘플은 [PostgreSQL 조회 결과](docs/evidence/airflow-market-replay/postgres-result.txt)에서 확인할 수 있습니다.
 
@@ -180,7 +180,7 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 .venv/bin/airflow db migrate
 .venv/bin/airflow dags test market_sip_replay_pipeline \
-  -c '{"tickers":["SPY","QQQ","SMH","NVDA"],"start":"2026-08-12T12:25:00Z","end":"2026-08-12T12:35:00Z","feed":"sip"}'
+  -c '{"tickers":["SPY","QQQ","SMH","NVDA"],"start":"2026-08-12T11:30:00Z","end":"2026-08-12T13:31:00Z","feed":"sip"}'
 ```
 
 `tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [4차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.

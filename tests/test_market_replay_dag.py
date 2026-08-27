@@ -58,6 +58,8 @@ class MarketReplayDagTest(unittest.TestCase):
             dag.params["tickers"],
             ["SPY", "QQQ", "SMH", "NVDA"],
         )
+        self.assertEqual(dag.params["start"], "2026-08-12T11:30:00Z")
+        self.assertEqual(dag.params["end"], "2026-08-12T13:31:00Z")
         self.assertEqual(
             set(dag.task_ids),
             {
