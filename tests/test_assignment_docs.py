@@ -166,12 +166,34 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("2026-08-12T13:31:00Z", assignment)
         self.assertNotIn("10분 구간", assignment)
         self.assertIn('`tickers=[SPY, QQQ]`', assignment)
+        self.assertIn(
+            "![Airflow 실행 A — 네 종목 mapped task 성공 화면]"
+            "(evidence/airflow-market-replay/airflow-run-a-four-symbols.png)",
+            assignment,
+        )
+        self.assertIn(
+            "![Airflow 실행 B — SPY와 QQQ로 입력값을 바꾼 재실행 화면]"
+            "(evidence/airflow-market-replay/airflow-run-b-changed-input.png)",
+            assignment,
+        )
+        self.assertIn("한 번의 DAG 실행에서 종목별 작업", assignment)
+        self.assertIn("DAG 코드를 수정하지 않고", assignment)
         self.assertNotIn('"ticker":"NVDA"', assignment)
         self.assertNotIn("ticker만 SPY로 변경", assignment)
 
         self.assertIn("manual__2026-08-27T07:56:50.333255+00:00", evidence)
         self.assertIn("manual__2026-08-27T07:58:07.693993+00:00", evidence)
         self.assertIn("21,270 | 27,638 | 11,174 | 58,036 | 118,118", evidence)
+        self.assertTrue(
+            Path(
+                "docs/evidence/airflow-market-replay/airflow-run-a-four-symbols.png"
+            ).is_file()
+        )
+        self.assertTrue(
+            Path(
+                "docs/evidence/airflow-market-replay/airflow-run-b-changed-input.png"
+            ).is_file()
+        )
 
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")

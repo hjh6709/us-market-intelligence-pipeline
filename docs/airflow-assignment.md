@@ -13,7 +13,7 @@
 | 기존 수집·처리 코드를 Airflow DAG로 실행 | Alpaca 수집, Kafka 전달 확인, Spark 1분봉 처리, PostgreSQL 저장 확인을 하나의 DAG로 연결 |
 | 코드를 고치지 않고 다시 실행할 입력값 | `tickers`, `start`, `end`, `feed` 제공 |
 | 값을 바꿔 한 번 더 실행 | 실행 A는 네 종목, 실행 B는 `SPY·QQQ`로 변경 |
-| 실행 화면 또는 로그 | [두 실행의 Airflow 작업 상태](evidence/airflow-market-replay/multi-symbol-task-states.txt) |
+| 실행 화면 또는 로그 | [실행 A 화면](evidence/airflow-market-replay/airflow-run-a-four-symbols.png), [실행 B 입력값 화면](evidence/airflow-market-replay/airflow-run-b-changed-input.png), [두 실행의 작업 상태 로그](evidence/airflow-market-replay/multi-symbol-task-states.txt) |
 | 만들어진 결과 | [PostgreSQL 네 종목 조회 결과](evidence/airflow-market-replay/postgres-result.txt) |
 | GitHub에 올리지 않은 데이터 | API key, Airflow 로컬 DB·전체 로그, 대용량 원시 체결 payload |
 
@@ -71,6 +71,10 @@ Spark 결과 수와 DB 저장 수 확인
 - run ID: `manual__2026-08-27T07:56:50.333255+00:00`
 - DAG 최종 상태: `success`
 
+![Airflow 실행 A — 네 종목 mapped task 성공 화면](evidence/airflow-market-replay/airflow-run-a-four-symbols.png)
+
+위 화면은 실행 A의 실제 Airflow UI다. 화면 위쪽의 실행 상태가 `성공`이고, 왼쪽 Grid에서 입력 검사와 `Kafka 발행 → Kafka 수신 확인 → Spark 1분봉 처리 → PostgreSQL 저장 확인` 작업이 모두 초록색으로 표시된다. 태스크 표의 맵 인덱스는 종목별로 자동 생성된 작업을 뜻한다. 즉, 네 종목을 네 번 수동 실행한 것이 아니라 한 번의 DAG 실행에서 종목별 작업을 나누어 처리했다.
+
 | 종목 | Alpaca 수집 | Kafka 발행 | Kafka 수신 | Spark 입력 | PostgreSQL 1분봉 | 종목 작업 상태 |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | SPY | 21,270 | 21,270 | 21,270 | 21,270 | 119 | success |
@@ -116,6 +120,10 @@ Spark는 가격 체결이 없는 분을 0원이나 직전 가격으로 채우지
 - run ID: `manual__2026-08-27T07:58:07.693993+00:00`
 - DAG 최종 상태: `success`
 
+![Airflow 실행 B — SPY와 QQQ로 입력값을 바꾼 재실행 화면](evidence/airflow-market-replay/airflow-run-b-changed-input.png)
+
+위 화면은 실행 B의 실제 Airflow UI다. 실행 상태는 `성공`이며, 화면 아래 `구성`에 `tickers=[SPY, QQQ]`, 동일한 시작·종료 시각과 `feed=sip`가 표시된다. DAG 코드를 수정하지 않고 실행할 때 넘기는 입력값만 네 종목에서 두 종목으로 바꿨다는 증거다. 왼쪽 Grid의 각 단계도 모두 성공했고, 종목 수가 두 개이므로 각 mapped task도 두 개씩 생성됐다.
+
 코드를 수정하지 않고 종목 목록만 네 종목에서 두 종목으로 바꿨다. Airflow가 두 종목의 작업을 다시 만들었고 모든 단계가 성공했다. 같은 종목과 1분 구간은 Upsert하기 때문에 재실행 후에도 PostgreSQL에 중복 행이 생기지 않았다.
 
 ## 최종 저장 결과
@@ -134,6 +142,8 @@ Spark는 가격 체결이 없는 분을 0원이나 직전 가격으로 채우지
 실제 결과와 로그:
 
 - [Airflow 실행 증거 요약](evidence/airflow-market-replay/README.md)
+- [실행 A — 네 종목 mapped task 성공 화면](evidence/airflow-market-replay/airflow-run-a-four-symbols.png)
+- [실행 B — `SPY·QQQ` 입력값 변경 화면](evidence/airflow-market-replay/airflow-run-b-changed-input.png)
 - [실행 A·B 입력과 단계별 건수](evidence/airflow-market-replay/multi-symbol-run-summary.json)
 - [두 실행의 Airflow 작업 상태](evidence/airflow-market-replay/multi-symbol-task-states.txt)
 - [PostgreSQL 네 종목 집계와 1분봉 샘플](evidence/airflow-market-replay/postgres-result.txt)
