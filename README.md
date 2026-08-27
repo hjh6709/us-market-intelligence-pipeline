@@ -219,7 +219,7 @@ docker compose exec -T postgres \
 
 README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회차별 요구사항, 메시지 명세, 상세 실행 명령과 검증 숫자는 아래 문서에서 관리합니다.
 
-- [4차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
+- [3차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
 - [4차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
 - [다종목 Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)

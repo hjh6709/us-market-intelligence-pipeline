@@ -64,7 +64,8 @@ class AssignmentDocumentationTest(unittest.TestCase):
         )
 
         self.assertIn("README는 프로젝트 전체 구조와 실행 진입점만 설명", readme)
-        self.assertIn("4차시 Kafka·Spark 과제 문서", readme)
+        self.assertIn("3차시 Kafka·Spark 과제 문서", readme)
+        self.assertIn("# 3차시 Kafka·Spark 과제", assignment)
         self.assertIn("실제 IEX 거래 10건", assignment)
         self.assertIn("## 전체 프로젝트에서의 과제 경계", assignment)
         self.assertIn("CPI 발표 시각과 분석 맥락을 제공. Kafka·Spark 입력이 아님", assignment)

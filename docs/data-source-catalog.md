@@ -76,7 +76,7 @@ GET https://data.alpaca.markets/v2/stocks/{symbol}/trades
 GET https://data.alpaca.markets/v2/stocks/bars
 ```
 
-Historical Trades는 요청한 `feed`의 과거 실제 거래로 ingestion을 재현하는 데 사용한다. 선행 smoke test는 IEX 거래를 사용했고, 4차시 과제는 CPI 발표 구간의 NVDA SIP 거래를 사용했다. 지정 구간을 `sort=asc`로 pagination하며, `next_page_token`이 없을 때만 완전한 수집으로 판정한다. REST 응답의 trade에 `T="t"`, 요청 symbol을 `S`로 보강한 뒤 WebSocket과 동일한 공통 envelope·Kafka topic·Spark schema를 사용한다. 이 과정은 실제 거래 값을 합성하거나 timestamp를 바꾸지 않는다.
+Historical Trades는 요청한 `feed`의 과거 실제 거래로 ingestion을 재현하는 데 사용한다. 선행 smoke test는 IEX 거래를 사용했고, 3차시 과제는 CPI 발표 구간의 NVDA SIP 거래를 사용했다. 지정 구간을 `sort=asc`로 pagination하며, `next_page_token`이 없을 때만 완전한 수집으로 판정한다. REST 응답의 trade에 `T="t"`, 요청 symbol을 `S`로 보강한 뒤 WebSocket과 동일한 공통 envelope·Kafka topic·Spark schema를 사용한다. 이 과정은 실제 거래 값을 합성하거나 timestamp를 바꾸지 않는다.
 
 고정 과제 증빙은 짧은 구간만 메모리에 유지해 Kafka에 발행한다. 원본 HTTP response, header와 API key가 포함된 정보는 파일 또는 Git에 저장하지 않으며, 장기 raw archive로 사용하지 않는다.
 
