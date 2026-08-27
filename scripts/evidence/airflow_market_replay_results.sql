@@ -13,6 +13,37 @@ WHERE source = 'alpaca_replay'
 GROUP BY symbol
 ORDER BY symbol;
 
+WITH expected_minutes AS (
+    SELECT generate_series(
+        TIMESTAMPTZ '2026-08-12 11:30:00+00',
+        TIMESTAMPTZ '2026-08-12 13:30:00+00',
+        INTERVAL '1 minute'
+    ) AS bar_start
+),
+symbols(symbol) AS (
+    VALUES ('SPY'), ('QQQ'), ('SMH'), ('NVDA')
+)
+SELECT
+    symbols.symbol,
+    to_char(
+        expected_minutes.bar_start AT TIME ZONE 'America/New_York',
+        'HH24:MI'
+    ) AS missing_et,
+    to_char(
+        expected_minutes.bar_start AT TIME ZONE 'UTC',
+        'HH24:MI'
+    ) AS missing_utc
+FROM symbols
+CROSS JOIN expected_minutes
+LEFT JOIN market_bars
+  ON market_bars.symbol = symbols.symbol
+ AND market_bars.bar_start = expected_minutes.bar_start
+ AND market_bars.timeframe = '1m'
+ AND market_bars.source = 'alpaca_replay'
+ AND market_bars.feed = 'sip'
+WHERE market_bars.symbol IS NULL
+ORDER BY symbols.symbol, expected_minutes.bar_start;
+
 SELECT
     symbol,
     bar_start,
