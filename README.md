@@ -11,6 +11,7 @@
 3. 발표 전후 가격·거래량·변동성이 평소와 달랐는지 계산해 PostgreSQL에 저장합니다.
 4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
 5. Airflow 과제에서는 같은 121분 구간을 `SPY`, `QQQ`, `SMH`, `NVDA`로 확장해 총 118,118건을 한 DAG에서 처리하고 472개 1분봉을 저장했습니다.
+6. 부하·복구 과제에서는 실제 CPI 발표 55회로 범위를 넓혀 SIP 체결 7,360,804건을 GCP에서 처리하고 22,260개 1분봉을 저장했습니다. PostgreSQL 중단 후 같은 입력으로 복구해 최종 고유키 중복 0건을 확인했습니다.
 
 검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
@@ -139,6 +140,20 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 - [CPI event impact 초기 결과](docs/test-results/2026-08-24-cpi-event-impact.md)
 - [발표 1·2·3주 전 같은 요일·시간 비교 결과](docs/test-results/2026-08-24-cpi-matched-baseline.md)
 
+### D. GCP 부하·장애·복구 실행
+
+2022-01-12부터 2026-08-12까지 실제 CPI 발표 55회와 네 종목을 연결했습니다. Alpaca에서 한 번 수집한 SIP 체결은 220개 Parquet 파티션에 보관하고, 외부 API가 아니라 이 원본을 Kafka에 재생했습니다. FRED·ALFRED는 10개 경제지표를 각 발표 시점 기준으로 연결해 550개 context를 저장했습니다.
+
+| 항목 | 기준 | 부하 |
+| --- | ---: | ---: |
+| 원시 체결 | 118,118 | 7,360,804 |
+| Kafka 발행·수신·Spark 입력 | 모두 118,118 | 모두 7,360,804 |
+| Spark 원본 중복 탐지 | 0 | 49 |
+| PostgreSQL 1분봉 | 472 | 22,260 |
+| DB 고유키 중복 | 0 | 0 |
+
+GCP PostgreSQL을 중지한 실행은 `failed`로 기록됐고 저장 행은 0건이었습니다. DB 복구 후 같은 입력을 Upsert해 전체 22,260행과 고유키 중복 0건이 유지됐습니다. 상세 수치와 캡처는 [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에 있습니다.
+
 현재 평균 수익률은 선택한 12개 발표 구간의 관측값입니다. 비발표일 비교군과 통계 검정이 아직 없으므로 CPI의 인과 효과나 미래 수익률로 해석하지 않습니다.
 
 ## 실행 방법
@@ -222,6 +237,8 @@ README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회
 - [3차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
 - [4차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
 - [다종목 Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
+- [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)
+- [GCP 부하·복구 실제 실행 증거](docs/evidence/load-recovery/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
 - [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)
 - [과제 제출 체크리스트](docs/submission-checklist.md)

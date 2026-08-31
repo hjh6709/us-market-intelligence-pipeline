@@ -4,9 +4,9 @@
 
 **Goal:** Build and execute a reproducible 2022-01-01 through 2026-08-12 CPI-window load, failure, and recovery experiment on GCP using archived Alpaca SIP trades and point-in-time FRED/ALFRED macro context.
 
-**Architecture:** Collect external data once into partitioned Parquet plus checksummed manifests, then replay only the local archive through Kafka, Spark, and PostgreSQL. Airflow coordinates baseline, load, fault, and recovery runs while small JSON summaries and sanitized screenshots provide assignment evidence.
+**Architecture:** Collect external data once into partitioned Parquet plus checksummed manifests, then replay only the local archive through Kafka, Spark, and PostgreSQL. A parameterized experiment runner records baseline, load, fault, and recovery runs while small JSON summaries and sanitized screenshots provide assignment evidence.
 
-**Tech Stack:** Python 3.14, PyArrow, Alpaca Historical Trades API, FRED/ALFRED API, Airflow 3.3, Kafka, Spark 4.2, PostgreSQL, Docker Compose, GCP Compute Engine
+**Tech Stack:** Python 3.13, PyArrow, Alpaca Historical Trades API, FRED/ALFRED API, Airflow 3.3, Kafka, Spark 4.2, PostgreSQL, Docker Compose, GCP Compute Engine
 
 **Spec:** `docs/superpowers/specs/2026-08-31-pipeline-load-recovery-design.md`
 
