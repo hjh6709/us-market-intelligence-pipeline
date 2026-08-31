@@ -19,3 +19,4 @@ __pycache__/
 docs/evidence/**/captures/
 /data/local/
 /data/raw/
+/data/archive/

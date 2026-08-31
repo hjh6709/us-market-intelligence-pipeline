@@ -6,9 +6,10 @@ build-backend = "setuptools.build_meta"
 name = "for-my-stock"
 version = "0.1.0"
 description = "U.S. macro impact and market data pipeline"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "confluent-kafka>=2.15,<3",
+    "pyarrow>=21,<22",
     "psycopg[binary]>=3.2,<4",
     "pyspark==4.2.0",
     "websockets>=15,<16",
