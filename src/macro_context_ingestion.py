@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
+import time
+from collections.abc import Callable
 
 import psycopg
 
@@ -90,6 +92,8 @@ def fetch_event_macro_context(
     releases: Sequence[CpiRelease],
     *,
     series: dict[str, MacroSeriesSpec] = MACRO_SERIES,
+    request_interval_seconds: float = 0.0,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> list[EventMacroContext]:
     contexts: list[EventMacroContext] = []
     for release in releases:
@@ -112,6 +116,8 @@ def fetch_event_macro_context(
                     value=selected.value,
                 )
             )
+            if request_interval_seconds:
+                sleeper(request_interval_seconds)
     return contexts
 
 
@@ -122,6 +128,32 @@ def upsert_event_macro_context(
 ) -> int:
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         with connection.cursor() as cursor:
+            cursor.executemany(
+                """
+                INSERT INTO macro_series (
+                    series_id, title, frequency, units,
+                    seasonal_adjustment, source_url
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (series_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    frequency = EXCLUDED.frequency,
+                    units = EXCLUDED.units,
+                    seasonal_adjustment = EXCLUDED.seasonal_adjustment,
+                    source_url = EXCLUDED.source_url,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                [
+                    (
+                        spec.series_id,
+                        spec.title,
+                        spec.frequency,
+                        spec.units,
+                        spec.seasonal_adjustment,
+                        f"https://fred.stlouisfed.org/series/{spec.series_id}",
+                    )
+                    for spec in MACRO_SERIES.values()
+                ],
+            )
             cursor.executemany(
                 """
                 INSERT INTO macro_event_contexts (
