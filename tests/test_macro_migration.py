@@ -44,6 +44,14 @@ class MacroMigrationTest(unittest.TestCase):
         self.assertIn("return_vs_matched_baseline_pct", migration)
         self.assertIn("baseline_sample_size", migration)
 
+    def test_pipeline_experiment_migration_tracks_event_context(self) -> None:
+        migration = Path("db/migrations/004_pipeline_experiments.sql").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS macro_event_contexts", migration)
+        self.assertIn("PRIMARY KEY (economic_event_id, series_id)", migration)
+
 
 if __name__ == "__main__":
     unittest.main()

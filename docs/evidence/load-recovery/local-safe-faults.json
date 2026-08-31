@@ -1,0 +1,32 @@
+{
+  "executed_at": "2026-08-31T07:20:47.899742+00:00",
+  "status": "succeeded",
+  "checks": [
+    {
+      "failure_type": "api_http_503",
+      "failure_reproduced": true,
+      "error_type": "HTTPError",
+      "request_attempts": 2,
+      "retry_delay_seconds": 0.01,
+      "secret_exposed": false,
+      "recovered": true,
+      "recovery": "retried once after HTTP 503 and received a valid response"
+    },
+    {
+      "failure_type": "invalid_input",
+      "failure_reproduced": true,
+      "error_type": "ValueError",
+      "side_effect_files": 0,
+      "recovered": true,
+      "recovery": "corrected parameters and created a valid manifest"
+    },
+    {
+      "failure_type": "database_unavailable",
+      "failure_reproduced": true,
+      "error_type": "OperationalError",
+      "secret_exposed": false,
+      "recovered": true,
+      "recovery": "restored valid database endpoint and health query passed"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+GCP experiment integrity check — 2026-08-31
+
+Before PostgreSQL outage:
+market_bars(source=alpaca_replay) = 22260
+duplicate business keys = 0
+
+During PostgreSQL outage:
+run_id = gcp-db-failure-20260831
+status = failed
+kafka published / consumed = 118118 / 118118
+postgres stored bars = 0
+error type = OperationalError
+
+After PostgreSQL restart and same-input rerun:
+run_id = gcp-db-recovered-20260831
+status = succeeded
+market_bars(source=alpaca_replay) = 22260
+duplicate business keys = 0
+NVDA = 6345
+QQQ = 6536
+SMH = 2891
+SPY = 6488
+
+Macro point-in-time check:
+CPI events = 55
+FRED/ALFRED series = 10
+event macro contexts = 550
+observation/realtime dates after event date = 0
+same-day daily-rate/VIX observations = 0
+
+Same-input idempotency review:
+run_id = local-idempotency-review-20260831
+before rows / duplicate keys = 22260 / 0
+after rows / duplicate keys = 22260 / 0
+before result hash = 85ba8d3153a1bbbd6277f969ecce39d4
+after result hash = 85ba8d3153a1bbbd6277f969ecce39d4
+hash columns = symbol, bar_start, timeframe, source, feed, OHLC, volume, trade_count, vwap

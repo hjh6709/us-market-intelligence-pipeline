@@ -116,6 +116,38 @@ class HistoricalMarketReplayTest(unittest.TestCase):
         self.assertNotIn("private-key-id", message)
         self.assertNotIn("private-secret", message)
 
+    def test_retries_transient_503_then_returns_the_page(self) -> None:
+        calls = 0
+        delays = []
+
+        def recovering_opener(request, timeout):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise HTTPError(request.full_url, 503, "unavailable", {}, None)
+            return FakeResponse({"trades": [], "next_page_token": None})
+
+        client = AlpacaHistoricalClient(
+            "key-id",
+            "secret",
+            opener=recovering_opener,
+            retry_delays=(0.25,),
+            sleeper=delays.append,
+        )
+
+        trades, next_page = client.fetch_page(
+            symbol="NVDA",
+            start="2026-08-12T11:30:00Z",
+            end="2026-08-12T13:31:00Z",
+            feed="sip",
+            limit=100,
+        )
+
+        self.assertEqual(trades, [])
+        self.assertIsNone(next_page)
+        self.assertEqual(calls, 2)
+        self.assertEqual(delays, [0.25])
+
     def test_normalizes_actual_trade_and_publishes_canonical_envelope(self) -> None:
         raw_trade = self.trade(7, "2026-08-19T19:51:23.123456Z")
         publisher = RecordingPublisher()

@@ -1,86 +1,57 @@
 [
-  {
-    "reference_period": "2025-07",
-    "release_date": "2025-08-12",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_08122025.htm"
-  },
-  {
-    "reference_period": "2025-08",
-    "release_date": "2025-09-11",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_09112025.htm"
-  },
-  {
-    "reference_period": "2025-09",
-    "release_date": "2025-10-24",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_10242025.htm"
-  },
-  {
-    "reference_period": "2025-11",
-    "release_date": "2025-12-18",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_12182025.htm"
-  },
-  {
-    "reference_period": "2025-12",
-    "release_date": "2026-01-13",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_01132026.htm"
-  },
-  {
-    "reference_period": "2026-01",
-    "release_date": "2026-02-13",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_02132026.htm"
-  },
-  {
-    "reference_period": "2026-02",
-    "release_date": "2026-03-11",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_03112026.htm"
-  },
-  {
-    "reference_period": "2026-03",
-    "release_date": "2026-04-10",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_04102026.htm"
-  },
-  {
-    "reference_period": "2026-04",
-    "release_date": "2026-05-12",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_05122026.htm"
-  },
-  {
-    "reference_period": "2026-05",
-    "release_date": "2026-06-10",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_06102026.htm"
-  },
-  {
-    "reference_period": "2026-06",
-    "release_date": "2026-07-14",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_07142026.htm"
-  },
-  {
-    "reference_period": "2026-07",
-    "release_date": "2026-08-12",
-    "release_time": "08:30",
-    "timezone": "America/New_York",
-    "source_url": "https://www.bls.gov/news.release/archives/cpi_08122026.htm"
-  }
+  {"reference_period":"2021-12","release_date":"2022-01-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_01122022.htm"},
+  {"reference_period":"2022-01","release_date":"2022-02-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_02102022.htm"},
+  {"reference_period":"2022-02","release_date":"2022-03-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_03102022.htm"},
+  {"reference_period":"2022-03","release_date":"2022-04-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_04122022.htm"},
+  {"reference_period":"2022-04","release_date":"2022-05-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_05112022.htm"},
+  {"reference_period":"2022-05","release_date":"2022-06-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_06102022.htm"},
+  {"reference_period":"2022-06","release_date":"2022-07-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_07132022.htm"},
+  {"reference_period":"2022-07","release_date":"2022-08-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_08102022.htm"},
+  {"reference_period":"2022-08","release_date":"2022-09-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_09132022.htm"},
+  {"reference_period":"2022-09","release_date":"2022-10-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_10132022.htm"},
+  {"reference_period":"2022-10","release_date":"2022-11-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_11102022.htm"},
+  {"reference_period":"2022-11","release_date":"2022-12-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_12132022.htm"},
+  {"reference_period":"2022-12","release_date":"2023-01-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_01122023.htm"},
+  {"reference_period":"2023-01","release_date":"2023-02-14","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_02142023.htm"},
+  {"reference_period":"2023-02","release_date":"2023-03-14","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_03142023.htm"},
+  {"reference_period":"2023-03","release_date":"2023-04-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_04122023.htm"},
+  {"reference_period":"2023-04","release_date":"2023-05-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_05102023.htm"},
+  {"reference_period":"2023-05","release_date":"2023-06-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_06132023.htm"},
+  {"reference_period":"2023-06","release_date":"2023-07-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_07122023.htm"},
+  {"reference_period":"2023-07","release_date":"2023-08-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_08102023.htm"},
+  {"reference_period":"2023-08","release_date":"2023-09-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_09132023.htm"},
+  {"reference_period":"2023-09","release_date":"2023-10-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_10122023.htm"},
+  {"reference_period":"2023-10","release_date":"2023-11-14","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_11142023.htm"},
+  {"reference_period":"2023-11","release_date":"2023-12-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_12122023.htm"},
+  {"reference_period":"2023-12","release_date":"2024-01-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_01112024.htm"},
+  {"reference_period":"2024-01","release_date":"2024-02-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_02132024.htm"},
+  {"reference_period":"2024-02","release_date":"2024-03-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_03122024.htm"},
+  {"reference_period":"2024-03","release_date":"2024-04-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_04102024.htm"},
+  {"reference_period":"2024-04","release_date":"2024-05-15","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_05152024.htm"},
+  {"reference_period":"2024-05","release_date":"2024-06-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_06122024.htm"},
+  {"reference_period":"2024-06","release_date":"2024-07-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_07112024.htm"},
+  {"reference_period":"2024-07","release_date":"2024-08-14","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_08142024.htm"},
+  {"reference_period":"2024-08","release_date":"2024-09-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_09112024.htm"},
+  {"reference_period":"2024-09","release_date":"2024-10-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_10102024.htm"},
+  {"reference_period":"2024-10","release_date":"2024-11-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_11132024.htm"},
+  {"reference_period":"2024-11","release_date":"2024-12-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_12112024.htm"},
+  {"reference_period":"2024-12","release_date":"2025-01-15","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_01152025.htm"},
+  {"reference_period":"2025-01","release_date":"2025-02-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_02122025.htm"},
+  {"reference_period":"2025-02","release_date":"2025-03-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_03122025.htm"},
+  {"reference_period":"2025-03","release_date":"2025-04-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_04102025.htm"},
+  {"reference_period":"2025-04","release_date":"2025-05-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_05132025.htm"},
+  {"reference_period":"2025-05","release_date":"2025-06-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_06112025.htm"},
+  {"reference_period":"2025-06","release_date":"2025-07-15","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_07152025.htm"},
+  {"reference_period":"2025-07","release_date":"2025-08-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_08122025.htm"},
+  {"reference_period":"2025-08","release_date":"2025-09-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_09112025.htm"},
+  {"reference_period":"2025-09","release_date":"2025-10-24","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_10242025.htm"},
+  {"reference_period":"2025-11","release_date":"2025-12-18","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_12182025.htm"},
+  {"reference_period":"2025-12","release_date":"2026-01-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_01132026.htm"},
+  {"reference_period":"2026-01","release_date":"2026-02-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_02132026.htm"},
+  {"reference_period":"2026-02","release_date":"2026-03-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_03112026.htm"},
+  {"reference_period":"2026-03","release_date":"2026-04-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_04102026.htm"},
+  {"reference_period":"2026-04","release_date":"2026-05-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_05122026.htm"},
+  {"reference_period":"2026-05","release_date":"2026-06-10","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_06102026.htm"},
+  {"reference_period":"2026-06","release_date":"2026-07-14","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_07142026.htm"},
+  {"reference_period":"2026-07","release_date":"2026-08-12","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/cpi_08122026.htm"}
 ]

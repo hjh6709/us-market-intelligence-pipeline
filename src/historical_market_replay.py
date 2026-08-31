@@ -35,11 +35,15 @@ class AlpacaHistoricalClient:
         *,
         timeout_seconds: float = 15.0,
         opener: Callable[..., Any] = urlopen,
+        retry_delays: Sequence[float] = (0.5, 1.0),
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         self._key_id = key_id
         self._secret_key = secret_key
         self._timeout_seconds = timeout_seconds
         self._opener = opener
+        self._retry_delays = tuple(retry_delays)
+        self._sleeper = sleeper
 
     def fetch_page(
         self,
@@ -72,21 +76,30 @@ class AlpacaHistoricalClient:
                 "Accept": "application/json",
             },
         )
-        try:
-            with self._opener(request, timeout=self._timeout_seconds) as response:
-                payload = json.loads(response.read())
-        except HTTPError as error:
-            raise HistoricalTradeError(
-                f"Alpaca historical trades request failed with HTTP {error.code}"
-            ) from error
-        except (TimeoutError, URLError) as error:
-            raise HistoricalTradeError(
-                "Alpaca historical trades request could not be completed"
-            ) from error
-        except (json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise HistoricalTradeError(
-                "Alpaca historical trades response was not valid JSON"
-            ) from error
+        for attempt in range(len(self._retry_delays) + 1):
+            try:
+                with self._opener(request, timeout=self._timeout_seconds) as response:
+                    payload = json.loads(response.read())
+                break
+            except HTTPError as error:
+                retryable = error.code in {429, 500, 502, 503, 504}
+                if retryable and attempt < len(self._retry_delays):
+                    self._sleeper(self._retry_delays[attempt])
+                    continue
+                raise HistoricalTradeError(
+                    f"Alpaca historical trades request failed with HTTP {error.code}"
+                ) from error
+            except (TimeoutError, URLError) as error:
+                if attempt < len(self._retry_delays):
+                    self._sleeper(self._retry_delays[attempt])
+                    continue
+                raise HistoricalTradeError(
+                    "Alpaca historical trades request could not be completed"
+                ) from error
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                raise HistoricalTradeError(
+                    "Alpaca historical trades response was not valid JSON"
+                ) from error
 
         trades = payload.get("trades")
         if not isinstance(trades, list):

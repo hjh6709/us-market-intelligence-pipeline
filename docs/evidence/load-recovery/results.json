@@ -1,0 +1,113 @@
+{
+  "evidence_date": "2026-08-31",
+  "dataset": {
+    "dataset_id": "cpi-sip-2022-01-01-2026-08-12",
+    "cpi_releases": 55,
+    "symbols": ["SPY", "QQQ", "SMH", "NVDA"],
+    "partitions": 220,
+    "raw_trades": 7360804,
+    "raw_trades_by_symbol": {
+      "SPY": 1731921,
+      "QQQ": 1685204,
+      "SMH": 173513,
+      "NVDA": 3770166
+    }
+  },
+  "macro_context": {
+    "source": "FRED/ALFRED",
+    "series": 10,
+    "cpi_events": 55,
+    "event_context_rows": 550,
+    "point_in_time_violations": 0,
+    "same_day_daily_series_observations": 0
+  },
+  "gcp_environment": {
+    "machine_type": "e2-standard-4",
+    "vcpu": 4,
+    "memory_gb": 16,
+    "disk_type": "pd-standard",
+    "disk_gb": 100,
+    "zone": "us-central1-a",
+    "deleted_after_evidence_copy": true
+  },
+  "kafka_partition_distribution_after_baseline_and_load": {
+    "partition_0": 0,
+    "partition_1": 7294235,
+    "partition_2": 184687,
+    "largest_partition_percent": 97.53,
+    "key": "symbol"
+  },
+  "runs": [
+    {
+      "run_id": "gcp-baseline-20260831",
+      "status": "succeeded",
+      "raw_input_trades": 118118,
+      "kafka_published": 118118,
+      "kafka_consumed": 118118,
+      "spark_input": 118118,
+      "spark_invalid": 0,
+      "spark_duplicates": 0,
+      "spark_output_bars": 472,
+      "postgres_stored_bars": 472,
+      "postgres_business_key_duplicates": 0,
+      "duration_seconds": 76.480415,
+      "note": "첫 GCP 실행으로 Spark Kafka connector 최초 다운로드 시간이 포함됨"
+    },
+    {
+      "run_id": "gcp-load-20260831",
+      "status": "succeeded",
+      "raw_input_trades": 7360804,
+      "kafka_published": 7360804,
+      "kafka_consumed": 7360804,
+      "spark_input": 7360804,
+      "spark_invalid": 0,
+      "spark_duplicates": 49,
+      "spark_output_bars": 22260,
+      "postgres_stored_bars": 22260,
+      "postgres_business_key_duplicates": 0,
+      "duration_seconds": 1690.250158,
+      "events_per_second": 4354.861
+    },
+    {
+      "run_id": "gcp-db-failure-20260831",
+      "status": "failed",
+      "raw_input_trades": 118118,
+      "kafka_published": 118118,
+      "kafka_consumed": 118118,
+      "postgres_stored_bars": 0,
+      "duration_seconds": 93.945992,
+      "error_type": "OperationalError"
+    },
+    {
+      "run_id": "gcp-db-recovered-20260831",
+      "status": "succeeded",
+      "raw_input_trades": 118118,
+      "kafka_published": 118118,
+      "kafka_consumed": 118118,
+      "spark_input": 118118,
+      "spark_invalid": 0,
+      "spark_duplicates": 0,
+      "spark_output_bars": 472,
+      "postgres_stored_bars": 472,
+      "postgres_business_key_duplicates": 0,
+      "duration_seconds": 95.308208
+    }
+  ],
+  "final_integrity": {
+    "market_bars": 22260,
+    "business_key_duplicates": 0,
+    "same_input_result_hash_before": "85ba8d3153a1bbbd6277f969ecce39d4",
+    "same_input_result_hash_after": "85ba8d3153a1bbbd6277f969ecce39d4",
+    "bars_by_symbol": {
+      "SPY": 6488,
+      "QQQ": 6536,
+      "SMH": 2891,
+      "NVDA": 6345
+    }
+  },
+  "safe_local_faults": [
+    "mocked_api_http_503_then_retry",
+    "invalid_input_then_corrected_rerun",
+    "database_unavailable_then_health_query"
+  ]
+}

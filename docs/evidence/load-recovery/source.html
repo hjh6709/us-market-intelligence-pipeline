@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pipeline Load & Recovery Evidence</title>
+  <style>
+    :root { color-scheme: dark; --bg:#09111f; --panel:#111d31; --line:#29405f; --text:#eef5ff; --muted:#9db0c9; --green:#45d483; --red:#ff6b78; --blue:#62a8ff; --amber:#ffc857; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:linear-gradient(135deg,#07101d,#10223b); color:var(--text); font-family:Inter,"Noto Sans KR",system-ui,sans-serif; }
+    main { width:760px; margin:0 auto; padding:28px; }
+    section { min-height:680px; margin-bottom:48px; padding:28px; background:rgba(17,29,49,.96); border:1px solid var(--line); border-radius:24px; box-shadow:0 24px 80px #0008; }
+    .eyebrow { color:var(--blue); font-weight:800; letter-spacing:.12em; font-size:15px; }
+    h1 { font-size:34px; margin:10px 0 12px; } h2 { font-size:29px; margin:8px 0 24px; }
+    p { color:var(--muted); font-size:16px; line-height:1.55; }
+    .cards { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:28px 0; }
+    .card { padding:16px; background:#0b1628; border:1px solid var(--line); border-radius:18px; }
+    .label { color:var(--muted); font-size:12px; } .value { font-size:24px; font-weight:850; margin-top:8px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; margin-top:16px; }
+    th,td { padding:12px 8px; border-bottom:1px solid var(--line); text-align:right; }
+    th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-size:14px; }
+    .ok { color:var(--green); font-weight:800; } .fail { color:var(--red); font-weight:800; } .warn { color:var(--amber); font-weight:800; }
+    .flow { display:flex; align-items:center; gap:8px; margin:24px 0; font-size:16px; font-weight:760; }
+    .node { padding:11px 13px; border-radius:14px; background:#162a47; border:1px solid #3d638e; } .arrow { color:var(--blue); }
+    .note { padding:14px 16px; background:#0b1628; border-left:5px solid var(--amber); border-radius:10px; color:var(--muted); font-size:13px; line-height:1.5; }
+  </style>
+</head>
+<body><main>
+  <section id="comparison">
+    <div class="eyebrow">5차시 과제 · 실제 GCP 실행</div>
+    <h1>기준 11.8만 건 → 부하 736만 건</h1>
+    <p>외부 API에 부하를 보내지 않고, 한 번 저장한 실제 Alpaca Historical SIP 체결을 Kafka로 재생했습니다.</p>
+    <div class="flow"><span class="node">Parquet archive</span><span class="arrow">→</span><span class="node">Kafka</span><span class="arrow">→</span><span class="node">Spark</span><span class="arrow">→</span><span class="node">PostgreSQL</span></div>
+    <table><thead><tr><th>실행</th><th>원시 입력</th><th>Kafka 발행/수신</th><th>Spark 입력</th><th>1분봉</th><th>시간</th></tr></thead><tbody>
+      <tr><td>GCP 기준</td><td>118,118</td><td>118,118 / 118,118</td><td>118,118</td><td>472</td><td>76.5초*</td></tr>
+      <tr><td class="ok">GCP 부하 성공</td><td>7,360,804</td><td>7,360,804 / 7,360,804</td><td>7,360,804</td><td>22,260</td><td>1,690.3초</td></tr>
+    </tbody></table>
+    <div class="cards"><div class="card"><div class="label">입력 증가</div><div class="value">62.3배</div></div><div class="card"><div class="label">Spark invalid</div><div class="value ok">0</div></div><div class="card"><div class="label">원본 중복 탐지</div><div class="value warn">49</div></div><div class="card"><div class="label">DB key 중복</div><div class="value ok">0</div></div></div>
+    <div class="note">* GCP 기준 실행에는 Spark Kafka connector 최초 다운로드 시간이 포함됩니다. 단순 환경 성능 비교 수치로 해석하지 않습니다.</div>
+  </section>
+  <section id="recovery">
+    <div class="eyebrow">장애 재현 · 복구 검증</div>
+    <h2>PostgreSQL 중단을 실패로 기록하고 같은 입력으로 복구</h2>
+    <table><thead><tr><th>단계</th><th>상태</th><th>Kafka 발행/수신</th><th>DB 저장</th><th>전체 1분봉</th><th>key 중복</th></tr></thead><tbody>
+      <tr><td>장애 전</td><td class="ok">정상</td><td>7,360,804 / 7,360,804</td><td>22,260</td><td>22,260</td><td>0</td></tr>
+      <tr><td>PostgreSQL 중단</td><td class="fail">failed / OperationalError</td><td>118,118 / 118,118</td><td>0</td><td>22,260</td><td>0</td></tr>
+      <tr><td>DB 재시작 + 동일 입력</td><td class="ok">succeeded</td><td>118,118 / 118,118</td><td>472 upsert</td><td>22,260</td><td>0</td></tr>
+    </tbody></table>
+    <div class="cards"><div class="card"><div class="label">API 503 mock</div><div class="value ok">복구</div></div><div class="card"><div class="label">잘못된 입력</div><div class="value ok">사전 차단</div></div><div class="card"><div class="label">DB 중단</div><div class="value ok">복구</div></div><div class="card"><div class="label">비밀 노출</div><div class="value ok">0</div></div></div>
+    <div class="note">재실행 때 472행을 새로 늘린 것이 아니라 기존 business key에 Upsert했습니다. 그래서 최종 business row는 22,260행으로 유지됐습니다.</div>
+  </section>
+  <section id="scope">
+    <div class="eyebrow">데이터 범위 · 최종 무결성</div>
+    <h2>CPI 발표 55회와 당시 이용 가능했던 경제지표</h2>
+    <div class="cards"><div class="card"><div class="label">CPI 발표</div><div class="value">55회</div></div><div class="card"><div class="label">시장 파티션</div><div class="value">220개</div></div><div class="card"><div class="label">FRED/ALFRED series</div><div class="value">10개</div></div><div class="card"><div class="label">event context</div><div class="value">550행</div></div></div>
+    <table><thead><tr><th>종목</th><th>원시 체결</th><th>최종 1분봉</th></tr></thead><tbody><tr><td>SPY</td><td>1,731,921</td><td>6,488</td></tr><tr><td>QQQ</td><td>1,685,204</td><td>6,536</td></tr><tr><td>SMH</td><td>173,513</td><td>2,891</td></tr><tr><td>NVDA</td><td>3,770,166</td><td>6,345</td></tr><tr><td class="ok">합계</td><td class="ok">7,360,804</td><td class="ok">22,260</td></tr></tbody></table>
+    <div class="cards"><div class="card"><div class="label">point-in-time 위반</div><div class="value ok">0</div></div><div class="card"><div class="label">Kafka 누락</div><div class="value ok">0</div></div><div class="card"><div class="label">Spark invalid</div><div class="value ok">0</div></div><div class="card"><div class="label">DB key 중복</div><div class="value ok">0</div></div></div>
+    <div class="note">GCP: e2-standard-4 (4 vCPU, 16GB), 100GB pd-standard. 증거를 내려받은 뒤 임시 VM과 부팅 디스크를 삭제했습니다.</div>
+  </section>
+</main></body></html>

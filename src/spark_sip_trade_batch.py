@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from pyspark.sql import functions as F
+from pyspark import StorageLevel
 
 from src.postgres import upsert_market_bars
 from src.preprocess import (
@@ -60,13 +61,17 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             .select("value", "topic", "partition", "offset", "timestamp")
         )
         traced = parse_market_events(kafka).filter(F.col("trace_id") == args.trace_id)
-        validated = validate_market_trades(traced, args.symbols).cache()
+        validated = validate_market_trades(traced, args.symbols).persist(
+            StorageLevel.DISK_ONLY
+        )
         valid, invalid = split_valid_invalid(validated)
         input_count = validated.count()
         invalid_count = invalid.count()
         deduplicated = valid.dropDuplicates(["event_id"])
         deduplicated_count = deduplicated.count()
-        policy_trades = apply_minute_bar_condition_policy(deduplicated).cache()
+        policy_trades = apply_minute_bar_condition_policy(deduplicated).persist(
+            StorageLevel.DISK_ONLY
+        )
         unsupported_count = policy_trades.filter(
             F.size("unsupported_conditions") > 0
         ).count()
@@ -94,7 +99,11 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             "postgres_upserted_bars": stored_count,
         }
     finally:
-        spark.stop()
+        try:
+            spark.stop()
+        except (ConnectionRefusedError, OSError):
+            # The JVM may already be gone after a Java heap failure.
+            pass
 
 
 def _spark_offset_json(topic: str, offset_ranges) -> tuple[str, str, str]:

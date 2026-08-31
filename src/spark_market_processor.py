@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import sys
 from typing import Sequence
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
@@ -68,6 +69,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def create_market_spark(app_name: str = "market-processor") -> SparkSession:
+    driver_memory = _load_setting("SPARK_DRIVER_MEMORY", "2g")
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
     spark = (
         SparkSession.builder.appName(app_name)
         .master("local[2]")
@@ -75,6 +79,9 @@ def create_market_spark(app_name: str = "market-processor") -> SparkSession:
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.caseSensitive", "true")
         .config("spark.sql.shuffle.partitions", "2")
+        .config("spark.driver.memory", driver_memory)
+        .config("spark.pyspark.python", sys.executable)
+        .config("spark.pyspark.driver.python", sys.executable)
         .config("spark.ui.enabled", "false")
         .getOrCreate()
     )

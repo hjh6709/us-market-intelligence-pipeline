@@ -1,0 +1,18 @@
+{
+  "experiment_run_id": "gcp-load-20260831",
+  "dataset_id": "cpi-sip-2022-01-01-2026-08-12:2022-01-01:2026-08-12",
+  "environment": "gcp",
+  "status": "succeeded",
+  "raw_input_trades": 7360804,
+  "kafka_published": 7360804,
+  "kafka_consumed": 7360804,
+  "spark_input": 7360804,
+  "spark_invalid": 0,
+  "spark_duplicates": 49,
+  "spark_output_bars": 22260,
+  "postgres_stored_bars": 22260,
+  "postgres_business_key_duplicates": 0,
+  "duration_seconds": 1690.250158,
+  "events_per_second": 4354.861,
+  "error_type": null
+}
