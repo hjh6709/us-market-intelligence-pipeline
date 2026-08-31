@@ -10,8 +10,8 @@
 | --- | --- |
 | 현재 입력량과 정상 결과 | 기존 2026-08-12 CPI 1회, `SPY·QQQ·SMH·NVDA`, SIP 원시 체결 118,118건을 기준 실행으로 기록한다. 실행 시간, 단계별 건수와 PostgreSQL 1분봉 472건을 같은 실행 ID로 남긴다. |
 | 더 많은 데이터 처리 | 2022-01-01 이상 2026-08-12 이하 CPI 발표 구간과 같은 4종목의 실제 SIP 체결을 저장한 뒤 Kafka로 재생한다. 최소 성공 조건은 기준 입력의 10배인 1,181,180건 이상이다. |
-| 장애 안전 재현 | 로컬 모의 API 503, 잘못된 입력, Spark 작업 중단, PostgreSQL 중단과 동일 데이터 중복 실행을 외부 서비스에 부하를 주지 않는 방식으로 재현한다. |
-| 복구 및 무결성 확인 | 동일 실행 명세와 Kafka offset 범위로 재실행해 발행·수신·Spark 입력 건수, 최종 저장 건수, 누락과 고유키 중복을 확인한다. |
+| 장애 안전 재현 | 로컬 모의 API 503과 잘못된 입력, 실제 PostgreSQL 중단을 외부 서비스에 부하를 주지 않는 방식으로 재현한다. 대량 실행 중 발생한 Spark OOM도 원인과 복구 결과를 남긴다. |
+| 복구 및 무결성 확인 | 동일 실행 명세로 재실행해 발행·수신·Spark 입력 건수, 최종 저장 건수, 고유키 중복과 결과 내용 hash를 확인한다. |
 
 공개 저장소에는 실행 코드, 집계 결과 JSON, 비밀정보가 제거된 짧은 로그, SQL 검증 결과와 화면 캡처만 포함한다. API key, DB 비밀번호, Airflow 메타데이터 DB, 전체 원시 payload와 대용량 Parquet은 포함하지 않는다.
 
@@ -73,7 +73,7 @@ Alpaca SIP ────┘                                                 │
                                                      └─> 무결성·성능 결과 JSON
 ```
 
-Airflow는 수집과 실험 실행 순서를 관리한다. XCom에는 원시 데이터가 아니라 dataset ID, 파티션 경로, offset 범위와 집계 수치만 전달한다.
+이번 부하·복구 실험은 재현 가능한 CLI runner가 수집 원본 선택과 Kafka·Spark·PostgreSQL 실행 순서를 관리한다. Airflow는 이전 차시의 다종목 자동화 경로로 유지하며 이번 실험의 필수 실행 도구로 주장하지 않는다.
 
 1. 실행 입력과 기간을 검증한다.
 2. BLS 이벤트와 FRED/ALFRED 데이터를 수집·Upsert한다.
@@ -90,11 +90,9 @@ Airflow는 수집과 실험 실행 순서를 관리한다. XCom에는 원시 데
 
 각 파티션 manifest에는 다음을 기록한다.
 
-- `dataset_id`, `economic_event_id`, `release_date`, `symbol`, `feed`
-- 조회 시작·종료 UTC
+- `release_date`, `symbol`, `feed`와 조회 시작·종료 UTC
 - API page 수와 원시 체결 건수
-- 파일 경로, 파일 크기와 SHA-256
-- 수집 시작·종료 시각과 완료 상태
+- Parquet 파일명, SHA-256과 수집 완료 시각
 
 완료 manifest와 파일 hash가 일치하는 파티션은 외부 API를 다시 호출하지 않는다.
 
@@ -105,8 +103,6 @@ Airflow는 수집과 실험 실행 순서를 관리한다. XCom에는 원시 데
 - `economic_events`: 공식 발표 시각과 대상 월
 - `market_bars`: Spark가 만든 SIP 1분봉
 - `macro_event_impacts`: 이벤트별 발표 전후 반응
-- 신규 `pipeline_experiment_runs`: 환경, dataset ID, 실행 단계, 시간과 단계별 건수
-- 신규 `pipeline_experiment_failures`: 주입한 장애, 관측한 오류, 복구 실행 ID와 복구 결과
 
 `market_bars`는 기존 `(symbol, bar_start, timeframe, source, feed)` 고유 기준과 Upsert를 유지한다. 실험 결과 테이블은 `experiment_run_id`로 실행을 구분한다.
 
@@ -128,7 +124,7 @@ Airflow는 수집과 실험 실행 순서를 관리한다. XCom에는 원시 데
 - 종목: 동일한 4개
 - 입력: 해당 기간 실제 CPI 발표 구간의 저장된 SIP 체결
 - 최소 입력: 1,181,180건
-- Kafka 재생률: 무제한 발행 1회와 제어된 발행률 실행을 분리한다.
+- Kafka 재생률: 저장 원본을 대기 없이 발행해 전체 처리량을 측정한다.
 - Spark: 같은 schema, validation, provider 거래 조건과 1분봉 집계를 사용한다.
 
 기준 실행과 부하 실행은 같은 GCP VM, Kafka partition 수, Spark 설정과 PostgreSQL 설정에서 수행한다. 비교표에는 원시 입력, Kafka 발행·수신, Spark 입력·유효·중복·오류, 생성·저장 1분봉, 전체 초, events/s와 오류를 기록한다.
@@ -137,36 +133,29 @@ Airflow는 수집과 실험 실행 순서를 관리한다. XCom에는 원시 데
 
 ### 1. API 503
 
-실제 Alpaca나 FRED에 실패 요청을 반복하지 않고, 테스트용 로컬 HTTP 응답이 처음 한 번 `503`을 반환한 뒤 정상 manifest 응답을 반환하게 한다. collector가 제한된 횟수와 backoff로 재시도하고 API key를 로그에 출력하지 않는지 검증한다.
+실제 Alpaca나 FRED에 실패 요청을 반복하지 않고, 테스트 opener가 처음 한 번 `503`을 반환한 뒤 정상 JSON 응답을 반환하게 한다. client가 제한된 횟수와 backoff로 재시도하고 API key를 로그에 출력하지 않는지 검증한다.
 
 ### 2. 잘못된 입력
 
-`start >= end`, 빈 종목 목록과 허용되지 않은 feed를 각각 입력한다. Airflow validation 단계가 외부 API나 Kafka 호출 전에 실패해야 하며 PostgreSQL 행 수는 변하지 않아야 한다.
+`limit=0`을 입력해 collector가 외부 API 호출이나 파일 생성 전에 실패하는지 확인한다. 이후 올바른 limit으로 다시 실행해 정상 manifest가 생성되는지 확인한다.
 
-### 3. Spark 작업 중단
-
-Kafka 발행과 offset 범위 기록이 끝난 뒤 Spark 프로세스를 종료한다. 실패 실행에서는 DB 결과를 성공으로 기록하지 않는다. 동일 manifest와 offset 범위로 Spark부터 재실행하고 발행·수신·Spark 입력 건수와 최종 저장 결과가 일치하는지 확인한다.
-
-### 4. PostgreSQL 중단
+### 3. PostgreSQL 중단
 
 전용 GCP 실험 VM에서 Spark 처리 전 PostgreSQL 컨테이너만 중지해 적재 실패를 기록한다. PostgreSQL을 다시 시작해 health check가 성공한 후 같은 처리 결과를 Upsert한다. 재실행 전후 `market_bars` 고유키 중복 수는 0이어야 한다.
 
-### 5. 동일 데이터 중복 실행
+### 4. 동일 데이터 중복 실행
 
-같은 manifest를 두 번 재생한다. Kafka에는 두 실행의 메시지가 각각 존재할 수 있지만 Spark의 거래 식별 중복 검사와 PostgreSQL Upsert 후 최종 business row 수와 값은 첫 성공 실행과 같아야 한다.
+같은 manifest를 두 번 재생한다. Kafka에는 두 실행의 메시지가 각각 존재할 수 있지만 PostgreSQL Upsert 후 최종 business row 수, 고유키 중복 수와 OHLC·거래량·VWAP 내용 hash는 첫 성공 실행과 같아야 한다.
 
 ## 측정 및 완료 기준
 
 각 실행은 다음 항목을 하나의 machine-readable JSON으로 남긴다.
 
-- 실행 ID, dataset ID, 환경과 장애 유형
-- 경제 이벤트 수, 종목 수와 데이터 파티션 수
-- 원시 입력, Kafka 발행·수신, Spark 입력·유효·중복·오류 건수
-- Spark 출력과 PostgreSQL 저장 1분봉 수
-- DB 저장 전·후 행 수와 고유키 중복 수
-- 단계별 시작·종료 시각, 소요 초와 처리량
-- 성공·실패 상태와 비밀정보가 제거된 오류 분류
-- 복구 대상 실행 ID와 복구 후 무결성 결과
+- 실행 ID, dataset ID와 환경
+- 원시 입력, Kafka 발행·수신, Spark 입력·중복·오류 건수
+- Spark 출력과 PostgreSQL Upsert 1분봉 수
+- 소요 초, 처리량, 성공·실패 상태와 비밀정보가 제거된 오류 분류
+- 별도 무결성 기록의 DB 행 수, 고유키 중복 수와 내용 hash
 
 완료 조건은 다음과 같다.
 
@@ -186,7 +175,7 @@ Kafka 발행과 offset 범위 기록이 끝난 뒤 Spark 프로세스를 종료�
 - 리전: `us-central1`
 - VM: `e2-standard-4`, 4 vCPU, 16GB memory
 - disk: 100GB Standard Persistent Disk
-- 실행 구성: Docker Compose의 Kafka·PostgreSQL, Spark local mode, Airflow
+- 실행 구성: Docker Compose의 Kafka·PostgreSQL, Spark local mode
 - 공개 포트: SSH 이외에는 열지 않는다.
 
 VM에는 최소 권한 서비스 계정만 사용한다. API key와 DB 접속값은 Git에 저장하지 않고 VM 환경 파일에만 둔다. 실험 완료 후 집계 증거를 로컬 저장소에 옮기고 VM을 삭제해 비용을 중단한다.

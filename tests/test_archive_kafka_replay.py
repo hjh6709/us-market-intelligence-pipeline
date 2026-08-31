@@ -25,7 +25,13 @@ class ArchiveKafkaReplayTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             manifest = collect_archive_partition(
                 OnePageClient(),
-                ArchivePartition("CPI", "2026-08-12", "NVDA", "start", "end"),
+                ArchivePartition(
+                    "CPI",
+                    "2026-08-12",
+                    "NVDA",
+                    "2026-08-12T11:30:00Z",
+                    "2026-08-12T13:31:00Z",
+                ),
                 archive_root=Path(temp),
             )
             publisher = RecordingPublisher()

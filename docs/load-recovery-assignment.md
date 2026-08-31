@@ -61,7 +61,7 @@ FRED API key를 사용해 각 CPI 발표일 당시 이용할 수 있었던 최�
 | 금리 | `DFF`, `DGS2`, `DGS10` |
 | 시장 불안 | `VIXCLS` |
 
-10개 지표 × CPI 55회 = `macro_event_contexts` 550행입니다. 발표일보다 미래인 관측일 또는 realtime 시작일을 연결한 건수는 0건입니다. `fdnpy`는 이번 구현에 사용하지 않았습니다.
+10개 지표 × CPI 55회 = `macro_event_contexts` 550행입니다. 월별 지표는 발표일 당시 ALFRED vintage를 사용하고, 일별 금리·VIX는 오전 8시 30분 이후 확정되는 당일 값을 피하려고 발표 전날 이하의 최신 관측값만 사용합니다. 발표일보다 미래인 관측일 또는 realtime 시작일을 연결한 건수는 0건입니다. `fdnpy`는 이번 구현에 사용하지 않았습니다.
 
 ## 2. 실행 환경
 
@@ -136,8 +136,8 @@ GCP의 PostgreSQL 컨테이너만 중지한 뒤 기준 데이터를 다시 실�
 
 | 장애 | 재현 방식 | 결과 |
 | --- | --- | --- |
-| API 503 | 외부 API가 아닌 mock 응답 | 실패 탐지 후 완성 Parquet과 checksum으로 복구 |
-| 잘못된 기간 | `start >= end` 입력 | 외부 호출·파일 생성 전에 `ValueError`, 부수 효과 0 |
+| API 503 | 외부 API가 아닌 mock 응답 | 첫 요청 503 후 1회 재시도해 정상 JSON 수신 |
+| 잘못된 입력 | `limit=0` 입력 | 파일 생성 전 `ValueError`, 수정값 재실행 후 정상 manifest 생성 |
 | DB endpoint 오류 | 로컬의 사용하지 않는 port 1 | `OperationalError` 후 정상 endpoint health query 통과 |
 
 외부 Alpaca·FRED 서비스에는 부하나 고의 실패 요청을 보내지 않았습니다.
@@ -151,8 +151,9 @@ GCP의 PostgreSQL 컨테이너만 중지한 뒤 기준 데이터를 다시 실�
 5. Spark는 `event_id`로 원본 중복을 제거합니다.
 6. PostgreSQL은 `(symbol, bar_start, timeframe, source, feed)` 고유키로 Upsert합니다.
 7. 재실행 전후 전체 행 수와 `GROUP BY ... HAVING COUNT(*) > 1` 결과를 비교합니다.
+8. OHLC·거래량·거래 건수·VWAP까지 정렬해 만든 결과 hash가 재실행 전후 같은지 확인합니다.
 
-최종 결과는 시장 1분봉 22,260행, DB business key 중복 0건, macro point-in-time 위반 0건입니다.
+동일 기준 입력 118,118건을 다시 처리한 전후 모두 시장 1분봉 22,260행, DB business key 중복 0건이었고 결과 hash도 `85ba8d3153a1bbbd6277f969ecce39d4`로 같았습니다. macro point-in-time 위반도 0건입니다.
 
 ## 7. 재현 명령
 
@@ -180,7 +181,7 @@ SPARK_DRIVER_MEMORY=6g \
   --output data/local/experiment-results/local-safe-faults.json
 ```
 
-Parquet 원본과 전체 로그는 Git에서 제외합니다. 공개 증거는 [`docs/evidence/load-recovery`](evidence/load-recovery/README.md)에 있습니다.
+Parquet 원본과 전체 로그는 Git에서 제외합니다. 공개 증거는 [`docs/evidence/load-recovery`](evidence/load-recovery/README.md)에 있으며, 기준·부하·DB 실패·복구의 비밀정보 제거 실행 JSON도 각각 확인할 수 있습니다. 행 수·결과 hash·경제지표 시점 검증 SQL은 [`scripts/evidence/load_recovery_integrity.sql`](../scripts/evidence/load_recovery_integrity.sql)입니다.
 
 ## 8. 과제 요구사항 확인
 

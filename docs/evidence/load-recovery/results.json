@@ -18,7 +18,8 @@
     "series": 10,
     "cpi_events": 55,
     "event_context_rows": 550,
-    "point_in_time_violations": 0
+    "point_in_time_violations": 0,
+    "same_day_daily_series_observations": 0
   },
   "gcp_environment": {
     "machine_type": "e2-standard-4",
@@ -95,6 +96,8 @@
   "final_integrity": {
     "market_bars": 22260,
     "business_key_duplicates": 0,
+    "same_input_result_hash_before": "85ba8d3153a1bbbd6277f969ecce39d4",
+    "same_input_result_hash_after": "85ba8d3153a1bbbd6277f969ecce39d4",
     "bars_by_symbol": {
       "SPY": 6488,
       "QQQ": 6536,
@@ -103,8 +106,8 @@
     }
   },
   "safe_local_faults": [
-    "mocked_api_http_503",
-    "invalid_input_before_side_effect",
+    "mocked_api_http_503_then_retry",
+    "invalid_input_then_corrected_rerun",
     "database_unavailable_then_health_query"
   ]
 }

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 import time
-from collections.abc import Callable
 
 import psycopg
 
@@ -73,12 +72,14 @@ def select_latest_available(
     observations: Sequence[MacroObservation],
     *,
     as_of: date,
+    observation_cutoff: date | None = None,
 ) -> MacroObservation:
     """Return the latest observation whose vintage was valid on ``as_of``."""
+    cutoff = observation_cutoff or as_of
     candidates = [
         observation
         for observation in observations
-        if observation.observation_date <= as_of
+        if observation.observation_date <= cutoff
         and observation.is_valid_on(as_of)
         and observation.value is not None
     ]
@@ -99,13 +100,20 @@ def fetch_event_macro_context(
     for release in releases:
         as_of = release.release_date
         for spec in series.values():
+            observation_cutoff = (
+                as_of - timedelta(days=1) if spec.frequency == "Daily" else as_of
+            )
             observations = client.fetch_observations(
                 series_id=spec.series_id,
                 observation_start=as_of - timedelta(days=spec.lookback_days),
-                observation_end=as_of,
+                observation_end=observation_cutoff,
                 vintage_dates=[as_of],
             )
-            selected = select_latest_available(observations, as_of=as_of)
+            selected = select_latest_available(
+                observations,
+                as_of=as_of,
+                observation_cutoff=observation_cutoff,
+            )
             contexts.append(
                 EventMacroContext(
                     economic_event_id=release.event_id,

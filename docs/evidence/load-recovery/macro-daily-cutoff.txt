@@ -1,0 +1,20 @@
+FRED/ALFRED daily-series cutoff verification — 2026-08-31
+
+Recollection command:
+.venv/bin/python scripts/collect_macro_event_context.py \
+  --release-from 2022-01-01 --release-to 2026-08-12 \
+  --series DFF DGS2 DGS10 VIXCLS --request-interval 0
+
+Recollection summary:
+economic_events = 55
+daily series = 4
+upserted macro_event_contexts = 220
+
+PostgreSQL verification after upsert:
+all macro_event_contexts = 550
+observation/realtime dates after event date = 0
+same-day observations for DFF/DGS2/DGS10/VIXCLS = 0
+
+Rule:
+Monthly series use the ALFRED vintage valid on the CPI release date.
+Daily rate and VIX series use the latest observation dated no later than the day before release.

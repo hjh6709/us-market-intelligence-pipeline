@@ -1,9 +1,14 @@
 import unittest
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from src.fred_client import MacroObservation
-from src.macro_context_ingestion import MACRO_SERIES, select_latest_available
+from src.macro_context_ingestion import (
+    MACRO_SERIES,
+    fetch_event_macro_context,
+    select_latest_available,
+)
+from src.cpi_ingestion import CpiRelease
 
 
 class MacroContextIngestionTest(unittest.TestCase):
@@ -70,6 +75,41 @@ class MacroContextIngestionTest(unittest.TestCase):
             ValueError, "no point-in-time observation was available"
         ):
             select_latest_available(observations, as_of=date(2024, 1, 11))
+
+    def test_daily_series_uses_only_dates_before_the_release_day(self) -> None:
+        class RecordingClient:
+            def __init__(self) -> None:
+                self.observation_end = None
+
+            def fetch_observations(self, **kwargs):
+                self.observation_end = kwargs["observation_end"]
+                return [
+                    MacroObservation(
+                        series_id="DGS2",
+                        observation_date=date(2024, 1, 10),
+                        realtime_start=date(2024, 1, 11),
+                        realtime_end=date(9999, 12, 31),
+                        value=Decimal("4.3"),
+                    )
+                ]
+
+        client = RecordingClient()
+        release = CpiRelease(
+            reference_period="2023-12",
+            release_date=date(2024, 1, 11),
+            released_at=datetime(2024, 1, 11, 13, 30, tzinfo=UTC),
+            timezone="America/New_York",
+            source_url="https://www.bls.gov/example",
+        )
+
+        contexts = fetch_event_macro_context(
+            client,
+            [release],
+            series={"DGS2": MACRO_SERIES["DGS2"]},
+        )
+
+        self.assertEqual(client.observation_end, date(2024, 1, 10))
+        self.assertEqual(contexts[0].observation_date, date(2024, 1, 10))
 
 
 if __name__ == "__main__":

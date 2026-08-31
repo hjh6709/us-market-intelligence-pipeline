@@ -88,9 +88,40 @@ class MarketTradeArchiveTest(unittest.TestCase):
                 client, self.spec, archive_root=self.root, max_pages=1
             )
 
-        partition_dir = self.root / "event_type=CPI" / "release_date=2026-08-12" / "symbol=NVDA"
+        partition_dir = self.spec.directory(self.root)
         self.assertFalse((partition_dir / "trades.parquet").exists())
         self.assertFalse((partition_dir / "manifest.json").exists())
+
+    def test_rejects_invalid_window_before_creating_files(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ordered timezone-aware"):
+            ArchivePartition(
+                "CPI",
+                "2026-08-12",
+                "NVDA",
+                "2026-08-12T13:31:00Z",
+                "2026-08-12T11:30:00Z",
+            )
+
+    def test_never_overwrites_a_different_partition_in_the_same_directory(self) -> None:
+        original = collect_archive_partition(
+            PagingClient([([trade(1, "2026-08-12T11:30:01Z")], None)]),
+            self.spec,
+            archive_root=self.root,
+        )
+        different_window = ArchivePartition(
+            "CPI",
+            "2026-08-12",
+            "NVDA",
+            "2026-08-12T11:31:00Z",
+            "2026-08-12T13:31:00Z",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "different or corrupt"):
+            collect_archive_partition(
+                PagingClient([]), different_window, archive_root=self.root
+            )
+
+        self.assertEqual(list(read_archive_records(original))[0]["i"], 1)
 
 
 if __name__ == "__main__":

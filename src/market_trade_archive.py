@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,6 +25,21 @@ class ArchivePartition:
     start: str
     end: str
     feed: str = "sip"
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Z][A-Z0-9._-]*", self.event_type):
+            raise ValueError("event_type must be an uppercase path-safe identifier")
+        if not re.fullmatch(r"[A-Z][A-Z0-9.-]*", self.symbol):
+            raise ValueError("symbol must be an uppercase market symbol")
+        if self.feed not in {"iex", "sip"}:
+            raise ValueError("feed must be iex or sip")
+        release_date = datetime.fromisoformat(self.release_date).date()
+        start = datetime.fromisoformat(self.start.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(self.end.replace("Z", "+00:00"))
+        if start.tzinfo is None or end.tzinfo is None or start >= end:
+            raise ValueError("archive start and end must be ordered timezone-aware timestamps")
+        if start.date() != release_date:
+            raise ValueError("archive start must fall on the release date")
 
     def directory(self, archive_root: Path) -> Path:
         return (
@@ -115,6 +131,10 @@ def collect_archive_partition(
         raise ValueError("limit and max_pages must be positive")
 
     directory = partition.directory(archive_root)
+    if (directory / "manifest.json").exists() or (directory / "trades.parquet").exists():
+        raise RuntimeError(
+            "archive directory already contains a different or corrupt partition"
+        )
     directory.mkdir(parents=True, exist_ok=True)
     parquet_path = directory / "trades.parquet"
     manifest_path = directory / "manifest.json"

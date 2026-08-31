@@ -1,0 +1,18 @@
+{
+  "experiment_run_id": "gcp-db-failure-20260831",
+  "dataset_id": "cpi-sip-2022-01-01-2026-08-12:2026-08-12:2026-08-12",
+  "environment": "gcp",
+  "status": "failed",
+  "raw_input_trades": 118118,
+  "kafka_published": 118118,
+  "kafka_consumed": 118118,
+  "spark_input": 0,
+  "spark_invalid": 0,
+  "spark_duplicates": 0,
+  "spark_output_bars": 0,
+  "postgres_stored_bars": 0,
+  "postgres_business_key_duplicates": 0,
+  "duration_seconds": 93.945992,
+  "events_per_second": 1257.297,
+  "error_type": "OperationalError"
+}

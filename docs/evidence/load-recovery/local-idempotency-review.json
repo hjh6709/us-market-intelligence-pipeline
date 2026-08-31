@@ -1,0 +1,18 @@
+{
+  "experiment_run_id": "local-idempotency-review-20260831",
+  "dataset_id": "cpi-sip-2022-01-01-2026-08-12:2026-08-12:2026-08-12",
+  "environment": "local",
+  "status": "succeeded",
+  "raw_input_trades": 118118,
+  "kafka_published": 118118,
+  "kafka_consumed": 118118,
+  "spark_input": 118118,
+  "spark_invalid": 0,
+  "spark_duplicates": 0,
+  "spark_output_bars": 472,
+  "postgres_stored_bars": 472,
+  "postgres_business_key_duplicates": 0,
+  "duration_seconds": 18.35327,
+  "events_per_second": 6435.801,
+  "error_type": null
+}

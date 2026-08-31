@@ -8,6 +8,7 @@ from pathlib import Path
 from src.cpi_ingestion import load_cpi_releases, upsert_cpi_data, _settings
 from src.fred_client import FredClient, MacroObservation
 from src.macro_context_ingestion import (
+    MACRO_SERIES,
     fetch_event_macro_context,
     upsert_event_macro_context,
 )
@@ -18,6 +19,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--release-from", default="2022-01-01")
     parser.add_argument("--release-to", default="2026-08-12")
     parser.add_argument("--request-interval", type=float, default=0.55)
+    parser.add_argument(
+        "--series",
+        nargs="+",
+        choices=sorted(MACRO_SERIES),
+        default=sorted(MACRO_SERIES),
+    )
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     return parser.parse_args()
 
@@ -34,11 +41,13 @@ def main() -> int:
         raise ValueError("no confirmed CPI release falls inside the requested range")
 
     client = FredClient(fred_api_key, timeout_seconds=30.0)
+    selected_series = {series_id: MACRO_SERIES[series_id] for series_id in args.series}
     contexts = []
     for release in releases:
         event_contexts = fetch_event_macro_context(
             client,
             [release],
+            series=selected_series,
             request_interval_seconds=args.request_interval,
         )
         contexts.extend(event_contexts)
@@ -79,7 +88,7 @@ def main() -> int:
                 "economic_events": events,
                 "macro_observations": observations,
                 "macro_event_contexts": stored_contexts,
-                "series_count": 10,
+                "series_count": len(selected_series),
             }
         )
     )
