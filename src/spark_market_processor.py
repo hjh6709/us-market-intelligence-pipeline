@@ -68,6 +68,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def create_market_spark(app_name: str = "market-processor") -> SparkSession:
+    driver_memory = _load_setting("SPARK_DRIVER_MEMORY", "2g")
     spark = (
         SparkSession.builder.appName(app_name)
         .master("local[2]")
@@ -75,6 +76,7 @@ def create_market_spark(app_name: str = "market-processor") -> SparkSession:
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.caseSensitive", "true")
         .config("spark.sql.shuffle.partitions", "2")
+        .config("spark.driver.memory", driver_memory)
         .config("spark.ui.enabled", "false")
         .getOrCreate()
     )

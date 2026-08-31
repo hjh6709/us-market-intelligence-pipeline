@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.pipeline_experiment import ExperimentResult, write_result
+from src.pipeline_experiment import ExperimentResult, failed_result, write_result
 
 
 class PipelineExperimentTest(unittest.TestCase):
@@ -34,6 +34,27 @@ class PipelineExperimentTest(unittest.TestCase):
         self.assertEqual(json.loads(payload)["kafka_consumed"], 100)
         self.assertNotIn("postgresql://", payload)
         self.assertNotIn("APCA_API", payload)
+
+    def test_failed_result_records_the_failure_without_secrets(self) -> None:
+        result = failed_result(
+            experiment_run_id="load-1",
+            dataset_id="dataset-1",
+            environment="local",
+            raw_input_trades=7_360_804,
+            started=100.0,
+            finished=220.0,
+            error=RuntimeError(
+                "database postgresql://market:secret@localhost/market failed"
+            ),
+            kafka_published=7_360_804,
+            kafka_consumed=7_360_804,
+        )
+
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.error_type, "RuntimeError")
+        self.assertEqual(result.kafka_published, 7_360_804)
+        self.assertNotIn("postgresql://", result.error_message or "")
+        self.assertNotIn("secret", result.error_message or "")
 
 
 if __name__ == "__main__":

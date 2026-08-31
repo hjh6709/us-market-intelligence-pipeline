@@ -55,7 +55,7 @@ def main() -> int:
     )
     write_result(result, args.output)
     print(json.dumps(asdict(result), ensure_ascii=False))
-    return 0
+    return 0 if result.status == "succeeded" else 1
 
 
 if __name__ == "__main__":
