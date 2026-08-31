@@ -30,13 +30,21 @@ class RecordingFredClient:
 
 
 class CpiIngestionTest(unittest.TestCase):
-    def test_manifest_has_twelve_published_releases_and_skips_unpublished_october(self) -> None:
+    def test_manifest_covers_official_releases_from_2022_through_august_2026(self) -> None:
         releases = load_cpi_releases(Path("config/cpi_releases.json"))
 
-        self.assertEqual(len(releases), 12)
+        self.assertEqual(len(releases), 55)
         self.assertNotIn("2025-10", {release.reference_period for release in releases})
-        self.assertEqual(releases[0].released_at, datetime(2025, 8, 12, 12, 30, tzinfo=UTC))
-        self.assertEqual(releases[4].released_at, datetime(2026, 1, 13, 13, 30, tzinfo=UTC))
+        self.assertEqual(releases[0].reference_period, "2021-12")
+        self.assertEqual(releases[0].released_at, datetime(2022, 1, 12, 13, 30, tzinfo=UTC))
+        self.assertEqual(releases[-1].reference_period, "2026-07")
+        self.assertEqual(releases[-1].released_at, datetime(2026, 8, 12, 12, 30, tzinfo=UTC))
+
+        released_at = [release.released_at for release in releases]
+        reference_periods = [release.reference_period for release in releases]
+        self.assertEqual(released_at, sorted(released_at))
+        self.assertEqual(len(released_at), len(set(released_at)))
+        self.assertEqual(len(reference_periods), len(set(reference_periods)))
 
     def test_fetches_each_series_at_the_official_release_vintage(self) -> None:
         release = CpiRelease(
