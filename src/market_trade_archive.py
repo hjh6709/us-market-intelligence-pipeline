@@ -71,24 +71,32 @@ def _load_completed(partition: ArchivePartition, archive_root: Path) -> ArchiveM
     if not manifest_path.exists() or not parquet_path.exists():
         return None
     try:
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if payload["partition"] != asdict(partition):
-            return None
-        if payload["sha256"] != _sha256(parquet_path):
-            return None
-        if pq.ParquetFile(parquet_path).metadata.num_rows != payload["row_count"]:
-            return None
-        return ArchiveManifest(
-            partition=partition,
-            parquet_path=parquet_path,
-            manifest_path=manifest_path,
-            row_count=payload["row_count"],
-            page_count=payload["page_count"],
-            sha256=payload["sha256"],
-            collected_at=payload["collected_at"],
-        )
-    except (KeyError, OSError, ValueError, json.JSONDecodeError):
+        manifest = load_archive_manifest(manifest_path)
+        return manifest if manifest.partition == partition else None
+    except (KeyError, OSError, TypeError, ValueError, RuntimeError, json.JSONDecodeError):
         return None
+
+
+def load_archive_manifest(manifest_path: Path) -> ArchiveManifest:
+    """Load one manifest and reject missing, mismatched, or corrupt Parquet."""
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    partition = ArchivePartition(**payload["partition"])
+    manifest = ArchiveManifest(
+        partition=partition,
+        parquet_path=manifest_path.parent / payload["parquet_file"],
+        manifest_path=manifest_path,
+        row_count=int(payload["row_count"]),
+        page_count=int(payload["page_count"]),
+        sha256=str(payload["sha256"]),
+        collected_at=str(payload["collected_at"]),
+    )
+    if not manifest.parquet_path.exists():
+        raise RuntimeError("archive Parquet file is missing")
+    if _sha256(manifest.parquet_path) != manifest.sha256:
+        raise RuntimeError("archive checksum does not match its manifest")
+    if pq.ParquetFile(manifest.parquet_path).metadata.num_rows != manifest.row_count:
+        raise RuntimeError("archive row count does not match its manifest")
+    return manifest
 
 
 def collect_archive_partition(
