@@ -1,4 +1,5 @@
 import unittest
+import sys
 
 from src.spark_session import create_local_spark
 
@@ -19,6 +20,7 @@ class SparkSessionTest(unittest.TestCase):
         self.assertEqual(self.spark.conf.get("spark.sql.session.timeZone"), "UTC")
         self.assertEqual(self.spark.conf.get("spark.sql.shuffle.partitions"), "2")
         self.assertEqual(self.spark.conf.get("spark.sql.caseSensitive"), "true")
+        self.assertEqual(self.spark.conf.get("spark.pyspark.python"), sys.executable)
 
 
 if __name__ == "__main__":
