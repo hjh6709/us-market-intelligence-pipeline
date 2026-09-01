@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-09-01",
+  "scope": {
+    "raw_trades": 7360804,
+    "cpi_releases": 55,
+    "symbols": ["SPY", "QQQ", "SMH", "NVDA"],
+    "archive_partitions": 220
+  },
+  "previous_identity": {
+    "fields": ["source", "feed", "event_type", "symbol", "provider_trade_id", "event_timestamp"],
+    "collisions": 49,
+    "interpretation": "실제 중복이 아니라 거래소가 다른 체결을 같은 event_id로 만든 식별키 충돌"
+  },
+  "corrected_identity": {
+    "fields": ["source", "feed", "event_type", "symbol", "exchange", "provider_trade_id", "event_timestamp"],
+    "collisions": 0,
+    "same_trade_replay_is_stable": true,
+    "different_exchange_is_distinct": true
+  },
+  "verification": {
+    "unit_tests": [
+      "same provider trade produces the same event_id",
+      "same provider ID and timestamp on different exchanges produces different event_id"
+    ],
+    "full_archive_scan": "7360804 rows checked; corrected identity collisions=0",
+    "full_pipeline_rerun": "Kafka published=consumed=Spark input=7360804; Spark duplicates=0"
+  }
+}

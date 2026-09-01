@@ -35,8 +35,8 @@
       <tr><td>GCP 기준</td><td>118,118</td><td>118,118 / 118,118</td><td>118,118</td><td>472</td><td>76.5초*</td></tr>
       <tr><td class="ok">GCP 부하 성공</td><td>7,360,804</td><td>7,360,804 / 7,360,804</td><td>7,360,804</td><td>22,260</td><td>1,690.3초</td></tr>
     </tbody></table>
-    <div class="cards"><div class="card"><div class="label">입력 증가</div><div class="value">62.3배</div></div><div class="card"><div class="label">Spark invalid</div><div class="value ok">0</div></div><div class="card"><div class="label">원본 중복 탐지</div><div class="value warn">49</div></div><div class="card"><div class="label">DB key 중복</div><div class="value ok">0</div></div></div>
-    <div class="note">* GCP 기준 실행에는 Spark Kafka connector 최초 다운로드 시간이 포함됩니다. 단순 환경 성능 비교 수치로 해석하지 않습니다.</div>
+    <div class="cards"><div class="card"><div class="label">입력 증가</div><div class="value">62.3배</div></div><div class="card"><div class="label">Spark invalid</div><div class="value ok">0</div></div><div class="card"><div class="label">당시 ID 충돌</div><div class="value warn">49*</div></div><div class="card"><div class="label">DB key 중복</div><div class="value ok">0</div></div></div>
+    <div class="note">* 6차시 점검에서 49건은 실제 중복이 아니라 거래소가 다른 체결을 기존 식별키가 오인한 것으로 확인했습니다. 거래소를 포함해 전체 재실행한 현재 중복은 0건입니다. GCP 기준 실행에는 Spark Kafka connector 최초 다운로드 시간이 포함됩니다.</div>
   </section>
   <section id="recovery">
     <div class="eyebrow">장애 재현 · 복구 검증</div>

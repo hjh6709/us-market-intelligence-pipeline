@@ -1,0 +1,19 @@
+{
+  "executed_at": "2026-09-01",
+  "run_id": "local-load-event-id-v2-20260901",
+  "dataset_id": "cpi-sip-2022-01-01-2026-08-12",
+  "environment": "local",
+  "status": "succeeded",
+  "raw_input_trades": 7360804,
+  "kafka_published": 7360804,
+  "kafka_consumed": 7360804,
+  "spark_input": 7360804,
+  "spark_invalid": 0,
+  "spark_duplicates": 0,
+  "spark_output_bars": 22260,
+  "postgres_stored_bars": 22260,
+  "postgres_business_key_duplicates": 0,
+  "duration_seconds": 436.652592,
+  "events_per_second": 16857.346,
+  "note": "거래소 코드를 event_id 구성요소에 포함한 뒤 저장된 Parquet 전체를 Kafka-Spark-PostgreSQL 경로로 재실행한 결과"
+}
