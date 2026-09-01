@@ -43,7 +43,7 @@ class MarketProducerTest(unittest.TestCase):
         self.assertEqual(publisher.envelopes[0]["trace_id"], "collector-1")
 
     def test_rejects_incomplete_trade_before_kafka(self) -> None:
-        incomplete = {"T": "t", "S": "NVDA", "i": 1}
+        incomplete = {"T": "t", "S": "NVDA", "i": 1, "x": "V"}
         publisher = RecordingPublisher()
 
         with self.assertRaisesRegex(ValueError, "Missing routing field: t"):
