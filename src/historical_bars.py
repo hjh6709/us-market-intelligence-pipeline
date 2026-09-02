@@ -1,4 +1,4 @@
-"""Fetch and store Alpaca historical one-minute bars without using Kafka."""
+"""Fetch and store Alpaca historical bars without using Kafka."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from src.postgres import UPSERT_MARKET_BAR_SQL
 
 
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
+SUPPORTED_TIMEFRAMES = {"1Min": "1m", "1Day": "1d"}
 
 
 class HistoricalBarError(RuntimeError):
@@ -59,13 +60,16 @@ class AlpacaHistoricalBarsClient:
         end: datetime,
         feed: str,
         limit: int,
+        timeframe: str = "1Min",
         page_token: str | None = None,
     ) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
         if not symbols:
             raise ValueError("At least one symbol is required")
+        if timeframe not in SUPPORTED_TIMEFRAMES:
+            raise ValueError(f"Unsupported historical bar timeframe: {timeframe}")
         params = {
             "symbols": ",".join(symbols),
-            "timeframe": "1Min",
+            "timeframe": timeframe,
             "start": _rfc3339(start),
             "end": _rfc3339(end),
             "feed": feed,
@@ -120,6 +124,7 @@ def fetch_all_bars(
     start: datetime,
     end: datetime,
     feed: str,
+    timeframe: str = "1Min",
     limit: int = 10_000,
     max_pages: int = 20,
 ) -> tuple[list[HistoricalBar], int]:
@@ -134,6 +139,7 @@ def fetch_all_bars(
             start=start,
             end=end,
             feed=feed,
+            timeframe=timeframe,
             limit=limit,
             page_token=page_token,
         )
@@ -183,12 +189,17 @@ def upsert_historical_bars(
     *,
     database_url: str,
     feed: str,
+    timeframe: str = "1Min",
 ) -> int:
+    try:
+        stored_timeframe = SUPPORTED_TIMEFRAMES[timeframe]
+    except KeyError as error:
+        raise ValueError(f"Unsupported historical bar timeframe: {timeframe}") from error
     rows = [
         (
             bar.symbol,
             bar.bar_start,
-            "1m",
+            stored_timeframe,
             bar.open,
             bar.high,
             bar.low,

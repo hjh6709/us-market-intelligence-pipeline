@@ -1,0 +1,27 @@
+{
+  "captured_at": "2026-09-02T22:39:48Z",
+  "status": "COLLECTED_AND_STORED",
+  "event_id": "FOMC|2026-07-29|2026-07-29T18:00:00Z",
+  "symbol": "TLT",
+  "source": "alpaca",
+  "feed": "sip",
+  "api_pages": 2,
+  "session_1min": {
+    "window": "[2026-07-29T17:00:00Z, 2026-07-29T20:01:00Z)",
+    "selected_rows": 181,
+    "postgres_rows": 181,
+    "postgres_first_bar": "2026-07-29T17:00:00Z",
+    "postgres_last_bar": "2026-07-29T20:00:00Z"
+  },
+  "daily_15_sessions": {
+    "sessions_before": 7,
+    "event_session": 1,
+    "sessions_after": 7,
+    "selected_rows": 15,
+    "postgres_rows": 15,
+    "postgres_first_bar": "2026-07-20T04:00:00Z",
+    "postgres_last_bar": "2026-08-07T04:00:00Z",
+    "complete": true
+  },
+  "note": "Counts and boundaries were verified by querying market_bars after the upsert. No credentials or price values are included."
+}

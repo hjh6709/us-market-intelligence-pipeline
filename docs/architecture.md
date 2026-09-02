@@ -194,14 +194,18 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ```text
 economic event with official released_at + as-known vintage
-→ fetch SIP 1m bars for configured pre/post windows
-→ calculate return, volume and volatility response
+→ core raw trades [T-60m,T+60m] for Kafka·Spark verification
+→ SIP 1m bars [T-60m,T+120m] for session response
+→ SIP daily bars [7 prior sessions,event,7 following sessions]
+→ calculate return, volume and volatility response by horizon
 → compare with matched non-event time, SPY/QQQ and sector ETF
 → aggregate the same release type across multiple dates
 → store observed association, sample size, coverage and limitation
 ```
 
-발표 후 `5m/30m/60m`은 초기 비교 window이며 config와 analysis version으로 관리한다. CPI·고용처럼 정규장 전 발표는 extended-hours SIP coverage가 충분할 때만 즉시 반응을 계산한다. 부족하면 첫 정규장 반응으로 분리하고 `PARTIAL_MARKET_COVERAGE`를 표시한다. FOMC처럼 정규장 중 발표는 정규장 기준으로 계산한다.
+발표 후 `5m/30m/60m`은 공통 단기 비교 window다. 분석용 1분봉은 `T-60m`부터 `T+120m`까지 수집해 CPI·고용·PCE의 장 시작 이후와 FOMC의 장 마감까지 포함한다. 중기 구간은 발표일을 포함한 전후 7거래일의 일봉으로 계산한다. 달력일을 거래일처럼 채우지 않으며 최신 발표가 아직 7거래일을 채우지 못했으면 `INCOMPLETE_FUTURE_SESSIONS`로 남긴다.
+
+원시 체결을 14일 전체에 확대하지 않는다. Kafka·Spark 정합성 검증은 기존 121분 원시 체결을 유지하고, 더 넓은 분석 범위는 Alpaca가 제공한 `1Min`·`1Day` bar를 `market_bars.timeframe`의 `1m`·`1d`로 구분해 Upsert한다. 같은 bar가 여러 이벤트의 7거래일 구간에 포함돼도 business key가 같으므로 중복 행이 생기지 않는다.
 
 Stage A에서는 이 과거 발표 구간 재계산을 `event-study backtest`라고 부른다. 가상 자산과 주문을 시뮬레이션하는 strategy/portfolio backtest는 Future Trading 경계에 남긴다. 발표 전 구간은 심리로 단정하지 않고 관측된 pre-event drift로만 기록한다.
 

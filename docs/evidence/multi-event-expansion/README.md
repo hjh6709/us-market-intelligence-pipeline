@@ -17,5 +17,17 @@ Parquet SHA-256: 77059c190cf58c9a90a2e52fb6abd3c26e6bf1979d240b680c5a21f1824bc1f
 
 이 증거가 확인하는 단계는 `공식 FOMC 시각 → TLT SIP 수집 → Parquet row count·checksum manifest`입니다. Kafka·Spark·PostgreSQL 처리는 아직 실행하지 않았으므로 이 문서에서 완료로 주장하지 않습니다.
 
+## 분석 구간 확장 smoke
+
+같은 `FOMC × TLT`를 대상으로 분석용 bar 수집과 PostgreSQL 저장도 별도로 확인했습니다.
+
+| 계층 | 범위 | API 선택 | PostgreSQL 확인 | coverage |
+| --- | --- | ---: | ---: | --- |
+| `SESSION_1MIN` | 13:00~16:00 ET, 181개 분 | 181 | 181 | 전체 분 존재 |
+| `DAILY_15_SESSIONS` | 이전 7 + 발표일 + 이후 7거래일 | 15 | 15 | 7 / 1 / 7 완료 |
+
+이는 한 이벤트·한 종목의 smoke 결과입니다. 77회 × 10종목 전체가 저장됐다는 뜻은 아닙니다.
+
 - 기계 판독 요약: [`fomc-tlt-2026-07-29.json`](fomc-tlt-2026-07-29.json)
+- 분석 구간 저장 요약: [`fomc-tlt-context.json`](fomc-tlt-context.json)
 - 전체 확장 설명: [`../../multi-event-expansion.md`](../../multi-event-expansion.md)

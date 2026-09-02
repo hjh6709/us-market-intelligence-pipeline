@@ -38,12 +38,22 @@
 
 ETF를 포함한 이유는 개별 기업 뉴스의 영향을 줄이고 경제지표에 대한 시장·섹터 반응을 비교하기 위해서입니다. 개별주 NVDA·AAPL·JPM은 섹터 ETF와 실제 개별 기업 반응이 얼마나 다른지 확인하는 용도입니다.
 
-## 같은 시간 범위로 수집하는 방법
+## 시간 범위는 세 층으로 나눈다
 
-모든 이벤트는 해당 기관의 공식 발표 시각 `T`를 기준으로 `[T-60분, T+61분)`의 실제 SIP 체결을 받습니다. 끝을 61분 뒤로 두는 이유는 `T+60분`에 시작하는 마지막 1분 구간까지 포함하기 위해서입니다.
+한 가지 해상도로 모든 질문에 답하지 않습니다. Kafka·Spark가 원시 거래를 정확히 처리하는지, 발표 당일 반응이 어땠는지, 발표 전후 며칠 동안 흐름이 이어졌는지는 필요한 데이터 양과 해상도가 다르기 때문입니다.
 
-- BLS CPI·고용, BEA PCE: 보통 08:30 ET 발표이므로 장전 반응을 포함합니다.
-- FOMC statement: 14:00 ET 발표이므로 정규장 반응을 포함합니다.
+| 계층 | 정확한 범위 | 입력 데이터 | 목적 | 현재 상태 |
+| --- | --- | --- | --- | --- |
+| `CORE_RAW_121M` | `T-60분`부터 `T+60분`에 시작하는 분까지 | SIP 개별 체결 | Kafka·Spark 전처리와 1분봉 정합성 검증 | CPI 55회 × 4종목 실행 완료 |
+| `SESSION_1MIN` | `T-60분`부터 `T+120분`에 시작하는 분까지, 최대 181개 | Alpaca SIP 1분봉 | 발표 직후 5·30·60분과 당일 후속 반응 분석 | FOMC×TLT 181행 smoke 완료, 전체 실행 전 |
+| `DAILY_15_SESSIONS` | 발표 거래일을 포함해 이전 7거래일 + 이후 7거래일 | Alpaca SIP 일봉 | 발표 전 움직임과 1·3·7거래일 후 흐름 분석 | FOMC×TLT 15행 smoke 완료, 전체 실행 전 |
+
+`전후 7일`은 달력 날짜가 아니라 실제 15개 거래 세션입니다. 주말과 휴장일은 행을 만들지 않습니다. 최신 발표가 아직 7거래일이 지나지 않았다면 부족한 이후 세션 수를 manifest에 `incomplete`로 남기며 미래 값을 채우지 않습니다.
+
+14일치 원시 체결을 모두 Kafka에 넣지 않는 이유는 일별 방향을 보는 데 틱 단위 데이터가 불필요하기 때문입니다. 원시 체결은 핵심 121분 검증에만 사용하고, 넓은 구간은 provider가 집계한 1분봉·일봉을 받아 PostgreSQL의 서로 다른 `timeframe`으로 저장합니다.
+
+- BLS CPI·고용, BEA PCE: 보통 08:30 ET 발표이므로 07:30~10:30 ET의 장전과 장 시작 후 반응을 함께 봅니다.
+- FOMC statement: 14:00 ET 발표이므로 13:00~16:00 ET의 정규장 반응을 봅니다.
 - 거래가 전혀 없거나 가격 형성 조건을 충족하는 거래가 없는 분은 임의로 채우지 않고 coverage 결측으로 남깁니다.
 
 ## 코드 흐름
@@ -64,11 +74,16 @@ Kafka replay → Spark 검증·집계 → PostgreSQL
 
 현재 새 스크립트는 공식 일정·종목·시간 구간을 일반화하고 Parquet 수집까지 담당합니다. 기존 Kafka replay와 Spark 처리기는 `event_type`과 `symbol`을 이미 메시지/파티션 필드로 사용하므로 같은 원본을 후속 처리할 수 있습니다. 다만 770개 파티션 전체의 신규 Kafka·Spark 실행 결과는 아직 생성하지 않았습니다.
 
+분석용 두 구간은 `collect_market_event_context.py`가 같은 공식 일정과 종목 목록을 사용해 수집합니다. 77회 × 10종목 기준 계획상 최대치는 `SESSION_1MIN` 139,370행과 `DAILY_15_SESSIONS` 11,550행입니다. 이는 실제 저장 완료 건수가 아니라 결측이 하나도 없다고 가정한 상한입니다. 실제 smoke에서는 FOMC×TLT의 181개 1분봉과 15개 일봉을 PostgreSQL에서 확인했습니다.
+
 ## 확인 및 단계 실행
 
 ```bash
 # API 호출 없이 전체 계획 확인
 .venv/bin/python scripts/collect_market_event_archive.py --dry-run
+
+# 분석용 181분·15거래일 계획 확인
+.venv/bin/python scripts/collect_market_event_context.py --dry-run
 
 # 먼저 FOMC와 금리 민감 4종목만 수집
 .venv/bin/python scripts/collect_market_event_archive.py \
@@ -78,6 +93,9 @@ Kafka replay → Spark 검증·집계 → PostgreSQL
 
 # 이후 전체 catalog·universe 수집
 .venv/bin/python scripts/collect_market_event_archive.py
+
+# 1분봉·일봉을 수집해 PostgreSQL에 timeframe 1m·1d로 Upsert
+.venv/bin/python scripts/collect_market_event_context.py
 ```
 
 대량 수집은 `FOMC → 고용 → PCE → 기존 CPI의 신규 6종목` 순으로 나눕니다. 중간 실패 시 완료 manifest와 Parquet checksum이 일치하는 파티션은 건너뛰고 실패한 파티션부터 이어서 실행합니다.

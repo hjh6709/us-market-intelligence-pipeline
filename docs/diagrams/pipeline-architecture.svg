@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
   <title id="title">U.S. Economic Event Market Data Pipeline</title>
-  <desc id="desc">CPI 실측 경로와 고용, PCE, FOMC 공식 발표 및 10종목 확장 계획을 구분한 데이터 파이프라인 아키텍처</desc>
+  <desc id="desc">CPI 원시 체결 실측 경로와 다중 경제 이벤트의 181분 및 전후 7거래일 분석 계획을 구분한 데이터 파이프라인 아키텍처</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
     <marker id="purpleArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
@@ -10,7 +10,7 @@
   </defs>
   <rect width="1600" height="1080" fill="#fff"/>
   <text x="52" y="58" class="title">U.S. Economic Event Market Data Pipeline</text>
-  <text x="52" y="88" class="subtitle">CPI 실측 결과를 보존하면서 고용·PCE·FOMC 공식 발표와 시장 대표 10종목으로 확장하는 구조</text>
+  <text x="52" y="88" class="subtitle">원시 체결 121분 검증은 보존하고, 발표 당일 181분과 전후 7거래일 분석을 별도 계층으로 확장</text>
   <g transform="translate(52 112)"><rect width="20" height="20" rx="4" class="source"/><text x="30" y="15" class="small">현재 구현 · 실행 결과 확인</text><rect x="210" width="20" height="20" rx="4" class="planned"/><text x="240" y="15" class="small">후속 확장 · 입력 계획 검증 · 데이터 수집 예정</text></g>
 
   <rect x="36" y="158" width="1528" height="225" rx="18" class="lane"/>
@@ -43,20 +43,20 @@
   <path d="M315 555 H355" class="flow"/><path d="M615 555 H655" class="flow"/><path d="M955 555 H995" class="flow"/><path d="M1265 555 H1305" class="flow"/>
 
   <rect x="36" y="683" width="1528" height="257" rx="18" class="lane"/>
-  <text x="58" y="715" class="section">3. 1분봉 공백을 처리하는 방법</text>
-  <text x="58" y="739" class="small">121분은 예상 시간 구간 수이며, 가격 형성 가능한 체결이 없는 분을 0원이나 직전 가격으로 채우지 않음</text>
+  <text x="58" y="715" class="section">3. 분석 시간축과 결측 처리</text>
+  <text x="58" y="739" class="small">목적에 따라 raw 121분 · 분석용 181분 · 전후 15거래 세션을 분리하고, 없는 가격이나 미래 거래일을 채우지 않음</text>
   <rect x="55" y="768" width="300" height="130" rx="14" class="source"/>
-  <text x="205" y="798" text-anchor="middle" class="boxt">원시 체결 보존</text><text x="205" y="826" text-anchor="middle" class="copy">Odd Lot도 Parquet·Kafka 건수에 포함</text><text x="205" y="854" text-anchor="middle" class="metric">거래 원본은 사라지지 않음</text>
-  <rect x="405" y="768" width="330" height="130" rx="14" class="process"/>
-  <text x="570" y="798" text-anchor="middle" class="boxt">가격 가능 여부 판정</text><text x="570" y="826" text-anchor="middle" class="copy">일반 체결 있음 → 1분 OHLCV</text><text x="570" y="854" text-anchor="middle" class="copy">Odd Lot만 있음 → 정상 무가격 구간</text>
-  <rect x="785" y="768" width="330" height="130" rx="14" class="store"/>
-  <text x="950" y="798" text-anchor="middle" class="boxt">1분봉 정본</text><text x="950" y="826" text-anchor="middle" class="copy">세밀한 검증·누락 판정에 사용</text><text x="950" y="854" text-anchor="middle" class="metric">없는 가격을 강제 생성하지 않음</text>
+  <text x="205" y="798" text-anchor="middle" class="boxt">CORE_RAW_121M</text><text x="205" y="826" text-anchor="middle" class="copy">T-60~T+60 · SIP 개별 체결</text><text x="205" y="854" text-anchor="middle" class="metric">Kafka·Spark 정합성 검증 완료</text>
+  <rect x="405" y="768" width="330" height="130" rx="14" class="planned"/>
+  <text x="570" y="798" text-anchor="middle" class="boxt">SESSION_1MIN</text><text x="570" y="826" text-anchor="middle" class="copy">T-60~T+120 · 최대 181개 1분봉</text><text x="570" y="854" text-anchor="middle" class="copy">5·30·60분 + 장 시작·마감 반응</text>
+  <rect x="785" y="768" width="330" height="130" rx="14" class="planned"/>
+  <text x="950" y="798" text-anchor="middle" class="boxt">DAILY_15_SESSIONS</text><text x="950" y="826" text-anchor="middle" class="copy">이전 7 + 발표일 + 이후 7거래일</text><text x="950" y="854" text-anchor="middle" class="metric">1·3·7일 흐름 · 주말 제외</text>
   <rect x="1165" y="768" width="380" height="130" rx="14" class="planned"/>
-  <text x="1355" y="798" text-anchor="middle" class="boxt">분석용 5분봉 추가</text><text x="1355" y="826" text-anchor="middle" class="copy">희소 장전 구간 완화 · 1분봉은 유지</text><text x="1355" y="854" text-anchor="middle" class="copy">source minute 수·coverage 함께 저장</text>
-  <path d="M355 833 H405" class="flow"/><path d="M735 833 H785" class="flow"/><path d="M1115 833 H1165" class="plannedflow"/>
+  <text x="1355" y="798" text-anchor="middle" class="boxt">Coverage 판정</text><text x="1355" y="826" text-anchor="middle" class="copy">무거래·Odd Lot-only·미도래 구분</text><text x="1355" y="854" text-anchor="middle" class="copy">1분봉 유지 · 5분봉은 후속 파생</text>
+  <path d="M355 833 H405" class="plannedflow"/><path d="M735 833 H785" class="plannedflow"/><path d="M1115 833 H1165" class="plannedflow"/>
 
   <rect x="52" y="968" width="1496" height="76" rx="16" class="planned"/>
   <text x="80" y="998" class="section">검증된 다음 실행</text>
-  <text x="280" y="998" class="copy">신규 22개 발표 × 시장 대표 10종목 SIP 단계 수집</text><text x="790" y="998" class="copy">→ Kafka·Spark 재생</text><text x="1080" y="998" class="copy">→ coverage · event study · backtest</text>
-  <text x="80" y="1026" class="small">770개 구간 계획 검증 · FOMC×TLT 1개 SIP 29,139건 수집 확인. Kafka·Spark·DB 완료 수치는 CPI 55회 × 4종목만 사용합니다.</text>
+  <text x="280" y="998" class="copy">77회 발표 × 10종목 context 수집</text><text x="790" y="998" class="copy">→ 1m·1d Upsert</text><text x="1080" y="998" class="copy">→ coverage · event study · backtest</text>
+  <text x="80" y="1026" class="small">전체 수치는 계획값. FOMC×TLT smoke만 1분봉 181행·일봉 15행 DB 확인했으며, 나머지는 실제 수집 전 완료로 표시하지 않습니다.</text>
 </svg>
