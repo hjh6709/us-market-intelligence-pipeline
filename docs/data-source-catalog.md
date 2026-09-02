@@ -1,6 +1,6 @@
 # API Data Source Catalog
 
-상태: market ingestion, CPI point-in-time ingestion and historical SIP backfill implemented
+상태: market ingestion, CPI point-in-time ingestion and historical SIP backfill implemented; Employment/PCE/FOMC official manifests and multi-symbol collection plan implemented
 
 검증일: 2026-08-24
 
@@ -122,10 +122,12 @@ Stage A에서는 주문·계좌 기능을 사용하지 않는다. Calendar 결�
 | Source | 초기 event | 가져오는 값 | 사용 |
 | --- | --- | --- | --- |
 | [BLS schedule](https://www.bls.gov/schedule/) | CPI, Employment Situation | event name, date/time, reference period, release URL | 발표 전후 window 기준 시각 |
-| [BEA schedule](https://www.bea.gov/news/schedule) | PCE — coverage 확인 후 | event name, date/time, release URL | 후속 event-study |
+| [BEA schedule](https://www.bea.gov/news/schedule) | PCE | event name, date/time, release URL | 발표 전후 window 기준 시각 |
 | [Federal Reserve calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) | FOMC statement | meeting date, statement release time/link | 정규장 event-study |
 
 공통 내부 field는 `economic_event_id`, `event_type`, `reference_period`, `scheduled_at`, `released_at`, `original_timezone`, `release_source`, `release_source_url`, `ingested_at`이다. 정확한 발표 시각을 공식 출처에서 확인하지 못하면 임의로 만들지 않고 `OFFICIAL_RELEASE_TIME_MISSING`을 기록한다.
+
+공식 발표 manifest 현황은 CPI 55회, 2026년 완료 고용보고서 8회, PCE 9회, FOMC statement 5회다. 기존 수집 완료 범위는 CPI 55회와 4종목이며, 신규 22회와 10종목 전체는 수집 계획 단계로 구분한다. `config/market_event_catalog.json`과 `config/market_universe.json`이 각각 이벤트와 종목의 단일 입력 명세다.
 
 ## 6. FRED / ALFRED API
 

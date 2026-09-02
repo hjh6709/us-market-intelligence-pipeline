@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
-  <title id="title">CPI Market Data Load and Recovery Pipeline</title>
-  <desc id="desc">CPI 55회, FRED ALFRED 배경지표, Alpaca SIP 원시 체결을 Parquet, Kafka, Spark, PostgreSQL로 처리하고 데이터 공백과 후속 5분봉을 구분한 아키텍처</desc>
+  <title id="title">U.S. Economic Event Market Data Pipeline</title>
+  <desc id="desc">CPI 실측 경로와 고용, PCE, FOMC 공식 발표 및 10종목 확장 계획을 구분한 데이터 파이프라인 아키텍처</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
     <marker id="purpleArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
@@ -9,16 +9,16 @@
     </style>
   </defs>
   <rect width="1600" height="1080" fill="#fff"/>
-  <text x="52" y="58" class="title">CPI Market Data Load · Failure · Recovery Pipeline</text>
-  <text x="52" y="88" class="subtitle">실제 CPI 발표 구간의 시장 거래를 보존하고, Kafka·Spark·PostgreSQL에서 대량 처리와 복구를 검증한 구조</text>
-  <g transform="translate(52 112)"><rect width="20" height="20" rx="4" class="source"/><text x="30" y="15" class="small">현재 구현 · 실행 검증 완료</text><rect x="210" width="20" height="20" rx="4" class="planned"/><text x="240" y="15" class="small">후속 확장</text></g>
+  <text x="52" y="58" class="title">U.S. Economic Event Market Data Pipeline</text>
+  <text x="52" y="88" class="subtitle">CPI 실측 결과를 보존하면서 고용·PCE·FOMC 공식 발표와 시장 대표 10종목으로 확장하는 구조</text>
+  <g transform="translate(52 112)"><rect width="20" height="20" rx="4" class="source"/><text x="30" y="15" class="small">현재 구현 · 실행 결과 확인</text><rect x="210" width="20" height="20" rx="4" class="planned"/><text x="240" y="15" class="small">후속 확장 · 입력 계획 검증 · 데이터 수집 예정</text></g>
 
   <rect x="36" y="158" width="1528" height="225" rx="18" class="lane"/>
   <text x="58" y="190" class="section">1. 분석 기준과 원본 데이터</text>
-  <text x="58" y="214" class="small">BLS · ALFRED · Alpaca SIP를 연결하되 CPI만 기준 이벤트로 사용하고, 다른 경제지표는 발표 당시 배경 정보로 연결</text>
+  <text x="58" y="214" class="small">BLS · ALFRED · Alpaca SIP 기존 경로 + BEA · Federal Reserve 공식 일정. 실측 수치는 CPI 55회 × 4종목 결과</text>
 
   <rect x="55" y="240" width="280" height="112" rx="14" class="source"/>
-  <text x="195" y="270" text-anchor="middle" class="boxt">BLS CPI 발표 일정</text><text x="195" y="298" text-anchor="middle" class="copy">2022-01-12 ~ 2026-08-12</text><text x="195" y="326" text-anchor="middle" class="metric">공식 발표 55회</text>
+  <text x="195" y="270" text-anchor="middle" class="boxt">공식 발표 catalog</text><text x="195" y="298" text-anchor="middle" class="copy">CPI 55 · 고용 8 · PCE 9 · FOMC 5</text><text x="195" y="326" text-anchor="middle" class="metric">77회 발표 시각 검증</text>
   <rect x="385" y="240" width="300" height="112" rx="14" class="source"/>
   <text x="535" y="270" text-anchor="middle" class="boxt">FRED · ALFRED</text><text x="535" y="298" text-anchor="middle" class="copy">물가·고용·금리·VIX point-in-time</text><text x="535" y="326" text-anchor="middle" class="metric">10개 지표 × 55회 = 550 context</text>
   <rect x="735" y="240" width="300" height="112" rx="14" class="source"/>
@@ -56,7 +56,7 @@
   <path d="M355 833 H405" class="flow"/><path d="M735 833 H785" class="flow"/><path d="M1115 833 H1165" class="plannedflow"/>
 
   <rect x="52" y="968" width="1496" height="76" rx="16" class="planned"/>
-  <text x="80" y="998" class="section">다음 확장</text>
-  <text x="250" y="998" class="copy">FOMC·고용·PCE를 각 공식 발표 시각의 독립 이벤트로 추가</text><text x="780" y="998" class="copy">→ 5분 분석봉·coverage 품질 지표</text><text x="1120" y="998" class="copy">→ point-in-time backtest · paper trading</text>
-  <text x="80" y="1026" class="small">현재 제출 결과는 CPI 55회까지이며, 5분봉과 다른 경제 이벤트 결과는 아직 실행 완료로 주장하지 않습니다.</text>
+  <text x="80" y="998" class="section">검증된 다음 실행</text>
+  <text x="280" y="998" class="copy">신규 22개 발표 × 시장 대표 10종목 SIP 단계 수집</text><text x="790" y="998" class="copy">→ Kafka·Spark 재생</text><text x="1080" y="998" class="copy">→ coverage · event study · backtest</text>
+  <text x="80" y="1026" class="small">770개 구간 계획 검증 · FOMC×TLT 1개 SIP 29,139건 수집 확인. Kafka·Spark·DB 완료 수치는 CPI 55회 × 4종목만 사용합니다.</text>
 </svg>

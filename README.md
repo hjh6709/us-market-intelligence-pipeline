@@ -1,6 +1,6 @@
-# U.S. CPI Market Reaction Pipeline
+# U.S. Economic Event Market Reaction Pipeline
 
-> 과거 미국 CPI 발표 당시 공개된 값과 발표 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
+> 미국 CPI·고용보고서·PCE·FOMC 발표 시각과 전후 주식시장 반응을 같은 시간축으로 연결하고, 같은 발표 구간의 실제 거래를 Kafka·Spark로 재현하는 데이터 파이프라인입니다.
 
 장기 목표는 검증 가능한 데이터에 기반한 자동매매 시스템입니다. 다만 현재 단계에서는 주문이나 가격 예측보다, “CPI 때문에 주가가 올랐다”를 단정하기 전에 공식 발표 시각, 당시 이용 가능했던 경제지표 값과 SIP 1분봉을 정확히 재현하는 데 집중합니다.
 
@@ -23,7 +23,7 @@
 2. [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구 결과를 읽습니다.
 3. [실행 증거 설명](docs/evidence/load-recovery/README.md)에서 캡처 3장과 원본 JSON 확인 순서를 봅니다.
 
-이번 제출의 범위는 **CPI 공식 발표 55회**입니다. FRED·ALFRED의 10개 지표는 별도의 발표 이벤트 550회가 아니라, 각 CPI 발표 당시 이용 가능했던 배경 정보 550행입니다. FOMC·고용·PCE를 각각의 공식 발표 시각으로 분석하는 작업은 다음 단계입니다.
+5차시까지 Kafka·Spark·DB 실행 검증이 끝난 범위는 **CPI 공식 발표 55회 × 4종목**입니다. 이후 확장을 위해 공식 발표가 완료된 2026년 고용보고서 8회·PCE 9회·FOMC 5회를 발표 manifest에 추가했고, 시장 대표군도 10종목으로 확장했습니다. 전체 `77개 발표 × 10종목 = 770개 수집 구간`은 검증된 실행 계획입니다. 이 중 신규 수집기 확인을 위해 `2026-07-29 FOMC × TLT` 한 구간의 실제 SIP 체결 29,139건을 Parquet으로 수집했으며, 나머지 신규 구간은 아직 수집 완료로 표시하지 않습니다.
 
 ## 프로젝트 목표
 
@@ -35,7 +35,7 @@
 - PostgreSQL에 경제 이벤트, 시장 데이터와 분석 결과를 같은 입력으로 다시 실행해도 중복되지 않게 저장합니다.
 - 관측 결과는 인과관계나 주문 신호로 단정하지 않고 후속 백테스트 입력으로 제공합니다.
 
-## 현재 분석 범위
+## 현재 분석 범위와 확장 범위
 
 - CPI 발표: 최근 실제 발표 12회
 - 경제지표: `CPIAUCSL`, `CPILFESL`의 ALFRED 당시 공개본(vintage)
@@ -47,6 +47,17 @@
 위 12회는 기존 CPI 영향 분석 테이블의 검증 범위입니다. 부하·복구 실험은 같은 구조를 2022년부터 2026년 8월까지 CPI 발표 55회로 확장했습니다. 두 범위를 섞어 같은 결과처럼 해석하지 않습니다.
 
 2025년 10월 CPI는 실제 발표되지 않아 분석 목록에서 제외했습니다. 전망치 출처는 아직 연결하지 않았으므로 `forecast`와 `surprise`를 임의로 만들지 않습니다.
+
+### 다음 수집에 확정한 범위
+
+| 구분 | 공식 발표 수 | 발표 시각 | 상태 |
+| --- | ---: | --- | --- |
+| CPI | 55 | BLS 08:30 ET | 4종목 SIP 수집·처리 완료 |
+| Employment Situation | 8 | BLS 08:30 ET | 2026년 완료 발표 manifest 검증 |
+| PCE / Personal Income and Outlays | 9 | BEA 08:30 ET | 2026년 완료 발표 manifest 검증 |
+| FOMC statement | 5 | Federal Reserve 14:00 ET | 2026년 완료 발표 manifest 검증 |
+
+확장 종목은 `SPY`, `QQQ`, `IWM`, `TLT`, `XLF`, `SMH`, `GLD`, `NVDA`, `AAPL`, `JPM`입니다. 시장 전체·성장주·소형주·장기채·금융·반도체·물가 헤지와 개별 대형주를 함께 봐야 경제지표 반응을 한 종목의 특이 움직임으로 오해하지 않을 수 있습니다. 상세 역할과 완료/계획 구분은 [다중 경제 이벤트 확장 문서](docs/multi-event-expansion.md)에 있습니다.
 
 ## 데이터 흐름
 
@@ -89,6 +100,9 @@ PostgreSQL market_bars
 | 데이터 | 공식 출처 | 역할 |
 | --- | --- | --- |
 | CPI 발표 날짜·시각 | [BLS CPI release schedule·archive](https://www.bls.gov/schedule/news_release/cpi.htm) | 이벤트 기준 시각과 대상 월 |
+| 고용보고서 발표 날짜·시각 | [BLS Employment Situation schedule](https://www.bls.gov/schedule/news_release/empsit.htm) | 고용 이벤트 기준 시각과 대상 월 |
+| PCE 발표 날짜·시각 | [BEA Personal Income and Outlays archive](https://www.bea.gov/news/archive?field_related_product_target_id=476) | PCE 이벤트 기준 시각과 대상 월 |
+| FOMC 결정 날짜·시각 | [Federal Reserve FOMC calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) | 정책결정 statement 기준 시각 |
 | 당시 CPI 값과 수정 이력 | [FRED/ALFRED observations](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 나중에 수정된 값이 섞이지 않은 당시 공개값 |
 | 발표 구간 실제 체결 | [Alpaca Historical Stock Trades](https://docs.alpaca.markets/reference/stocktradesingle) | 과거 체결을 Kafka·Spark에 다시 흘려보내는 재생(replay) 입력 |
 | 발표 전후 주식시장 | [Alpaca Historical Stock Bars](https://docs.alpaca.markets/us/v1.4.2/reference/stockbars) | SIP 1분 OHLCV·거래 수·VWAP |
@@ -214,7 +228,28 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 `tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [4차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
 
-### 4. 검증
+### 4. 다중 경제 이벤트 수집 계획과 실행
+
+API를 호출하기 전에 공식 발표 수, 종목 수와 예상 파티션을 검증합니다.
+
+```bash
+.venv/bin/python scripts/collect_market_event_archive.py --dry-run
+```
+
+현재 결과는 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`, `10종목`, `770개 발표-종목 구간`입니다. 각 구간은 발표 60분 전부터 60분 후까지 121개 예상 분을 포함합니다. 실제 수집은 `--dry-run`을 제거하면 되며, 완료된 파티션은 Parquet checksum manifest가 일치하면 다시 API를 호출하지 않습니다.
+
+신규 경로 smoke test로 `2026-07-29 FOMC × TLT`를 실행해 실제 SIP 체결 29,139건을 3페이지로 수집했고 checksum을 검증했습니다. 이는 Alpaca → Parquet 수집 단계의 결과이며 아직 해당 구간을 Kafka·Spark·PostgreSQL까지 처리했다는 뜻은 아닙니다. 공개 가능한 실행 요약은 [신규 FOMC·TLT 수집 증거](docs/evidence/multi-event-expansion/README.md)에 있습니다.
+
+특정 이벤트나 종목만 단계적으로 실행할 수도 있습니다.
+
+```bash
+.venv/bin/python scripts/collect_market_event_archive.py \
+  --event-types EMPLOYMENT FOMC \
+  --symbols SPY QQQ TLT XLF \
+  --release-from 2026-01-01 --release-to 2026-08-31
+```
+
+### 5. 검증
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -238,11 +273,11 @@ docker compose exec -T postgres \
 
 ## 다음 단계
 
-1. 미국 거래일과 주요 경제 발표 일정을 반영해 평소 비교 구간 정제
-2. 장전 반응과 첫 정규장 반응 분리
-3. BLS 발표문의 월간·연간 actual 구조화
-4. 검증 가능한 전망치 출처가 확보되면 surprise 분석 추가
-5. Airflow schedule과 누락 구간 자동 backfill·알림 추가
+1. 신규 고용·PCE·FOMC 22개 발표를 10종목으로 단계 수집하고 partition manifest 확정
+2. 일반화된 event manifest를 Airflow Dynamic Task Mapping 입력으로 연결
+3. 장전 08:30 발표와 정규장 14:00 FOMC를 세션별로 구분해 분석
+4. 각 발표의 point-in-time actual을 ALFRED/BLS/BEA와 연결
+5. Airflow schedule과 누락 구간 자동 backfill·알림 추가, 이후 검증 가능한 전망치 기반 surprise 분석
 
 ## 구현·과제 증거
 

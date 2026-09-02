@@ -1,10 +1,10 @@
 # Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
-상태: CPI vertical slice implemented, orchestration in progress
+상태: CPI 55회 × 4종목 실행 검증 완료, 고용·PCE·FOMC 22회 × 10종목 수집 계획 검증 완료
 
 기준일: 2026-08-13
 
-최근 수정: 2026-08-24 멘토 피드백 반영
+최근 수정: 2026-09-03 다중 경제 이벤트·다종목 확장 반영
 
 범위: 2026-09-12 발표 MVP
 
@@ -190,7 +190,7 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ### 7.2 Macro release impact
 
-초기 이벤트 유형은 CPI, Employment Situation, FOMC이고 최근 24개월을 분석 후보 범위로 둔다. 실제 범위는 공식 일정과 SIP extended-hours coverage smoke test 뒤 고정한다.
+이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. CPI는 2022-01-12부터 2026-08-12까지 55회를 실행 검증했고, 나머지는 공식 발표가 완료된 2026년 22회를 우선 수집 범위로 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이며, 신규 범위는 SIP 원시 수집 후에만 실행 완료로 전환한다.
 
 ```text
 economic event with official released_at + as-known vintage

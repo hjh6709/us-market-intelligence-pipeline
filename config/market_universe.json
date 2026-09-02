@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "instruments": [
+    {"symbol":"SPY","asset_type":"ETF","role":"broad_market","reason":"미국 대형주 전체 반응 기준"},
+    {"symbol":"QQQ","asset_type":"ETF","role":"growth_market","reason":"금리 민감 성장주 반응"},
+    {"symbol":"IWM","asset_type":"ETF","role":"small_caps","reason":"경기와 자금조달 비용에 민감한 소형주"},
+    {"symbol":"TLT","asset_type":"ETF","role":"long_duration_bonds","reason":"금리 기대 변화의 장기채 반응"},
+    {"symbol":"XLF","asset_type":"ETF","role":"financial_sector","reason":"금리와 경기 변화에 민감한 금융업"},
+    {"symbol":"SMH","asset_type":"ETF","role":"semiconductor_sector","reason":"고변동 반도체 업종 반응"},
+    {"symbol":"GLD","asset_type":"ETF","role":"inflation_hedge","reason":"물가와 위험회피 변화 비교"},
+    {"symbol":"NVDA","asset_type":"STOCK","role":"high_beta_semiconductor","reason":"기존 검증 결과와 연속성 유지"},
+    {"symbol":"AAPL","asset_type":"STOCK","role":"mega_cap_technology","reason":"대형 기술주 개별 반응"},
+    {"symbol":"JPM","asset_type":"STOCK","role":"large_bank","reason":"대표 은행주의 금리·고용 반응"}
+  ]
+}

@@ -1,0 +1,10 @@
+[
+  {"reference_period":"2025-12","release_date":"2026-01-09","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_01092026.htm"},
+  {"reference_period":"2026-01","release_date":"2026-02-11","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_02112026.htm"},
+  {"reference_period":"2026-02","release_date":"2026-03-06","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_03062026.htm"},
+  {"reference_period":"2026-03","release_date":"2026-04-03","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_04032026.htm"},
+  {"reference_period":"2026-04","release_date":"2026-05-08","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_05082026.htm"},
+  {"reference_period":"2026-05","release_date":"2026-06-05","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_06052026.htm"},
+  {"reference_period":"2026-06","release_date":"2026-07-02","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_07022026.htm"},
+  {"reference_period":"2026-07","release_date":"2026-08-07","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bls.gov/news.release/archives/empsit_08072026.htm"}
+]
