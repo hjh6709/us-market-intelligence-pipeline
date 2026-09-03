@@ -12,6 +12,7 @@
 4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
 5. Airflow 과제에서는 같은 121분 구간을 `SPY`, `QQQ`, `SMH`, `NVDA`로 확장해 총 118,118건을 한 DAG에서 처리하고 472개 1분봉을 저장했습니다.
 6. 부하·복구 과제에서는 실제 CPI 발표 55회로 범위를 넓혀 SIP 체결 7,360,804건을 GCP에서 처리하고 22,260개 1분봉을 저장했습니다. PostgreSQL 중단 후 같은 입력으로 복구해 최종 고유키 중복 0건을 확인했습니다.
+7. 전체 흐름 보완에서는 77회·10종목 분석용 수집 코드를 `경제발표 1건 × 종목 1개` Airflow 작업으로 연결하고, FOMC·SPY·TLT 동일 입력 재실행에서 588행·동일 hash·중복 0건을 확인했습니다.
 
 검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
@@ -20,8 +21,8 @@
 처음 보는 경우 아래 순서로 보면 됩니다.
 
 1. 아래의 아키텍처 그림으로 전체 데이터 흐름을 확인합니다.
-2. [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구 결과를 읽습니다.
-3. [실행 증거 설명](docs/evidence/load-recovery/README.md)에서 캡처 3장과 원본 JSON 확인 순서를 봅니다.
+2. [6차시 전체 흐름 점검 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구와 현재 연결 범위를 읽습니다.
+3. [신규 Airflow·alert 실행 증거](docs/evidence/sixth-assignment/README.md)에서 실제 run ID와 재실행 hash를 확인합니다.
 
 원시 체결을 Kafka·Spark로 재생한 부하 검증 범위는 **CPI 공식 발표 55회 × 4종목**입니다. 분석용 provider bar는 별도 경로로 범위를 넓혀 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`와 10종목, 총 770개 발표-종목 구간을 실제 수집·저장했습니다. PostgreSQL에서 해당 발표 시각 범위를 재조회해 1분봉 117,566행, 3분봉 43,184행, 5분봉 26,883행을 확인했습니다.
 
@@ -94,6 +95,8 @@ PostgreSQL market_bars
 같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
 
 현재 `market_sip_replay_pipeline` Airflow DAG는 `tickers`, `start`, `end`, `feed`를 입력받습니다. `tickers` 목록의 각 종목에는 Dynamic Task Mapping으로 독립된 수집 → Kafka 검증 → Spark 집계 → PostgreSQL 검증 작업이 만들어집니다. 따라서 네 종목을 한 번의 DAG 실행으로 처리하면서도 종목별 실패 지점과 재실행 범위를 구분할 수 있습니다.
+
+`market_context_backfill_pipeline`은 `event_types`, 발표 날짜 범위, `symbols`, `feed`, `data_cutoff`을 입력받아 분석용 bar를 `경제발표 1건 × 종목 1개`로 나눕니다. 실행·작업·품질검사 상태는 PostgreSQL에 기록하며 Airflow XCom에는 원시 bar 배열이 아니라 식별자와 건수만 전달합니다. 전체 770개 작업의 재실행은 아직 하지 않았고, FOMC 1회 × SPY·TLT 실제 실행과 동일 입력 재실행까지 검증했습니다.
 
 ## 데이터 출처
 
@@ -224,6 +227,12 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 .venv/bin/airflow db migrate
 .venv/bin/airflow dags test market_sip_replay_pipeline \
   -c '{"tickers":["SPY","QQQ","SMH","NVDA"],"start":"2026-08-12T11:30:00Z","end":"2026-08-12T13:31:00Z","feed":"sip"}'
+
+# 경제발표 1건 × 종목 1개 분석용 backfill
+.venv/bin/python scripts/configure_airflow_pools.py
+.venv/bin/airflow dags test market_context_backfill_pipeline \
+  -f "$PWD/dags/market_context_backfill_pipeline.py" \
+  -c '{"event_types":["FOMC"],"release_from":"2026-07-29","release_to":"2026-07-29","symbols":["SPY","TLT"],"feed":"sip","data_cutoff":"2026-09-03T00:00:00Z"}'
 ```
 
 `tickers` 목록을 `['SPY', 'QQQ']`처럼 바꾸면 코드를 수정하지 않고 처리 대상을 변경할 수 있습니다. 전체 입력값과 두 실행 결과는 [4차시 Airflow 과제 문서](docs/airflow-assignment.md)에 있습니다.
@@ -276,11 +285,12 @@ docker compose exec -T postgres \
 
 ## 다음 단계
 
-1. 77개 발표 × 10종목 분석용 bar 수집을 Airflow Dynamic Task Mapping 입력으로 연결
-2. 휴장일과 아직 도래하지 않은 이후 거래일 coverage를 자동 재수집·알림 대상으로 연결
-3. 장전 08:30 발표와 정규장 14:00 FOMC를 세션별로 구분해 분석
-4. 각 발표의 point-in-time actual을 ALFRED/BLS/BEA와 연결
-5. Airflow schedule과 누락 구간 자동 backfill·알림 추가, 이후 검증 가능한 전망치 기반 surprise 분석
+1. 신규 Airflow DAG으로 전체 77회 × 10종목 770개 work item 재실행
+2. Kafka key를 `event_id + symbol + segment`로 바꾸고 3개·6개 파티션 분포 비교
+3. Airflow schedule과 누락 구간 자동 backfill·알림 추가
+4. 휴장·미래 거래일 coverage 재수집과 운영 alert 연결
+5. 고용·PCE·FOMC 실제 발표값을 point-in-time으로 결합
+6. 전체 영향 분석 후 거래비용·슬리피지·시점 누수를 포함한 백테스트
 
 ## 구현·과제 증거
 
@@ -289,8 +299,9 @@ README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회
 - [3차시 Kafka·Spark 과제 문서](docs/kafka-spark-assignment.md)
 - [4차시 Airflow 자동화 과제 문서](docs/airflow-assignment.md)
 - [다종목 Airflow 실제 실행 증거](docs/evidence/airflow-market-replay/README.md)
-- [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)
+- [6차시 부하·복구 보완 및 전체 흐름 점검](docs/load-recovery-assignment.md)
 - [GCP 부하·복구 실제 실행 증거](docs/evidence/load-recovery/README.md)
+- [Airflow event-symbol·alert·멱등성 실제 증거](docs/evidence/sixth-assignment/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
 - [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)
 - [과제 제출 체크리스트](docs/submission-checklist.md)

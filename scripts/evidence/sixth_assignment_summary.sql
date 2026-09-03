@@ -17,11 +17,13 @@ FROM pipeline_run_checks
 GROUP BY pipeline_run_id, status, alert_status
 ORDER BY pipeline_run_id DESC, status, alert_status;
 
-SELECT timeframe, coverage_status, COUNT(*) AS rows
+-- source/feed를 같이 표시해야 과제 실행 범위와 이전 실험 데이터가 섞여
+-- 하나의 수치처럼 보이지 않는다.
+SELECT source, feed, timeframe, coverage_status, COUNT(*) AS rows
 FROM market_bars
 WHERE timeframe IN ('1m', '3m', '5m', '1d')
-GROUP BY timeframe, coverage_status
-ORDER BY timeframe, coverage_status;
+GROUP BY source, feed, timeframe, coverage_status
+ORDER BY source, feed, timeframe, coverage_status;
 
 SELECT COUNT(*) AS business_key_duplicates
 FROM (
