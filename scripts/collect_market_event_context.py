@@ -10,19 +10,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
-from src.derived_bars import aggregate_derived_bars, upsert_derived_bars
 from src.economic_event_schedule import event_counts, load_event_catalog
-from src.historical_bars import (
-    AlpacaHistoricalBarsClient,
-    fetch_all_bars,
-    upsert_historical_bars,
-)
+from src.historical_bars import AlpacaHistoricalBarsClient
 from src.live_market_smoke import _read_env_file, load_credentials
-from src.market_event_context import (
-    build_context_requests,
-    available_request_end,
-    select_daily_context,
-    select_session_context,
+from src.market_context_backfill import (
+    collect_market_context_work_item,
+    select_market_context_work,
 )
 from src.market_universe import load_market_universe
 
@@ -62,10 +55,21 @@ def _selection(args: argparse.Namespace):
         if args.symbols
         else [item.symbol for item in load_market_universe(args.universe)]
     )
-    return releases, symbols, build_context_requests(releases, symbols)
+    work = select_market_context_work(
+        {
+            "catalog": args.catalog,
+            "universe": args.universe,
+            "event_types": args.event_types,
+            "release_from": args.release_from,
+            "release_to": args.release_to,
+            "symbols": symbols,
+            "feed": args.feed,
+        }
+    )
+    return releases, symbols, work
 
 
-def _planned_summary(args, releases, symbols, requests) -> dict:
+def _planned_summary(args, releases, symbols, work) -> dict:
     return {
         "schema_version": 1,
         "status": "PLANNED" if args.dry_run else "COLLECTED",
@@ -75,7 +79,8 @@ def _planned_summary(args, releases, symbols, requests) -> dict:
         "release_count": len(releases),
         "symbols": symbols,
         "symbol_count": len(symbols),
-        "api_request_count_before_pagination": len(requests),
+        "work_item_count": len(work),
+        "api_request_count_before_pagination": len(work) * 2,
         "layers": {
             "SESSION_1MIN": {
                 "window": "T-60m through T+120m inclusive",
@@ -96,8 +101,8 @@ def _planned_summary(args, releases, symbols, requests) -> dict:
 
 def main() -> int:
     args = parse_args()
-    releases, symbols, requests = _selection(args)
-    summary = _planned_summary(args, releases, symbols, requests)
+    releases, symbols, work = _selection(args)
+    summary = _planned_summary(args, releases, symbols, work)
     if args.dry_run:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
@@ -106,7 +111,6 @@ def main() -> int:
     env_values = _read_env_file(args.env_file)
     database_url = os.environ.get("DATABASE_URL") or env_values.get("DATABASE_URL") or DEFAULT_DATABASE_URL
     client = AlpacaHistoricalBarsClient(key_id, secret_key, timeout_seconds=30.0)
-    release_by_id = {release.event_id: release for release in releases}
     fetched_counts = Counter()
     upserted_counts = Counter()
     derived_counts = Counter()
@@ -115,65 +119,44 @@ def main() -> int:
     daily_coverage = []
     provider_available_until = datetime.now(UTC) - timedelta(minutes=20)
 
-    for request in requests:
-        request_end = available_request_end(request, provider_available_until)
-        bars, pages = fetch_all_bars(
-            client,
-            symbols=request.symbols,
-            start=request.start,
-            end=request_end,
-            feed=args.feed,
-            timeframe=request.timeframe,
-            max_pages=20,
-        )
-        total_pages += pages
-        if request.layer == "SESSION_1MIN":
-            selected_bars = select_session_context(bars, request)
-        else:
-            selected_bars = []
-            release = release_by_id[request.event_id]
-            for symbol in request.symbols:
-                selection = select_daily_context(bars, release, symbol)
-                selected_bars.extend(selection.bars)
-                daily_coverage.append(
-                    {
-                        "event_id": request.event_id,
-                        "symbol": symbol,
-                        "before": selection.sessions_before,
-                        "event": selection.event_session,
-                        "after": selection.sessions_after,
-                        "complete": selection.complete,
-                    }
-                )
-        fetched_counts[request.layer] += len(selected_bars)
-        upserted_counts[request.layer] += upsert_historical_bars(
-            selected_bars,
+    for item in work:
+        result = collect_market_context_work_item(
+            item,
+            client=client,
             database_url=database_url,
-            feed=args.feed,
-            timeframe=request.timeframe,
+            provider_available_until=provider_available_until,
         )
-        if request.layer == "SESSION_1MIN":
-            for minutes in (3, 5):
-                derived = aggregate_derived_bars(selected_bars, minutes)
-                upsert_derived_bars(
-                    derived,
-                    database_url=database_url,
-                    feed=args.feed,
-                )
-                timeframe = f"{minutes}m"
-                derived_counts[timeframe] += len(derived)
-                derived_partial_counts[timeframe] += sum(
-                    bar.coverage_status == "PARTIAL" for bar in derived
-                )
+        total_pages += result.pages
+        fetched_counts["SESSION_1MIN"] += result.session_1m_rows
+        fetched_counts["DAILY_15_SESSIONS"] += result.daily_rows
+        upserted_counts["SESSION_1MIN"] += result.session_1m_rows
+        upserted_counts["DAILY_15_SESSIONS"] += result.daily_rows
+        derived_counts["3m"] += result.derived_3m_rows
+        derived_counts["5m"] += result.derived_5m_rows
+        derived_partial_counts["3m"] += result.derived_3m_partial_rows
+        derived_partial_counts["5m"] += result.derived_5m_partial_rows
+        daily_coverage.append(
+            {
+                "event_id": result.event_id,
+                "symbol": result.symbol,
+                "before": result.daily_before,
+                "event": result.daily_event,
+                "after": result.daily_after,
+                "complete": result.coverage_status == "COMPLETE",
+                "coverage_status": result.coverage_status,
+            }
+        )
         print(
             json.dumps(
                 {
                     "step": "event_context",
-                    "event_type": request.event_type,
-                    "release_date": request.release_date,
-                    "layer": request.layer,
-                    "selected_bars": len(selected_bars),
-                    "pages": pages,
+                    "event_type": item.event_type,
+                    "release_date": item.release_date.isoformat(),
+                    "symbol": item.symbol,
+                    "session_1m_rows": result.session_1m_rows,
+                    "daily_rows": result.daily_rows,
+                    "coverage_status": result.coverage_status,
+                    "pages": result.pages,
                 },
                 ensure_ascii=False,
             ),
