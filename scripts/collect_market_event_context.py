@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
+from src.derived_bars import aggregate_derived_bars, upsert_derived_bars
 from src.economic_event_schedule import event_counts, load_event_catalog
 from src.historical_bars import (
     AlpacaHistoricalBarsClient,
@@ -78,6 +79,8 @@ def _planned_summary(args, releases, symbols, requests) -> dict:
                 "window": "T-60m through T+120m inclusive",
                 "expected_buckets_per_event_symbol": 181,
                 "planned_max_rows": len(releases) * len(symbols) * 181,
+                "derived_3m_max_rows": len(releases) * len(symbols) * 61,
+                "derived_5m_max_rows": len(releases) * len(symbols) * 37,
             },
             "DAILY_15_SESSIONS": {
                 "window": "7 observed sessions before + event session + 7 after",
@@ -104,6 +107,8 @@ def main() -> int:
     release_by_id = {release.event_id: release for release in releases}
     fetched_counts = Counter()
     upserted_counts = Counter()
+    derived_counts = Counter()
+    derived_partial_counts = Counter()
     total_pages = 0
     daily_coverage = []
 
@@ -143,6 +148,19 @@ def main() -> int:
             feed=args.feed,
             timeframe=request.timeframe,
         )
+        if request.layer == "SESSION_1MIN":
+            for minutes in (3, 5):
+                derived = aggregate_derived_bars(selected_bars, minutes)
+                upsert_derived_bars(
+                    derived,
+                    database_url=database_url,
+                    feed=args.feed,
+                )
+                timeframe = f"{minutes}m"
+                derived_counts[timeframe] += len(derived)
+                derived_partial_counts[timeframe] += sum(
+                    bar.coverage_status == "PARTIAL" for bar in derived
+                )
         print(
             json.dumps(
                 {
@@ -163,6 +181,8 @@ def main() -> int:
         "pages": total_pages,
         "selected_bar_counts": dict(sorted(fetched_counts.items())),
         "upsert_attempt_counts": dict(sorted(upserted_counts.items())),
+        "derived_bar_counts": dict(sorted(derived_counts.items())),
+        "derived_partial_counts": dict(sorted(derived_partial_counts.items())),
         "daily_context_complete": sum(item["complete"] for item in daily_coverage),
         "daily_context_incomplete": sum(not item["complete"] for item in daily_coverage),
         "daily_coverage": daily_coverage,

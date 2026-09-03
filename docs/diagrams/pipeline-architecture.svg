@@ -49,14 +49,14 @@
   <text x="205" y="798" text-anchor="middle" class="boxt">CORE_RAW_121M</text><text x="205" y="826" text-anchor="middle" class="copy">T-60~T+60 · SIP 개별 체결</text><text x="205" y="854" text-anchor="middle" class="metric">Kafka·Spark 정합성 검증 완료</text>
   <rect x="405" y="768" width="330" height="130" rx="14" class="planned"/>
   <text x="570" y="798" text-anchor="middle" class="boxt">SESSION_1MIN</text><text x="570" y="826" text-anchor="middle" class="copy">T-60~T+120 · 최대 181개 1분봉</text><text x="570" y="854" text-anchor="middle" class="copy">5·30·60분 + 장 시작·마감 반응</text>
-  <rect x="785" y="768" width="330" height="130" rx="14" class="planned"/>
-  <text x="950" y="798" text-anchor="middle" class="boxt">DAILY_15_SESSIONS</text><text x="950" y="826" text-anchor="middle" class="copy">이전 7 + 발표일 + 이후 7거래일</text><text x="950" y="854" text-anchor="middle" class="metric">1·3·7일 흐름 · 주말 제외</text>
+  <rect x="785" y="768" width="330" height="130" rx="14" class="evidence"/>
+  <text x="950" y="798" text-anchor="middle" class="boxt">3분봉 · 5분봉 파생</text><text x="950" y="826" text-anchor="middle" class="copy">원본 분 수 · COMPLETE/PARTIAL</text><text x="950" y="854" text-anchor="middle" class="copy">1분봉 유지 · 없는 가격은 안 채움</text>
   <rect x="1165" y="768" width="380" height="130" rx="14" class="planned"/>
-  <text x="1355" y="798" text-anchor="middle" class="boxt">Coverage 판정</text><text x="1355" y="826" text-anchor="middle" class="copy">무거래·Odd Lot-only·미도래 구분</text><text x="1355" y="854" text-anchor="middle" class="copy">1분봉 유지 · 5분봉은 후속 파생</text>
-  <path d="M355 833 H405" class="plannedflow"/><path d="M735 833 H785" class="plannedflow"/><path d="M1115 833 H1165" class="plannedflow"/>
+  <text x="1355" y="798" text-anchor="middle" class="boxt">DAILY_15_SESSIONS</text><text x="1355" y="826" text-anchor="middle" class="copy">이전 7 + 발표일 + 이후 7거래일</text><text x="1355" y="854" text-anchor="middle" class="metric">1·3·7일 흐름 · 주말 제외</text>
+  <path d="M355 833 H405" class="plannedflow"/><path d="M735 833 H785" class="flow"/><path d="M355 875 C650 925 1020 925 1165 875" class="plannedflow"/>
 
   <rect x="52" y="968" width="1496" height="76" rx="16" class="planned"/>
   <text x="80" y="998" class="section">검증된 다음 실행</text>
   <text x="280" y="998" class="copy">77회 발표 × 10종목 context 수집</text><text x="790" y="998" class="copy">→ 1m·1d Upsert</text><text x="1080" y="998" class="copy">→ coverage · event study · backtest</text>
-  <text x="80" y="1026" class="small">전체 수치는 계획값. FOMC×TLT smoke만 1분봉 181행·일봉 15행 DB 확인했으며, 나머지는 실제 수집 전 완료로 표시하지 않습니다.</text>
+  <text x="80" y="1026" class="small">전체 수치는 계획값. FOMC×TLT smoke: 1m 181행 · 3m 61행 · 5m 37행 · 1d 15행 DB 확인. 나머지는 완료로 표시하지 않습니다.</text>
 </svg>

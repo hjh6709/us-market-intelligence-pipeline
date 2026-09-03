@@ -236,7 +236,7 @@ API를 호출하기 전에 공식 발표 수, 종목 수와 예상 파티션을 
 .venv/bin/python scripts/collect_market_event_archive.py --dry-run
 ```
 
-현재 결과는 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`, `10종목`, `770개 발표-종목 구간`입니다. Kafka·Spark 검증용 원시 체결은 발표 전후 60분의 121개 예상 분을 유지합니다. 분석 범위는 별도로 발표 60분 전부터 120분 후까지의 1분봉과 전후 7거래일의 일봉으로 확장합니다. 실제 수집은 `--dry-run`을 제거하면 되며, 완료된 원시 파티션은 Parquet checksum manifest가 일치하면 다시 API를 호출하지 않습니다.
+현재 결과는 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`, `10종목`, `770개 발표-종목 구간`입니다. Kafka·Spark 검증용 원시 체결은 발표 전후 60분의 121개 예상 분을 유지합니다. 분석 범위는 별도로 발표 60분 전부터 120분 후까지의 1분봉, 이 1분봉에서 파생한 coverage 포함 3분봉·5분봉, 전후 7거래일의 일봉으로 확장합니다. 실제 수집은 `--dry-run`을 제거하면 되며, 완료된 원시 파티션은 Parquet checksum manifest가 일치하면 다시 API를 호출하지 않습니다.
 
 신규 경로 smoke test로 `2026-07-29 FOMC × TLT`를 실행해 실제 SIP 체결 29,139건을 3페이지로 수집했고 checksum을 검증했습니다. 이는 Alpaca → Parquet 수집 단계의 결과이며 아직 해당 구간을 Kafka·Spark·PostgreSQL까지 처리했다는 뜻은 아닙니다. 공개 가능한 실행 요약은 [신규 FOMC·TLT 수집 증거](docs/evidence/multi-event-expansion/README.md)에 있습니다.
 

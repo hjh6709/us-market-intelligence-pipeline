@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-09-02T22:39:48Z",
+  "captured_at": "2026-09-03T00:47:32Z",
   "status": "COLLECTED_AND_STORED",
   "event_id": "FOMC|2026-07-29|2026-07-29T18:00:00Z",
   "symbol": "TLT",
@@ -12,6 +12,22 @@
     "postgres_rows": 181,
     "postgres_first_bar": "2026-07-29T17:00:00Z",
     "postgres_last_bar": "2026-07-29T20:00:00Z"
+  },
+  "derived_bars": {
+    "3m": {
+      "postgres_rows": 61,
+      "complete": 60,
+      "partial": 1,
+      "source_minutes_min": 1,
+      "source_minutes_max": 3
+    },
+    "5m": {
+      "postgres_rows": 37,
+      "complete": 36,
+      "partial": 1,
+      "source_minutes_min": 1,
+      "source_minutes_max": 5
+    }
   },
   "daily_15_sessions": {
     "sessions_before": 7,
