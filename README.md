@@ -23,7 +23,7 @@
 2. [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구 결과를 읽습니다.
 3. [실행 증거 설명](docs/evidence/load-recovery/README.md)에서 캡처 3장과 원본 JSON 확인 순서를 봅니다.
 
-5차시까지 Kafka·Spark·DB 실행 검증이 끝난 범위는 **CPI 공식 발표 55회 × 4종목**입니다. 이후 확장을 위해 공식 발표가 완료된 2026년 고용보고서 8회·PCE 9회·FOMC 5회를 발표 manifest에 추가했고, 시장 대표군도 10종목으로 확장했습니다. 전체 `77개 발표 × 10종목 = 770개 수집 구간`은 검증된 실행 계획입니다. 이 중 신규 수집기 확인을 위해 `2026-07-29 FOMC × TLT` 한 구간의 실제 SIP 체결 29,139건을 Parquet으로 수집했으며, 나머지 신규 구간은 아직 수집 완료로 표시하지 않습니다.
+원시 체결을 Kafka·Spark로 재생한 부하 검증 범위는 **CPI 공식 발표 55회 × 4종목**입니다. 분석용 provider bar는 별도 경로로 범위를 넓혀 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`와 10종목, 총 770개 발표-종목 구간을 실제 수집·저장했습니다. PostgreSQL에서 해당 발표 시각 범위를 재조회해 1분봉 117,566행, 3분봉 43,184행, 5분봉 26,883행을 확인했습니다.
 
 ## 프로젝트 목표
 
@@ -37,11 +37,11 @@
 
 ## 현재 분석 범위와 확장 범위
 
-- CPI 발표: 최근 실제 발표 12회
-- 경제지표: `CPIAUCSL`, `CPILFESL`의 ALFRED 당시 공개본(vintage)
-- 시장 데이터: Alpaca Historical SIP `1Min` bar
-- 종목: `SPY`, `QQQ`, `SMH`, `NVDA`
-- 분석 구간: 발표 전 60분, 발표 후 5·30·60분
+- 공식 발표: CPI 55회, 고용보고서 8회, PCE 9회, FOMC 5회
+- 경제지표: FRED·ALFRED 10개 series의 당시 이용 가능 값
+- 시장 데이터: Alpaca Historical SIP `1Min`·`1Day` bar와 1분봉에서 파생한 `3m`·`5m`
+- 종목: `SPY`, `QQQ`, `IWM`, `TLT`, `XLF`, `SMH`, `GLD`, `NVDA`, `AAPL`, `JPM`
+- 분석 구간: 발표 60분 전~120분 후, 발표일 전후 각 7거래일
 - 저장소: PostgreSQL
 
 위 12회는 기존 CPI 영향 분석 테이블의 검증 범위입니다. 부하·복구 실험은 같은 구조를 2022년부터 2026년 8월까지 CPI 발표 55회로 확장했습니다. 두 범위를 섞어 같은 결과처럼 해석하지 않습니다.
@@ -180,7 +180,7 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 
 GCP PostgreSQL을 중지한 실행은 `failed`로 기록됐고 저장 행은 0건이었습니다. DB 복구 후 같은 입력을 Upsert해 전체 22,260행과 고유키 중복 0건이 유지됐습니다. 상세 수치와 캡처는 [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에 있습니다.
 
-각 발표 구간은 121개의 예상 1분 구간이지만, 한 분의 모든 체결이 Odd Lot이면 OHLC·VWAP 가격을 만들 수 없어 완성된 `market_bars` 행을 생성하지 않습니다. 원시 체결은 Parquet과 Kafka 처리 건수에 남아 있습니다. 1분봉은 검증용 정본으로 유지하고, 희소한 장전 분석에는 coverage를 포함한 5분봉을 후속 파생 결과로 추가할 계획입니다.
+각 원시 replay 구간은 121개의 예상 1분 구간이지만, 한 분의 모든 체결이 Odd Lot이면 OHLC·VWAP 가격을 만들 수 없어 완성된 `market_bars` 행을 생성하지 않습니다. 원시 체결은 Parquet과 Kafka 처리 건수에 남아 있습니다. 분석용 1분봉은 그대로 유지하면서 3분봉과 5분봉을 실제 생성했으며, 없는 분을 채우지 않고 각 파생봉에 `COMPLETE` 또는 `PARTIAL` coverage를 저장했습니다.
 
 현재 평균 수익률은 선택한 12개 발표 구간의 관측값입니다. 비발표일 비교군과 통계 검정이 아직 없으므로 CPI의 인과 효과나 미래 수익률로 해석하지 않습니다.
 
@@ -236,7 +236,7 @@ API를 호출하기 전에 공식 발표 수, 종목 수와 예상 파티션을 
 .venv/bin/python scripts/collect_market_event_archive.py --dry-run
 ```
 
-현재 결과는 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`, `10종목`, `770개 발표-종목 구간`입니다. Kafka·Spark 검증용 원시 체결은 발표 전후 60분의 121개 예상 분을 유지합니다. 분석 범위는 별도로 발표 60분 전부터 120분 후까지의 1분봉, 이 1분봉에서 파생한 coverage 포함 3분봉·5분봉, 전후 7거래일의 일봉으로 확장합니다. 실제 수집은 `--dry-run`을 제거하면 되며, 완료된 원시 파티션은 Parquet checksum manifest가 일치하면 다시 API를 호출하지 않습니다.
+현재 결과는 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`, `10종목`, `770개 발표-종목 구간`입니다. Kafka·Spark 검증용 원시 체결은 발표 전후 60분의 121개 예상 분을 유지합니다. 분석용 SIP bar 전체 실행에서는 발표 60분 전부터 120분 후까지 1분봉 117,566행, 여기서 파생한 3분봉 43,184행과 5분봉 26,883행을 PostgreSQL에서 확인했습니다. 전후 7거래일 일봉은 이벤트별 11,520행을 선택했고, 겹치는 거래일을 고유키로 합친 DB 행은 8,740개입니다.
 
 신규 경로 smoke test로 `2026-07-29 FOMC × TLT`를 실행해 실제 SIP 체결 29,139건을 3페이지로 수집했고 checksum을 검증했습니다. 이는 Alpaca → Parquet 수집 단계의 결과이며 아직 해당 구간을 Kafka·Spark·PostgreSQL까지 처리했다는 뜻은 아닙니다. 공개 가능한 실행 요약은 [신규 FOMC·TLT 수집 증거](docs/evidence/multi-event-expansion/README.md)에 있습니다.
 
@@ -276,8 +276,8 @@ docker compose exec -T postgres \
 
 ## 다음 단계
 
-1. 신규 고용·PCE·FOMC 22개 발표를 10종목으로 단계 수집하고 partition manifest 확정
-2. 일반화된 event manifest를 Airflow Dynamic Task Mapping 입력으로 연결
+1. 77개 발표 × 10종목 분석용 bar 수집을 Airflow Dynamic Task Mapping 입력으로 연결
+2. 휴장일과 아직 도래하지 않은 이후 거래일 coverage를 자동 재수집·알림 대상으로 연결
 3. 장전 08:30 발표와 정규장 14:00 FOMC를 세션별로 구분해 분석
 4. 각 발표의 point-in-time actual을 ALFRED/BLS/BEA와 연결
 5. Airflow schedule과 누락 구간 자동 backfill·알림 추가, 이후 검증 가능한 전망치 기반 surprise 분석

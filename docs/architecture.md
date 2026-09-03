@@ -1,6 +1,6 @@
 # Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
-상태: CPI 55회 × 4종목 실행 검증 완료, 고용·PCE·FOMC 22회 × 10종목 수집 계획 검증 완료
+상태: CPI 원시 replay 55회 × 4종목 검증 완료, 분석용 SIP bar 77회 × 10종목 수집·DB 저장 완료
 
 기준일: 2026-08-13
 
@@ -190,7 +190,7 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ### 7.2 Macro release impact
 
-이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. CPI는 2022-01-12부터 2026-08-12까지 55회를 실행 검증했고, 나머지는 공식 발표가 완료된 2026년 22회를 우선 수집 범위로 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이며, 신규 범위는 SIP 원시 수집 후에만 실행 완료로 전환한다.
+이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. CPI는 2022-01-12부터 2026-08-12까지 55회, 나머지는 공식 발표가 완료된 2026년 22회를 범위로 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이다. 2026-09-03 기준 분석용 SIP bar 770개 발표-종목 구간을 실행해 1분봉 117,566행, 3분봉 43,184행, 5분봉 26,883행을 PostgreSQL에서 확인했다. 원시 체결 Kafka·Spark 검증 범위는 별도로 CPI 55회 × 4종목이다.
 
 ```text
 economic event with official released_at + as-known vintage

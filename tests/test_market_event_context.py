@@ -5,6 +5,7 @@ from decimal import Decimal
 from src.economic_event_schedule import load_event_catalog
 from src.historical_bars import HistoricalBar
 from src.market_event_context import (
+    available_request_end,
     build_context_requests,
     select_daily_context,
     select_session_context,
@@ -70,6 +71,15 @@ class MarketEventContextTest(unittest.TestCase):
         selected = select_session_context(bars, request)
 
         self.assertEqual([bar.bar_start for bar in selected], [request.start, request.end - timedelta(minutes=1)])
+
+    def test_clamps_future_request_end_to_provider_availability(self) -> None:
+        request = build_context_requests([self.release], ["TLT"])[1]
+        available_until = request.end - timedelta(days=5)
+
+        self.assertEqual(
+            available_request_end(request, available_until),
+            available_until,
+        )
 
     def test_marks_daily_context_incomplete_when_future_sessions_are_unavailable(self) -> None:
         event_start = datetime(2026, 7, 29, 4, tzinfo=UTC)

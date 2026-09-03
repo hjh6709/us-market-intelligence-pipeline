@@ -135,3 +135,13 @@ def select_session_context(
     if request.layer != "SESSION_1MIN" or request.timeframe != "1Min":
         raise ValueError("session selection requires a SESSION_1MIN request")
     return [bar for bar in bars if request.start <= bar.bar_start < request.end]
+
+
+def available_request_end(
+    request: EventContextRequest,
+    provider_available_until: datetime,
+) -> datetime:
+    """Prevent historical requests from extending beyond provider availability."""
+    if provider_available_until.tzinfo is None:
+        raise ValueError("provider availability timestamp must include a timezone")
+    return min(request.end, provider_available_until)

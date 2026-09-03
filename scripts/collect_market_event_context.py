@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
@@ -19,6 +20,7 @@ from src.historical_bars import (
 from src.live_market_smoke import _read_env_file, load_credentials
 from src.market_event_context import (
     build_context_requests,
+    available_request_end,
     select_daily_context,
     select_session_context,
 )
@@ -111,13 +113,15 @@ def main() -> int:
     derived_partial_counts = Counter()
     total_pages = 0
     daily_coverage = []
+    provider_available_until = datetime.now(UTC) - timedelta(minutes=20)
 
     for request in requests:
+        request_end = available_request_end(request, provider_available_until)
         bars, pages = fetch_all_bars(
             client,
             symbols=request.symbols,
             start=request.start,
-            end=request.end,
+            end=request_end,
             feed=args.feed,
             timeframe=request.timeframe,
             max_pages=20,
@@ -183,6 +187,9 @@ def main() -> int:
         "upsert_attempt_counts": dict(sorted(upserted_counts.items())),
         "derived_bar_counts": dict(sorted(derived_counts.items())),
         "derived_partial_counts": dict(sorted(derived_partial_counts.items())),
+        "provider_available_until": provider_available_until.isoformat().replace(
+            "+00:00", "Z"
+        ),
         "daily_context_complete": sum(item["complete"] for item in daily_coverage),
         "daily_context_incomplete": sum(not item["complete"] for item in daily_coverage),
         "daily_coverage": daily_coverage,
