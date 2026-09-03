@@ -8,7 +8,7 @@ os.environ.setdefault("AIRFLOW_HOME", str(Path.cwd() / "airflow-runtime"))
 
 
 class MarketContextBackfillDagTest(unittest.TestCase):
-    def test_dag_maps_event_symbol_work_with_bounded_resources(self) -> None:
+    def test_dag_maps_event_batches_with_bounded_resources(self) -> None:
         dag = importlib.import_module(
             "dags.market_context_backfill_pipeline"
         ).market_context_backfill_pipeline

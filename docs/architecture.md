@@ -1,6 +1,6 @@
 # Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
-상태: CPI 원시 replay 55회 × 4종목 검증 완료, 분석용 SIP bar 77회 × 10종목 수집·DB 저장 완료
+상태: CPI 원시 replay 55회 × 4종목 검증 완료, 분석용 SIP bar 202회 × 10종목 수집·DB 저장 완료, Kafka v2 분산 검증 완료
 
 기준일: 2026-08-13
 
@@ -152,7 +152,7 @@ sequenceDiagram
     S->>K: invalid/unprocessable → dead-letter.v1
 ```
 
-Partition key는 `symbol`이다. 한 symbol의 순서를 같은 partition에서 유지한다. Spark는 processing time이 아니라 `event_timestamp`의 1분 window로 bar를 계산하고 configured watermark 동안 state를 유지한다. P0는 append output mode로 watermark를 통과한 final bar만 sink에 전달한다. Watermark 안의 late trade는 final 출력 전에 Spark state의 집계에 포함되며, 너무 늦은 event는 정책에 따라 drop/DLQ metric으로 기록한다. 초기 watermark 후보는 2분이지만 fixture와 지연 측정 전에는 확정하지 않는다.
+실시간 v1의 partition key는 `symbol`이다. 원시 부하 replay v2는 종목별 거래량 차이로 생긴 쏠림을 줄이기 위해 `event type + 발표일 + symbol + 15분 segment`를 key로 사용한다. 동일 종목 전체의 전역 순서 대신 한 segment 안의 순서를 유지하며, Spark는 payload의 `event_timestamp`로 다시 정렬·집계한다. 기준 118,118건의 6개 파티션 실행에서 최대 비중은 33.9%였다. Spark는 processing time이 아니라 `event_timestamp`의 1분 window로 bar를 계산하고 configured watermark 동안 state를 유지한다. P0는 append output mode로 watermark를 통과한 final bar만 sink에 전달한다. Watermark 안의 late trade는 final 출력 전에 Spark state의 집계에 포함되며, 너무 늦은 event는 정책에 따라 drop/DLQ metric으로 기록한다. 초기 watermark 후보는 2분이지만 fixture와 지연 측정 전에는 확정하지 않는다.
 
 Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. `foreachBatch` sink는 기본적으로 at-least-once write가 가능하므로 checkpoint와 별개로 PostgreSQL business unique key/upsert가 반드시 필요하다. DB write가 실패하면 micro-batch를 성공 처리하지 않고 재시도 가능한 상태로 남긴다.
 
@@ -161,6 +161,7 @@ Spark checkpoint가 Kafka offset과 stateful aggregation state를 관리한다. 
 | Topic | Key | Producer | Consumer | Partitions | 기본 보존 |
 | --- | --- | --- | --- | ---: | --- |
 | `raw.market.v1` | symbol | market collector/replay | Spark Structured Streaming | 3 | 24h |
+| `raw.market-sip.load.v2` | event·date·symbol·15분 segment | historical replay | Spark batch | 6 | 24h |
 | `dead-letter.v1` | original key | Spark/news processors | manual inspection/reporting | 1 | 7d |
 
 선택 구현에서 live/replay news processor를 만들 때만 `raw.news.v1`을 추가한다. `market.bars.1m.v1`, `market.events.v1`, `market.features.v1`, `market.signals.v1`은 실제 두 번째 consumer가 생기기 전에는 만들지 않는다. Spark 결과와 LLM market event는 MVP에서 PostgreSQL에 직접 저장한다.
@@ -190,7 +191,7 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ### 7.2 Macro release impact
 
-이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. CPI는 2022-01-12부터 2026-08-12까지 55회, 나머지는 공식 발표가 완료된 2026년 22회를 범위로 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이다. 2026-09-03 기준 분석용 SIP bar 770개 발표-종목 구간을 실행해 1분봉 117,566행, 3분봉 43,184행, 5분봉 26,883행을 PostgreSQL에서 확인했다. 원시 체결 Kafka·Spark 검증 범위는 별도로 CPI 55회 × 4종목이다.
+이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. 공식 archive에서 2022년부터 2026년 8월까지 CPI 55회, 고용 55회, PCE 55회, FOMC 37회, 총 202회를 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이다. 2026-09-03 기준 2,020개 발표-종목 구간을 실행해 이벤트별 선택 합계 1분봉 308,512행, 파생 3분봉 112,593행, 5분봉 70,090행과 일봉 30,250행을 확인했다. 원시 체결 Kafka·Spark 검증 범위는 별도로 CPI 55회 × 4종목이다.
 
 ```text
 economic event with official released_at + as-known vintage

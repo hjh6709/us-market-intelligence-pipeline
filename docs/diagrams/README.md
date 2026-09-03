@@ -4,7 +4,7 @@
 
 | 파일 | 용도 |
 | --- | --- |
-| `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 121분 실측 경로와 77회·10종목의 181분/전후 7거래일 실제 저장 결과, 결측 판정을 구분 |
+| `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 부하 경로, 202회·10종목 시장 데이터, 발표 시점 경제 맥락과 미구현 분석을 구분 |
 | `pipeline-architecture.png` | 루트 README에서 사용하는 전체 프로젝트 렌더 결과 |
 | `cpi-sip-kafka-spark-assignment.svg` | 한 CPI 발표일의 Kafka·Spark 과제 실행 정본 |
 | `cpi-sip-kafka-spark-assignment.png` | 과제 문서와 발표에서 사용하는 실행 결과 렌더 |
@@ -21,7 +21,7 @@ Data Source
 ```
 
 - 파란색·초록색·주황색 실선: 현재 구현하고 실행 결과를 검증한 경로
-- 보라색 점선: 아직 실행하지 않은 event-study/backtest·Airflow 자동화 확장
+- 보라색 점선: 아직 실행하지 않은 전망치·surprise, event-study와 backtest
 - 주황색: 실제 실행 결과와 건수·coverage 검증 증거
 - 루트 README에는 전체 프로젝트 그림만 배치하고, 과제 실행 그림은 과제 문서에서만 사용한다.
 

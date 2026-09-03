@@ -1,59 +1,79 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
-  <title id="title">U.S. Economic Event Market Data Pipeline</title>
-  <desc id="desc">현재 구현: Raw trades → Parquet → Kafka → Spark → PostgreSQL. Official events → Airflow → Alpaca bars → PostgreSQL. 미구현 분석은 점선으로 구분.</desc>
+  <title id="title">U.S. Economic Event Market Reaction Pipeline</title>
+  <desc id="desc">현재 실행한 원시 체결, 시장 데이터, 경제 맥락 경로와 아직 미구현인 분석 및 백테스트를 구분한 구성도</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#334155"/></marker>
-    <marker id="futureArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#7c3aed"/></marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#334155"/></marker>
+    <marker id="future-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#7c3aed"/></marker>
     <style>
-      .title{font:700 34px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}.subtitle{font:400 17px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#475569}.section{font:700 21px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}.box-title{font:700 17px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}.copy{font:400 13px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#334155}.metric{font:700 14px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0369a1}.lane{fill:#f8fafc;stroke:#cbd5e1;stroke-width:1.5}.source{fill:#eff6ff;stroke:#2563eb;stroke-width:2}.raw{fill:#f0f9ff;stroke:#0284c7;stroke-width:2}.process{fill:#eef2ff;stroke:#4f46e5;stroke-width:2}.store{fill:#ecfdf5;stroke:#059669;stroke-width:2}.evidence{fill:#fff7ed;stroke:#ea580c;stroke-width:2}.future{fill:#faf5ff;stroke:#7c3aed;stroke-width:2;stroke-dasharray:8 6}.flow{fill:none;stroke:#334155;stroke-width:2.3;marker-end:url(#arrow)}.future-flow{fill:none;stroke:#7c3aed;stroke-width:2.3;stroke-dasharray:8 6;marker-end:url(#futureArrow)}
+      .title{font:700 34px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}
+      .subtitle{font:400 17px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#475569}
+      .section{font:700 21px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}
+      .box-title{font:700 17px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0f172a}
+      .copy{font:400 13px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#334155}
+      .metric{font:700 14px -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;fill:#0369a1}
+      .lane{fill:#f8fafc;stroke:#cbd5e1;stroke-width:1.5}
+      .source{fill:#eff6ff;stroke:#2563eb;stroke-width:2}
+      .process{fill:#eef2ff;stroke:#4f46e5;stroke-width:2}
+      .store{fill:#ecfdf5;stroke:#059669;stroke-width:2}
+      .evidence{fill:#fff7ed;stroke:#ea580c;stroke-width:2}
+      .future{fill:#faf5ff;stroke:#7c3aed;stroke-width:2;stroke-dasharray:8 6}
+      .flow{fill:none;stroke:#334155;stroke-width:2.3;marker-end:url(#arrow)}
+      .future-flow{fill:none;stroke:#7c3aed;stroke-width:2.3;stroke-dasharray:8 6;marker-end:url(#future-arrow)}
     </style>
   </defs>
-  <rect width="1600" height="1080" fill="#ffffff"/>
-  <text x="52" y="58" class="title">U.S. Economic Event Market Data Pipeline</text>
-  <text x="52" y="88" class="subtitle">현재 실행된 두 경로와 아직 검증하지 않은 분석·백테스트 경계를 분리</text>
+  <rect width="1600" height="1080" fill="#fff"/>
+  <text x="52" y="58" class="title">U.S. Economic Event Market Reaction Pipeline</text>
+  <text x="52" y="88" class="subtitle">실행한 세 경로는 실선, 아직 검증하지 않은 분석·자동매매는 점선으로 표시</text>
 
-  <rect x="36" y="125" width="1528" height="265" rx="18" class="lane"/>
-  <text x="58" y="160" class="section">현재 구현 A · 원시 체결 전달·집계 검증</text>
-  <text x="58" y="185" class="copy">CPI 55회 × 4종목 · GCP 부하 기록 + 식별키 수정 후 전체 재실행</text>
-  <rect x="58" y="215" width="250" height="125" rx="14" class="source"/>
-  <text x="183" y="247" text-anchor="middle" class="box-title">Alpaca SIP trades</text><text x="183" y="275" text-anchor="middle" class="copy">실제 개별 체결</text><text x="183" y="306" text-anchor="middle" class="metric">7,360,804건</text>
-  <rect x="348" y="215" width="235" height="125" rx="14" class="raw"/>
-  <text x="466" y="247" text-anchor="middle" class="box-title">Parquet archive</text><text x="466" y="275" text-anchor="middle" class="copy">220 event-symbol partitions</text><text x="466" y="306" text-anchor="middle" class="metric">checksum 원본</text>
-  <rect x="623" y="215" width="235" height="125" rx="14" class="process"/>
-  <text x="741" y="247" text-anchor="middle" class="box-title">Kafka</text><text x="741" y="275" text-anchor="middle" class="copy">raw.market-sip.v1</text><text x="741" y="306" text-anchor="middle" class="metric">발행 = 수신</text>
-  <rect x="898" y="215" width="270" height="125" rx="14" class="process"/>
-  <text x="1033" y="247" text-anchor="middle" class="box-title">Spark Batch / Streaming</text><text x="1033" y="275" text-anchor="middle" class="copy">검증·exchange 포함 event_id·1분 집계</text><text x="1033" y="306" text-anchor="middle" class="metric">수정 후 실제 중복 0</text>
-  <rect x="1208" y="215" width="315" height="125" rx="14" class="store"/>
-  <text x="1366" y="247" text-anchor="middle" class="box-title">PostgreSQL market_bars</text><text x="1366" y="275" text-anchor="middle" class="copy">business key Upsert</text><text x="1366" y="306" text-anchor="middle" class="metric">1분봉 22,260 · 중복 0</text>
-  <path d="M308 278 H348" class="flow"/><path d="M583 278 H623" class="flow"/><path d="M858 278 H898" class="flow"/><path d="M1168 278 H1208" class="flow"/>
+  <rect x="36" y="120" width="1528" height="235" rx="18" class="lane"/>
+  <text x="58" y="155" class="section">A · 원시 체결 정확성·부하 검증</text>
+  <text x="58" y="180" class="copy">CPI 55회 × 4종목 원본 / Kafka v2는 기준 118,118건으로 실제 재검증</text>
+  <rect x="58" y="205" width="240" height="110" rx="14" class="source"/>
+  <text x="178" y="238" text-anchor="middle" class="box-title">Alpaca SIP trades</text><text x="178" y="266" text-anchor="middle" class="copy">실제 개별 체결</text><text x="178" y="292" text-anchor="middle" class="metric">부하 원본 7,360,804</text>
+  <rect x="338" y="205" width="220" height="110" rx="14" class="source"/>
+  <text x="448" y="238" text-anchor="middle" class="box-title">Parquet</text><text x="448" y="266" text-anchor="middle" class="copy">row count · checksum</text><text x="448" y="292" text-anchor="middle" class="metric">220 partitions</text>
+  <rect x="598" y="205" width="250" height="110" rx="14" class="process"/>
+  <text x="723" y="238" text-anchor="middle" class="box-title">Kafka v2 · 6 partitions</text><text x="723" y="266" text-anchor="middle" class="copy">event + symbol + 15분 segment</text><text x="723" y="292" text-anchor="middle" class="metric">최대 비중 33.9%</text>
+  <rect x="888" y="205" width="260" height="110" rx="14" class="process"/>
+  <text x="1018" y="238" text-anchor="middle" class="box-title">Spark</text><text x="1018" y="266" text-anchor="middle" class="copy">검증 · 중복 · 거래조건 · 1분 집계</text><text x="1018" y="292" text-anchor="middle" class="metric">입력 118,118 · 오류 0</text>
+  <rect x="1188" y="205" width="335" height="110" rx="14" class="store"/>
+  <text x="1356" y="238" text-anchor="middle" class="box-title">PostgreSQL market_bars</text><text x="1356" y="266" text-anchor="middle" class="copy">business key Upsert</text><text x="1356" y="292" text-anchor="middle" class="metric">1분봉 472 · 중복 0</text>
+  <path d="M298 260H338" class="flow"/><path d="M558 260H598" class="flow"/><path d="M848 260H888" class="flow"/><path d="M1148 260H1188" class="flow"/>
 
-  <rect x="36" y="420" width="1528" height="355" rx="18" class="lane"/>
-  <text x="58" y="455" class="section">현재 구현 B · 공식 발표 기준 분석용 시장 문맥</text>
-  <text x="58" y="480" class="copy">BLS · ALFRED · Alpaca SIP + BEA · Federal Reserve · 77회 × 10종목</text>
-  <rect x="58" y="510" width="275" height="125" rx="14" class="source"/>
-  <text x="196" y="542" text-anchor="middle" class="box-title">Official event catalog</text><text x="196" y="570" text-anchor="middle" class="copy">economic_events</text><text x="196" y="601" text-anchor="middle" class="metric">CPI 55 · 고용 8 · PCE 9 · FOMC 5</text>
-  <rect x="373" y="510" width="280" height="125" rx="14" class="process"/>
-  <text x="513" y="542" text-anchor="middle" class="box-title">Airflow orchestration</text><text x="513" y="570" text-anchor="middle" class="copy">경제발표 1건 × 종목 1개</text><text x="513" y="601" text-anchor="middle" class="metric">run · work item · check</text>
-  <rect x="693" y="510" width="280" height="125" rx="14" class="source"/>
-  <text x="833" y="542" text-anchor="middle" class="box-title">Alpaca SIP bars</text><text x="833" y="570" text-anchor="middle" class="copy">T-60~T+120 · ±7거래일</text><text x="833" y="601" text-anchor="middle" class="metric">1m 117,566 · 1d 고유 8,740</text>
-  <rect x="1013" y="510" width="260" height="125" rx="14" class="process"/>
-  <text x="1143" y="542" text-anchor="middle" class="box-title">3m · 5m derivation</text><text x="1143" y="570" text-anchor="middle" class="copy">COMPLETE / PARTIAL</text><text x="1143" y="601" text-anchor="middle" class="metric">43,184 · 26,883</text>
-  <rect x="1313" y="510" width="210" height="125" rx="14" class="store"/>
-  <text x="1418" y="542" text-anchor="middle" class="box-title">PostgreSQL</text><text x="1418" y="570" text-anchor="middle" class="copy">market_bars</text><text x="1418" y="601" text-anchor="middle" class="metric">Upsert · coverage</text>
-  <path d="M333 573 H373" class="flow"/><path d="M653 573 H693" class="flow"/><path d="M973 573 H1013" class="flow"/><path d="M1273 573 H1313" class="flow"/>
-  <rect x="373" y="665" width="900" height="75" rx="14" class="evidence"/>
-  <text x="403" y="695" class="box-title">실제 Airflow 검증</text><text x="620" y="695" class="copy">FOMC 1회 × SPY·TLT</text><text x="850" y="695" class="metric">588행 · 동일 hash · 중복 0</text>
-  <text x="403" y="721" class="copy">mock 503: FAILED / OPEN → retry → SUCCEEDED / RESOLVED</text>
+  <rect x="36" y="385" width="1528" height="265" rx="18" class="lane"/>
+  <text x="58" y="420" class="section">B · 공식 발표와 10종목 시장 데이터</text>
+  <text x="58" y="445" class="copy">2022-01-07~2026-08-26 · 202회 × 10종목 = 2,020개 분석 구간</text>
+  <rect x="58" y="475" width="285" height="120" rx="14" class="source"/>
+  <text x="201" y="508" text-anchor="middle" class="box-title">Official event catalog</text><text x="201" y="536" text-anchor="middle" class="copy">BLS · BEA · Federal Reserve</text><text x="201" y="564" text-anchor="middle" class="metric">CPI 55 · 고용 55 · PCE 55 · FOMC 37</text>
+  <rect x="383" y="475" width="285" height="120" rx="14" class="process"/>
+  <text x="526" y="508" text-anchor="middle" class="box-title">Airflow / Python</text><text x="526" y="536" text-anchor="middle" class="copy">발표별 task · 10종목 batch 요청</text><text x="526" y="564" text-anchor="middle" class="metric">4,040 → 404 requests</text>
+  <rect x="708" y="475" width="285" height="120" rx="14" class="source"/>
+  <text x="851" y="508" text-anchor="middle" class="box-title">Alpaca SIP bars</text><text x="851" y="536" text-anchor="middle" class="copy">T-60~T+120분 · ±7거래일</text><text x="851" y="564" text-anchor="middle" class="metric">1m 308,512 · 1d 30,250</text>
+  <rect x="1033" y="475" width="240" height="120" rx="14" class="process"/>
+  <text x="1153" y="508" text-anchor="middle" class="box-title">3m · 5m 생성</text><text x="1153" y="536" text-anchor="middle" class="copy">COMPLETE / PARTIAL</text><text x="1153" y="564" text-anchor="middle" class="metric">112,593 · 70,090</text>
+  <rect x="1313" y="475" width="210" height="120" rx="14" class="store"/>
+  <text x="1418" y="508" text-anchor="middle" class="box-title">PostgreSQL</text><text x="1418" y="536" text-anchor="middle" class="copy">bars · work · checks</text><text x="1418" y="564" text-anchor="middle" class="metric">Upsert · coverage</text>
+  <path d="M343 535H383" class="flow"/><path d="M668 535H708" class="flow"/><path d="M993 535H1033" class="flow"/><path d="M1273 535H1313" class="flow"/>
+  <rect x="383" y="610" width="890" height="25" rx="8" class="evidence"/>
+  <text x="828" y="628" text-anchor="middle" class="copy">Airflow smoke: FOMC 1회 × SPY·TLT · work 2 성공 · open alert 0</text>
 
-  <rect x="36" y="805" width="1528" height="220" rx="18" class="future"/>
-  <text x="58" y="842" class="section">미구현 · 후속 검증 / 후속 확장</text>
-  <rect x="70" y="875" width="330" height="105" rx="14" class="future"/>
-  <text x="235" y="907" text-anchor="middle" class="box-title">Kafka v2 partition test</text><text x="235" y="936" text-anchor="middle" class="copy">event + symbol + segment · 3 vs 6</text><text x="235" y="962" text-anchor="middle" class="metric">97.5% 쏠림 개선 검증</text>
-  <rect x="470" y="875" width="330" height="105" rx="14" class="future"/>
-  <text x="635" y="907" text-anchor="middle" class="box-title">Point-in-time actuals</text><text x="635" y="936" text-anchor="middle" class="copy">고용 · PCE · FOMC 값 결합</text><text x="635" y="962" text-anchor="middle" class="metric">시점 누수 검사</text>
-  <rect x="870" y="875" width="300" height="105" rx="14" class="future"/>
-  <text x="1020" y="907" text-anchor="middle" class="box-title">macro_event_impacts</text><text x="1020" y="936" text-anchor="middle" class="copy">비발표일 비교·통계 검정</text><text x="1020" y="962" text-anchor="middle" class="metric">인과 단정 금지</text>
-  <rect x="1240" y="875" width="290" height="105" rx="14" class="future"/>
-  <text x="1385" y="907" text-anchor="middle" class="box-title">Backtest</text><text x="1385" y="936" text-anchor="middle" class="copy">비용·슬리피지·시점 누수</text><text x="1385" y="962" text-anchor="middle" class="metric">자동매매 전 검증</text>
-  <path d="M400 928 H470" class="future-flow"/><path d="M800 928 H870" class="future-flow"/><path d="M1170 928 H1240" class="future-flow"/>
+  <rect x="36" y="680" width="1528" height="180" rx="18" class="lane"/>
+  <text x="58" y="715" class="section">C · 발표 당시 경제 상황</text>
+  <rect x="115" y="745" width="330" height="80" rx="14" class="source"/>
+  <text x="280" y="776" text-anchor="middle" class="box-title">같은 공식 발표 202회</text><text x="280" y="803" text-anchor="middle" class="copy">released_at 기준</text>
+  <rect x="635" y="745" width="330" height="80" rx="14" class="process"/>
+  <text x="800" y="776" text-anchor="middle" class="box-title">FRED · ALFRED</text><text x="800" y="803" text-anchor="middle" class="copy">10 series · 당시 이용 가능 값</text>
+  <rect x="1155" y="745" width="330" height="80" rx="14" class="store"/>
+  <text x="1320" y="776" text-anchor="middle" class="box-title">macro_event_contexts</text><text x="1320" y="803" text-anchor="middle" class="metric">202 × 10 = 2,020행</text>
+  <path d="M445 785H635" class="flow"/><path d="M965 785H1155" class="flow"/>
+
+  <rect x="36" y="890" width="1528" height="145" rx="18" class="future"/>
+  <text x="58" y="925" class="section">아직 미구현 · 분석과 자동매매 경계</text>
+  <rect x="90" y="952" width="360" height="58" rx="12" class="future"/>
+  <text x="270" y="977" text-anchor="middle" class="box-title">전망치 · 실제값 · surprise</text><text x="270" y="998" text-anchor="middle" class="copy">신뢰 가능한 point-in-time 출처 필요</text>
+  <rect x="620" y="952" width="360" height="58" rx="12" class="future"/>
+  <text x="800" y="977" text-anchor="middle" class="box-title">Event study · 통계 검정</text><text x="800" y="998" text-anchor="middle" class="copy">비발표일 비교 · 다른 사건 통제</text>
+  <rect x="1150" y="952" width="360" height="58" rx="12" class="future"/>
+  <text x="1330" y="977" text-anchor="middle" class="box-title">Backtest → Paper trading</text><text x="1330" y="998" text-anchor="middle" class="copy">비용 · 슬리피지 · 위험 한도</text>
+  <path d="M450 981H620" class="future-flow"/><path d="M980 981H1150" class="future-flow"/>
 </svg>

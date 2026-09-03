@@ -13,10 +13,23 @@ class EconomicEventScheduleTest(unittest.TestCase):
 
         self.assertEqual(
             Counter(item.event_type for item in releases),
-            {"CPI": 55, "EMPLOYMENT": 8, "PCE": 9, "FOMC": 5},
+            {"CPI": 55, "EMPLOYMENT": 55, "PCE": 55, "FOMC": 37},
         )
-        self.assertEqual(len({item.event_id for item in releases}), 77)
+        self.assertEqual(len({item.event_id for item in releases}), 202)
         self.assertTrue(all(item.released_at.tzinfo is UTC for item in releases))
+        self.assertTrue(all(item.source_url.startswith("https://") for item in releases))
+
+        by_type_and_period = {
+            (item.event_type, item.reference_period): item for item in releases
+        }
+        self.assertEqual(
+            by_type_and_period[("EMPLOYMENT", "2025-09")].release_date.isoformat(),
+            "2025-11-20",
+        )
+        self.assertEqual(
+            by_type_and_period[("PCE", "2025-10/11")].release_date.isoformat(),
+            "2026-01-22",
+        )
 
     def test_universe_expands_roles_without_duplicate_symbols(self) -> None:
         instruments = load_market_universe()
@@ -34,7 +47,7 @@ class EconomicEventScheduleTest(unittest.TestCase):
 
         plan = build_archive_plan(releases, symbols)
 
-        self.assertEqual(len(plan), 770)
+        self.assertEqual(len(plan), 2020)
         fomc = next(
             item
             for item in plan

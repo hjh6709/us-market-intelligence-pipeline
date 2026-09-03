@@ -49,6 +49,8 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
         args.topic, offset_ranges
     )
     spark = create_market_spark("cpi-sip-trade-batch")
+    validated = None
+    policy_trades = None
     try:
         kafka = (
             spark.read.format("kafka")
@@ -99,6 +101,10 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             "postgres_upserted_bars": stored_count,
         }
     finally:
+        if policy_trades is not None:
+            policy_trades.unpersist(blocking=False)
+        if validated is not None:
+            validated.unpersist(blocking=False)
         try:
             spark.stop()
         except (ConnectionRefusedError, OSError):

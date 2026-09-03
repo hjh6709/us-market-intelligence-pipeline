@@ -1,0 +1,28 @@
+{
+  "experiment_run_id": "local-v2-routing-20260903",
+  "dataset_id": "cpi-sip-2022-01-01-2026-08-12:2026-08-12:2026-08-12",
+  "environment": "local",
+  "status": "succeeded",
+  "raw_input_trades": 118118,
+  "kafka_published": 118118,
+  "kafka_consumed": 118118,
+  "spark_input": 118118,
+  "spark_invalid": 0,
+  "spark_duplicates": 0,
+  "spark_output_bars": 472,
+  "postgres_stored_bars": 472,
+  "postgres_business_key_duplicates": 0,
+  "duration_seconds": 18.666279,
+  "events_per_second": 6327.881,
+  "kafka_partition_counts": {
+    "0": 40069,
+    "1": 29314,
+    "2": 15098,
+    "3": 5580,
+    "4": 9793,
+    "5": 18264
+  },
+  "kafka_max_partition_share": 0.339229,
+  "error_type": null,
+  "error_message": null
+}

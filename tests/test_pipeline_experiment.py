@@ -24,6 +24,8 @@ class PipelineExperimentTest(unittest.TestCase):
             postgres_business_key_duplicates=0,
             duration_seconds=1.0,
             events_per_second=100.0,
+            kafka_partition_counts={0: 40, 1: 35, 2: 25},
+            kafka_max_partition_share=0.4,
         )
 
         with tempfile.TemporaryDirectory() as temp:
@@ -32,6 +34,7 @@ class PipelineExperimentTest(unittest.TestCase):
             payload = path.read_text(encoding="utf-8")
 
         self.assertEqual(json.loads(payload)["kafka_consumed"], 100)
+        self.assertEqual(json.loads(payload)["kafka_max_partition_share"], 0.4)
         self.assertNotIn("postgresql://", payload)
         self.assertNotIn("APCA_API", payload)
 

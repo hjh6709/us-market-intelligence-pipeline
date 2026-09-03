@@ -56,9 +56,34 @@ class MarketContextResult:
     fallback_used: bool
 
 
+@dataclass(frozen=True)
+class MarketContextBatchResult:
+    event_id: str
+    results: tuple[MarketContextResult, ...]
+    pages: int
+
+
 BarFetcher = Callable[..., tuple[list[HistoricalBar], int]]
 HistoricalWriter = Callable[..., int]
 DerivedWriter = Callable[..., int]
+
+
+def build_yearly_backfill_configs(config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Split a multi-year request into bounded child-DAG configurations."""
+    release_from = date.fromisoformat(str(config["release_from"]))
+    release_to = date.fromisoformat(str(config["release_to"]))
+    if release_to < release_from:
+        raise ValueError("release_to must not be before release_from")
+
+    child_configs = []
+    for year in range(release_from.year, release_to.year + 1):
+        child_from = max(release_from, date(year, 1, 1))
+        child_to = min(release_to, date(year, 12, 31))
+        child = dict(config)
+        child["release_from"] = child_from.isoformat()
+        child["release_to"] = child_to.isoformat()
+        child_configs.append(child)
+    return child_configs
 
 
 def select_market_context_work(
@@ -188,16 +213,14 @@ def collect_market_context_work_item(
         timeframe="1Day",
     )
 
-    if daily.complete:
-        coverage_status = "COMPLETE"
-    elif item.release_date > provider_available_until.date() - timedelta(days=12):
-        coverage_status = "FUTURE_SESSION_UNAVAILABLE"
-    elif daily.event_session == 0 and not session_rows:
-        coverage_status = "MARKET_CLOSED"
-    elif not daily.bars and not session_rows:
-        coverage_status = "NO_MARKET_DATA"
-    else:
-        coverage_status = "PARTIAL"
+    coverage_status = _coverage_status(
+        item,
+        daily_complete=daily.complete,
+        daily_event=daily.event_session,
+        daily_rows=len(daily.bars),
+        session_rows=len(session_rows),
+        provider_available_until=provider_available_until,
+    )
 
     return MarketContextResult(
         event_id=item.event_id,
@@ -215,6 +238,151 @@ def collect_market_context_work_item(
         pages=session_pages + daily_pages,
         fallback_used=False,
     )
+
+
+def collect_market_context_event(
+    items: Sequence[MarketContextWorkItem],
+    *,
+    client: object,
+    database_url: str,
+    provider_available_until: datetime,
+    fetcher: BarFetcher = fetch_all_bars,
+    historical_writer: HistoricalWriter = upsert_historical_bars,
+    derived_writer: DerivedWriter = upsert_derived_bars,
+) -> MarketContextBatchResult:
+    """Fetch every symbol for one release in two provider requests."""
+    if not items:
+        raise ValueError("event batch must contain at least one symbol")
+    event_ids = {item.event_id for item in items}
+    feeds = {item.feed for item in items}
+    symbols = [item.symbol for item in items]
+    if len(event_ids) != 1 or len(feeds) != 1:
+        raise ValueError("event batch must share one event and feed")
+    if len(symbols) != len(set(symbols)):
+        raise ValueError("event batch symbols must be unique")
+
+    first = items[0]
+    release = EconomicRelease(
+        event_type=first.event_type,
+        reference_period=first.reference_period,
+        release_date=first.release_date,
+        released_at=first.released_at,
+        timezone=first.timezone,
+        source=first.source,
+        source_url=first.source_url,
+    )
+    session_request, daily_request = build_context_requests([release], symbols)
+    session_bars, session_pages = _fetch_request(
+        session_request,
+        client=client,
+        feed=first.feed,
+        provider_available_until=provider_available_until,
+        fetcher=fetcher,
+    )
+    session_rows = select_session_context(session_bars, session_request)
+    historical_writer(
+        session_rows,
+        database_url=database_url,
+        feed=first.feed,
+        timeframe="1Min",
+    )
+
+    derived_by_minutes = {
+        minutes: aggregate_derived_bars(session_rows, minutes)
+        for minutes in (3, 5)
+    }
+    for derived in derived_by_minutes.values():
+        derived_writer(derived, database_url=database_url, feed=first.feed)
+
+    daily_bars, daily_pages = _fetch_request(
+        daily_request,
+        client=client,
+        feed=first.feed,
+        provider_available_until=provider_available_until,
+        fetcher=fetcher,
+    )
+    daily_by_symbol = {
+        item.symbol: select_daily_context(daily_bars, release, item.symbol)
+        for item in items
+    }
+    selected_daily = [
+        bar
+        for item in items
+        for bar in daily_by_symbol[item.symbol].bars
+    ]
+    historical_writer(
+        selected_daily,
+        database_url=database_url,
+        feed=first.feed,
+        timeframe="1Day",
+    )
+
+    results = []
+    for item in items:
+        symbol_session = [bar for bar in session_rows if bar.symbol == item.symbol]
+        daily = daily_by_symbol[item.symbol]
+        symbol_derived = {
+            minutes: [
+                bar
+                for bar in derived_by_minutes[minutes]
+                if bar.symbol == item.symbol
+            ]
+            for minutes in (3, 5)
+        }
+        results.append(
+            MarketContextResult(
+                event_id=item.event_id,
+                symbol=item.symbol,
+                session_1m_rows=len(symbol_session),
+                derived_3m_rows=len(symbol_derived[3]),
+                derived_5m_rows=len(symbol_derived[5]),
+                derived_3m_partial_rows=sum(
+                    bar.coverage_status == "PARTIAL" for bar in symbol_derived[3]
+                ),
+                derived_5m_partial_rows=sum(
+                    bar.coverage_status == "PARTIAL" for bar in symbol_derived[5]
+                ),
+                daily_rows=len(daily.bars),
+                daily_before=daily.sessions_before,
+                daily_event=daily.event_session,
+                daily_after=daily.sessions_after,
+                coverage_status=_coverage_status(
+                    item,
+                    daily_complete=daily.complete,
+                    daily_event=daily.event_session,
+                    daily_rows=len(daily.bars),
+                    session_rows=len(symbol_session),
+                    provider_available_until=provider_available_until,
+                ),
+                pages=0,
+                fallback_used=False,
+            )
+        )
+    return MarketContextBatchResult(
+        event_id=first.event_id,
+        results=tuple(results),
+        pages=session_pages + daily_pages,
+    )
+
+
+def _coverage_status(
+    item: MarketContextWorkItem,
+    *,
+    daily_complete: bool,
+    daily_event: int,
+    daily_rows: int,
+    session_rows: int,
+    provider_available_until: datetime,
+) -> str:
+    if daily_complete:
+        return "COMPLETE"
+    if item.release_date > provider_available_until.date() - timedelta(days=12):
+        return "FUTURE_SESSION_UNAVAILABLE"
+    if daily_event == 0 and not session_rows:
+        return "MARKET_CLOSED"
+    if not daily_rows and not session_rows:
+        return "NO_MARKET_DATA"
+    return "PARTIAL"
 
 
 def _fetch_request(

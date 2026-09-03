@@ -7,6 +7,7 @@ import json
 import os
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from itertools import groupby
 from pathlib import Path
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
@@ -14,7 +15,7 @@ from src.economic_event_schedule import event_counts, load_event_catalog
 from src.historical_bars import AlpacaHistoricalBarsClient
 from src.live_market_smoke import _read_env_file, load_credentials
 from src.market_context_backfill import (
-    collect_market_context_work_item,
+    collect_market_context_event,
     select_market_context_work,
 )
 from src.market_universe import load_market_universe
@@ -80,7 +81,7 @@ def _planned_summary(args, releases, symbols, work) -> dict:
         "symbols": symbols,
         "symbol_count": len(symbols),
         "work_item_count": len(work),
-        "api_request_count_before_pagination": len(work) * 2,
+        "api_request_count_before_pagination": len(releases) * 2,
         "layers": {
             "SESSION_1MIN": {
                 "window": "T-60m through T+120m inclusive",
@@ -119,44 +120,60 @@ def main() -> int:
     daily_coverage = []
     provider_available_until = datetime.now(UTC) - timedelta(minutes=20)
 
-    for item in work:
-        result = collect_market_context_work_item(
-            item,
+    grouped_work = groupby(work, key=lambda item: item.event_id)
+    for _event_id, event_items_iterator in grouped_work:
+        event_items = list(event_items_iterator)
+        batch = collect_market_context_event(
+            event_items,
             client=client,
             database_url=database_url,
             provider_available_until=provider_available_until,
         )
-        total_pages += result.pages
-        fetched_counts["SESSION_1MIN"] += result.session_1m_rows
-        fetched_counts["DAILY_15_SESSIONS"] += result.daily_rows
-        upserted_counts["SESSION_1MIN"] += result.session_1m_rows
-        upserted_counts["DAILY_15_SESSIONS"] += result.daily_rows
-        derived_counts["3m"] += result.derived_3m_rows
-        derived_counts["5m"] += result.derived_5m_rows
-        derived_partial_counts["3m"] += result.derived_3m_partial_rows
-        derived_partial_counts["5m"] += result.derived_5m_partial_rows
-        daily_coverage.append(
-            {
-                "event_id": result.event_id,
-                "symbol": result.symbol,
-                "before": result.daily_before,
-                "event": result.daily_event,
-                "after": result.daily_after,
-                "complete": result.coverage_status == "COMPLETE",
-                "coverage_status": result.coverage_status,
-            }
-        )
+        total_pages += batch.pages
+        for item, result in zip(event_items, batch.results, strict=True):
+            fetched_counts["SESSION_1MIN"] += result.session_1m_rows
+            fetched_counts["DAILY_15_SESSIONS"] += result.daily_rows
+            upserted_counts["SESSION_1MIN"] += result.session_1m_rows
+            upserted_counts["DAILY_15_SESSIONS"] += result.daily_rows
+            derived_counts["3m"] += result.derived_3m_rows
+            derived_counts["5m"] += result.derived_5m_rows
+            derived_partial_counts["3m"] += result.derived_3m_partial_rows
+            derived_partial_counts["5m"] += result.derived_5m_partial_rows
+            daily_coverage.append(
+                {
+                    "event_id": result.event_id,
+                    "symbol": result.symbol,
+                    "before": result.daily_before,
+                    "event": result.daily_event,
+                    "after": result.daily_after,
+                    "complete": result.coverage_status == "COMPLETE",
+                    "coverage_status": result.coverage_status,
+                }
+            )
+            print(
+                json.dumps(
+                    {
+                        "step": "event_context",
+                        "event_type": item.event_type,
+                        "release_date": item.release_date.isoformat(),
+                        "symbol": item.symbol,
+                        "session_1m_rows": result.session_1m_rows,
+                        "daily_rows": result.daily_rows,
+                        "coverage_status": result.coverage_status,
+                        "event_pages": batch.pages,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         print(
             json.dumps(
                 {
-                    "step": "event_context",
-                    "event_type": item.event_type,
-                    "release_date": item.release_date.isoformat(),
-                    "symbol": item.symbol,
-                    "session_1m_rows": result.session_1m_rows,
-                    "daily_rows": result.daily_rows,
-                    "coverage_status": result.coverage_status,
-                    "pages": result.pages,
+                    "step": "event_complete",
+                    "event_type": event_items[0].event_type,
+                    "release_date": event_items[0].release_date.isoformat(),
+                    "symbols": len(event_items),
+                    "pages": batch.pages,
                 },
                 ensure_ascii=False,
             ),

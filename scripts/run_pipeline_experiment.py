@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--release-from", required=True)
     parser.add_argument("--release-to", required=True)
     parser.add_argument("--environment", choices=("local", "gcp"), required=True)
-    parser.add_argument("--topic", default="raw.market-sip.load.v1")
+    parser.add_argument("--topic", default="raw.market-sip.load.v2")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument("--run-id", default=None)

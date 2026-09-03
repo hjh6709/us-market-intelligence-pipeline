@@ -20,7 +20,13 @@ ENVELOPE = {
 
 
 class RecordingProducer:
-    def __init__(self, delivery_error=None, buffer_failures: int = 0, remaining: int = 0):
+    def __init__(
+        self,
+        delivery_error=None,
+        buffer_failures: int = 0,
+        remaining: int = 0,
+        partitions=None,
+    ):
         self.delivery_error = delivery_error
         self.buffer_failures = buffer_failures
         self.remaining = remaining
@@ -28,15 +34,20 @@ class RecordingProducer:
         self.poll_calls = []
         self.records = []
         self.next_offset = 41
+        self.partitions = iter(partitions or [])
 
     def produce(self, topic, *, key, value, on_delivery) -> None:
         self.attempts += 1
         if self.attempts <= self.buffer_failures:
             raise BufferError("queue full")
         self.records.append({"topic": topic, "key": key, "value": value})
+        try:
+            partition = next(self.partitions)
+        except StopIteration:
+            partition = 2
         on_delivery(
             self.delivery_error,
-            DeliveryMessage(topic, partition=2, offset=self.next_offset),
+            DeliveryMessage(topic, partition=partition, offset=self.next_offset),
         )
         self.next_offset += 1
 
@@ -75,6 +86,17 @@ class KafkaPublisherTest(unittest.TestCase):
         self.assertEqual(record["key"], b"NVDA")
         self.assertEqual(json.loads(record["value"]), ENVELOPE)
         self.assertEqual(recorder.poll_calls, [0])
+
+    def test_accepts_explicit_replay_partition_key(self) -> None:
+        recorder = RecordingProducer()
+        publisher = KafkaPublisher("localhost:9092", producer=recorder)
+
+        publisher.publish(ENVELOPE, key="CPI|2026-08-12|NVDA|segment-04")
+
+        self.assertEqual(
+            recorder.records[0]["key"],
+            b"CPI|2026-08-12|NVDA|segment-04",
+        )
 
     def test_default_client_enables_idempotence_and_all_acks(self) -> None:
         with patch("src.kafka_publisher.Producer") as producer_class:
@@ -130,6 +152,18 @@ class KafkaPublisherTest(unittest.TestCase):
             publisher.offset_ranges,
             [{"topic": "raw.market.v1", "partition": 2, "start": 41, "end": 43}],
         )
+
+    def test_reports_exact_delivery_count_per_partition(self) -> None:
+        publisher = KafkaPublisher(
+            "localhost:9092",
+            producer=RecordingProducer(partitions=[0, 2, 0]),
+        )
+
+        for _ in range(3):
+            publisher.publish(ENVELOPE)
+        publisher.close()
+
+        self.assertEqual(publisher.partition_counts, {0: 2, 2: 1})
 
 
 if __name__ == "__main__":

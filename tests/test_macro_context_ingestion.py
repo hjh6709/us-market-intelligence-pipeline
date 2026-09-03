@@ -9,6 +9,7 @@ from src.macro_context_ingestion import (
     select_latest_available,
 )
 from src.cpi_ingestion import CpiRelease
+from src.economic_event_schedule import EconomicRelease
 
 
 class MacroContextIngestionTest(unittest.TestCase):
@@ -110,6 +111,38 @@ class MacroContextIngestionTest(unittest.TestCase):
 
         self.assertEqual(client.observation_end, date(2024, 1, 10))
         self.assertEqual(contexts[0].observation_date, date(2024, 1, 10))
+
+    def test_context_accepts_non_cpi_economic_releases(self) -> None:
+        class RecordingClient:
+            def fetch_observations(self, **kwargs):
+                return [
+                    MacroObservation(
+                        series_id=kwargs["series_id"],
+                        observation_date=date(2024, 1, 31),
+                        realtime_start=date(2024, 2, 2),
+                        realtime_end=date(9999, 12, 31),
+                        value=Decimal("3.7"),
+                    )
+                ]
+
+        release = EconomicRelease(
+            event_type="EMPLOYMENT",
+            reference_period="2024-01",
+            release_date=date(2024, 2, 2),
+            released_at=datetime(2024, 2, 2, 13, 30, tzinfo=UTC),
+            timezone="America/New_York",
+            source="BLS",
+            source_url="https://www.bls.gov/example",
+        )
+
+        contexts = fetch_event_macro_context(
+            RecordingClient(),
+            [release],
+            series={"UNRATE": MACRO_SERIES["UNRATE"]},
+        )
+
+        self.assertEqual(contexts[0].economic_event_id, release.event_id)
+        self.assertEqual(contexts[0].series_id, "UNRATE")
 
 
 if __name__ == "__main__":
