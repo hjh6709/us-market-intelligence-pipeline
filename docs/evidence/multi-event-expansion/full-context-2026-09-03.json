@@ -1,0 +1,50 @@
+{
+  "status": "COLLECTED_AND_DB_VERIFIED",
+  "verified_on": "2026-09-03",
+  "feed": "sip",
+  "release_count": 77,
+  "event_counts": {
+    "CPI": 55,
+    "EMPLOYMENT": 8,
+    "PCE": 9,
+    "FOMC": 5
+  },
+  "symbols": ["SPY", "QQQ", "IWM", "TLT", "XLF", "SMH", "GLD", "NVDA", "AAPL", "JPM"],
+  "event_symbol_windows": 770,
+  "selected_and_verified_rows": {
+    "1m": 117566,
+    "3m": 43184,
+    "5m": 26883
+  },
+  "derived_coverage": {
+    "3m": {"complete": 35255, "partial": 7929},
+    "5m": {"complete": 20205, "partial": 6678}
+  },
+  "daily_rows": {
+    "event_window_selection_attempts": 11520,
+    "database_unique_rows": 8740
+  },
+  "daily_coverage": {
+    "complete_event_symbol_windows": 750,
+    "incomplete_event_symbol_windows": 20,
+    "known_exceptions": [
+      {
+        "event": "EMPLOYMENT 2026-04-03",
+        "affected_symbols": 10,
+        "before_event_after": "7/0/7",
+        "reason": "US market closed for Good Friday"
+      },
+      {
+        "event": "PCE 2026-08-26",
+        "affected_symbols": 10,
+        "before_event_after": "7/1/5",
+        "reason": "Only five post-event trading sessions were available at verification time"
+      }
+    ]
+  },
+  "notes": [
+    "1m, 3m and 5m counts were re-queried from PostgreSQL using all 77 official event windows.",
+    "Daily selection attempts include the same trading date from overlapping event windows; the database unique key stores each provider bar once.",
+    "PARTIAL derived bars preserve missing source-minute coverage and are not ingestion failures."
+  ]
+}

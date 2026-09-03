@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "manifests": [
+    {"event_type": "CPI", "source": "BLS", "path": "cpi_releases.json"},
+    {"event_type": "EMPLOYMENT", "source": "BLS", "path": "employment_releases.json"},
+    {"event_type": "PCE", "source": "BEA", "path": "pce_releases.json"},
+    {"event_type": "FOMC", "source": "FED", "path": "fomc_releases.json"}
+  ]
+}

@@ -1,0 +1,11 @@
+[
+  {"reference_period":"2025-10/11","release_date":"2026-01-22","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-october-and-november-2025"},
+  {"reference_period":"2025-12","release_date":"2026-02-20","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-december-2025"},
+  {"reference_period":"2026-01","release_date":"2026-03-13","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-january-2026"},
+  {"reference_period":"2026-02","release_date":"2026-04-09","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-february-2026"},
+  {"reference_period":"2026-03","release_date":"2026-04-30","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-march-2026"},
+  {"reference_period":"2026-04","release_date":"2026-05-28","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-april-2026"},
+  {"reference_period":"2026-05","release_date":"2026-06-25","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-may-2026"},
+  {"reference_period":"2026-06","release_date":"2026-07-30","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-june-2026"},
+  {"reference_period":"2026-07","release_date":"2026-08-26","release_time":"08:30","timezone":"America/New_York","source_url":"https://www.bea.gov/news/2026/personal-income-and-outlays-july-2026"}
+]

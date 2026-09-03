@@ -86,7 +86,7 @@ Validation:
 - timestamp는 parse 가능한 aware timestamp여야 한다.
 - 미래 허용 오차 또는 지나치게 오래된 event는 reason code와 함께 격리한다.
 
-## 4. One-minute bar
+## 4. Market bar
 
 ```json
 {
@@ -110,6 +110,10 @@ Validation:
 ```
 
 Unique key: `(symbol, bar_start, timeframe, source, feed)`.
+
+`timeframe`은 `1m`, `3m`, `5m` 또는 `1d`다. `1m`은 발표 당일의 세밀한 반응과 raw-trade 집계 검증에, `3m`·`5m`은 희소 구간 분석에, `1d`는 발표 전후 7거래일의 흐름에 사용한다. 같은 종목·시각이어도 `source`와 `feed`가 다르면 별도 행으로 보존한다. 경제 이벤트와의 연결은 `economic_events.released_at`을 기준으로 분석 작업이 선택하며, 같은 일봉이 인접한 여러 이벤트에 쓰이더라도 market bar 자체를 복제하지 않는다.
+
+3분봉·5분봉에는 `source_bar_count`, `expected_bar_count`, `coverage_status`를 저장한다. 각각 실제 포함된 1분봉 수, 완전한 봉에 필요한 분 수, `COMPLETE` 또는 `PARTIAL` 상태다. 결측 분의 가격을 직전 값으로 채워 `COMPLETE`로 만들지 않는다.
 
 `alpaca_sip_minute_v1`은 Alpaca의 CTA/UTP sale-condition 표에 따라 각 raw trade가 OHLC 가격 형성 및 volume·trade_count에 반영되는지를 따로 결정한다. 여러 조건이 있으면 가장 엄격한 조건을 사용하며, 알려지지 않은 condition/tape 조합은 조용히 포함하지 않고 집계에서 제외해 별도 건수로 기록한다. VWAP는 가격과 거래량 모두 갱신 가능한 체결만 사용한다.
 
@@ -393,7 +397,7 @@ SIP 조회 실패나 bar 누락은 확정 또는 기각 사유가 아니므로 `
 | Table | 주요 목적 | Unique/idempotency key |
 | --- | --- | --- |
 | `symbols` | universe, role, active interval | `symbol` |
-| `market_bars` | 1분 OHLCV | symbol/bar/timeframe/source/feed |
+| `market_bars` | 1분·3분·5분·일봉 OHLCV와 파생봉 coverage | symbol/bar/timeframe/source/feed |
 | `technical_features` | 계산 snapshot | symbol/as_of/version/source/feed |
 | `market_bar_reconciliations` | 같은 window의 IEX/SIP 차이와 판정 | symbol/bar/timeframe/rule_version |
 | `alert_reconciliations` | SIP feature로 alert 규칙을 다시 평가한 증거와 결정 | alert_id/rule_version |

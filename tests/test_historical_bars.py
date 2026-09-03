@@ -89,6 +89,25 @@ class HistoricalBarsTest(unittest.TestCase):
         self.assertEqual(bar.close, Decimal("101.0"))
         self.assertEqual(bar.vwap, Decimal("100.5"))
 
+    def test_requests_daily_bars_when_timeframe_is_explicit(self) -> None:
+        opener = RecordingOpener(
+            [{"bars": {"SPY": [raw_bar("2026-08-12T04:00:00Z")]}}]
+        )
+        client = AlpacaHistoricalBarsClient("key", "secret", opener=opener)
+
+        bars, _ = fetch_all_bars(
+            client,
+            symbols=["SPY"],
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 8, 20, tzinfo=UTC),
+            feed="sip",
+            timeframe="1Day",
+        )
+
+        self.assertEqual(len(bars), 1)
+        query = parse_qs(urlparse(opener.requests[0][0].full_url).query)
+        self.assertEqual(query["timeframe"], ["1Day"])
+
     def test_rejects_inconsistent_ohlc(self) -> None:
         with self.assertRaisesRegex(HistoricalBarError, "high"):
             normalize_bar("SPY", raw_bar("2026-08-12T12:30:00Z", close=103.0))

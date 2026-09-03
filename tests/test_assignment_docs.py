@@ -14,6 +14,49 @@ from scripts.evidence.export_actual_market_bars import (
 
 
 class AssignmentDocumentationTest(unittest.TestCase):
+    def test_sixth_assignment_separates_executed_paths_and_remaining_work(self) -> None:
+        assignment = Path("docs/load-recovery-assignment.md").read_text(
+            encoding="utf-8"
+        )
+        readme = Path("README.md").read_text(encoding="utf-8")
+        diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(
+            encoding="utf-8"
+        )
+        script = Path("docs/09.03_대본.md").read_text(encoding="utf-8")
+
+        for phrase in (
+            "# 6차시 과제 — 부하·복구 결과 보완 및 전체 흐름 점검",
+            "## 1. 정상 입력과 결과",
+            "## 2. 더 큰 입력과 실행 환경",
+            "## 3. 실패 원인과 탐지",
+            "## 4. 재실행 위치와 무결성",
+            "## 5. 현재 실제 연결과 남은 작업",
+            "118,118",
+            "7,360,804",
+            "22,260",
+            "77회 × 10종목",
+            "1분봉 117,566",
+            "3분봉 43,184",
+            "5분봉 26,883",
+            "일봉 고유 8,740",
+            "OPEN → RESOLVED",
+            "경제발표 1건 × 종목 1개",
+            "588행",
+            "Kafka v2 파티션 비교",
+            "전체 경제 이벤트 영향 계산",
+            "백테스트",
+        ):
+            self.assertIn(phrase, assignment)
+
+        self.assertIn("docs/load-recovery-assignment.md", readme)
+        self.assertIn("Raw trades → Parquet → Kafka → Spark → PostgreSQL", diagram)
+        self.assertIn("Official events → Airflow → Alpaca bars", diagram)
+        self.assertIn("미구현 · 후속 검증", diagram)
+        self.assertIn("7,360,804", script)
+        self.assertIn("588", script)
+        self.assertIn("OPEN", script)
+        self.assertIn("RESOLVED", script)
+
     def test_readme_connects_core_cpi_and_kafka_spark_paths(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
         headings = [

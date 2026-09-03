@@ -1,0 +1,14 @@
+alert drill
+- run: alert-drill-0ab76a02d86b
+- first attempt: FAILED / FAIL / OPEN / stored rows 0
+- retry: SUCCEEDED / PASS / RESOLVED / stored rows 1
+- fixture business key duplicates: 0
+
+real Airflow backfill idempotency comparison
+- compared successful runs: 2 (a separate smoke run also succeeded)
+- work items per run: SPY 1 + TLT 1 = 2
+- accepted work items per run: 2
+- open alerts per run: 0
+- first rows/hash: 588 / ee58892b2b1c6fab311d773b32722f52
+- repeated rows/hash: 588 / ee58892b2b1c6fab311d773b32722f52
+- all market_bars business key duplicates: 0

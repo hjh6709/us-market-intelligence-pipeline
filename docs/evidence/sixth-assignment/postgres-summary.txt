@@ -1,0 +1,20 @@
+PostgreSQL 검증일: 2026-09-03 UTC
+
+검증 범위
+- FOMC 발표: 2026-07-29 18:00 UTC
+- 종목: SPY, TLT
+- 장중: T-60분 ~ T+120분, 1m/3m/5m
+- 일봉: 발표 전 7거래일 + 발표일 + 발표 후 7거래일
+- source/feed: alpaca/sip
+
+첫 실행 후
+- selected rows: 588
+- content hash: ee58892b2b1c6fab311d773b32722f52
+
+동일 입력 두 번째 실행 후
+- selected rows: 588
+- content hash: ee58892b2b1c6fab311d773b32722f52
+- business key duplicates: 0
+
+588 = 2종목 × (1분봉 181 + 3분봉 61 + 5분봉 37 + 일봉 15)
+해시 입력은 symbol, bar_start, timeframe, source, feed, OHLCV, trade_count, vwap을 business key 순으로 정렬한 값입니다.

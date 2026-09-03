@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "COLLECTED",
+  "event_type": "FOMC",
+  "reference_period": "2026-07-29",
+  "released_at": "2026-07-29T18:00:00Z",
+  "symbol": "TLT",
+  "feed": "sip",
+  "start": "2026-07-29T17:00:00Z",
+  "end": "2026-07-29T19:01:00Z",
+  "raw_trade_count": 29139,
+  "page_count": 3,
+  "sha256": "77059c190cf58c9a90a2e52fb6abd3c26e6bf1979d240b680c5a21f1824bc1ff",
+  "completed_stages": ["official_event_manifest", "alpaca_sip_collection", "parquet_manifest"],
+  "not_yet_run": ["kafka_replay", "spark_aggregation", "postgresql_load"]
+}
