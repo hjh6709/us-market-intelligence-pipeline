@@ -1,10 +1,11 @@
-"""Backfill economic-event market context as event-symbol Airflow work items."""
+"""Backfill market context as one Airflow task per event with batched symbols."""
 
 from __future__ import annotations
 
 import os
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
+from itertools import groupby
 
 import psycopg
 from airflow.sdk import Param, dag, get_current_context, task
@@ -12,7 +13,7 @@ from airflow.sdk import Param, dag, get_current_context, task
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.market_context_backfill import (
     MarketContextWorkItem,
-    collect_market_context_work_item,
+    collect_market_context_event,
     select_market_context_work,
 )
 from src.pipeline_run_tracking import (
@@ -34,16 +35,26 @@ def _database_url() -> str:
     return os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 
 
-def _work_item_dict(item: MarketContextWorkItem, pipeline_run_id: str) -> dict:
-    values = asdict(item)
-    values["release_date"] = item.release_date.isoformat()
-    values["released_at"] = item.released_at.isoformat()
-    values["pipeline_run_id"] = pipeline_run_id
-    return values
+def _event_work_dict(
+    items: list[MarketContextWorkItem],
+    pipeline_run_id: str,
+    data_cutoff: str,
+) -> dict:
+    serialized = []
+    for item in items:
+        values = asdict(item)
+        values["release_date"] = item.release_date.isoformat()
+        values["released_at"] = item.released_at.isoformat()
+        serialized.append(values)
+    return {
+        "items": serialized,
+        "pipeline_run_id": pipeline_run_id,
+        "data_cutoff": data_cutoff,
+    }
 
 
-def _restore_work_item(values: dict) -> MarketContextWorkItem:
-    item_values = {key: value for key, value in values.items() if key != "pipeline_run_id"}
+def _restore_work_item(item_values: dict) -> MarketContextWorkItem:
+    item_values = dict(item_values)
     item_values["release_date"] = date.fromisoformat(item_values["release_date"])
     item_values["released_at"] = datetime.fromisoformat(
         item_values["released_at"].replace("Z", "+00:00")
@@ -86,8 +97,12 @@ def build_market_context_backfill_pipeline():
     @task(task_id="validate_run_config")
     def validate_run_config() -> dict:
         context = get_current_context()
+        supplied = dict(context["params"])
+        dag_run = context.get("dag_run")
+        if dag_run and dag_run.conf:
+            supplied.update(dag_run.conf)
         config = {
-            key: context["params"][key]
+            key: supplied[key]
             for key in (
                 "event_types",
                 "release_from",
@@ -127,9 +142,17 @@ def build_market_context_backfill_pipeline():
 
     @task(task_id="build_work_items")
     def build_work_items(config: dict) -> list[dict]:
+        selected = select_market_context_work(config)
         return [
-            _work_item_dict(item, config["pipeline_run_id"])
-            for item in select_market_context_work(config)
+            _event_work_dict(
+                list(event_items),
+                config["pipeline_run_id"],
+                config["data_cutoff"],
+            )
+            for _event_id, event_items in groupby(
+                selected,
+                key=lambda item: item.event_id,
+            )
         ]
 
     @task(
@@ -144,101 +167,111 @@ def build_market_context_backfill_pipeline():
         context = get_current_context()
         attempt = int(context["ti"].try_number)
         pipeline_run_id = values["pipeline_run_id"]
-        item = _restore_work_item(values)
+        items = [_restore_work_item(item) for item in values["items"]]
         database_url = _database_url()
         stage = "MARKET_CONTEXT"
-        mark_work_item(
-            database_url,
-            PipelineWorkItem(
-                pipeline_run_id=pipeline_run_id,
-                economic_event_id=item.event_id,
-                symbol=item.symbol,
-                stage=stage,
-                status="RUNNING",
-                attempt_count=attempt,
-            ),
-        )
+        for item in items:
+            mark_work_item(
+                database_url,
+                PipelineWorkItem(
+                    pipeline_run_id=pipeline_run_id,
+                    economic_event_id=item.event_id,
+                    symbol=item.symbol,
+                    stage=stage,
+                    status="RUNNING",
+                    attempt_count=attempt,
+                ),
+            )
         try:
             key_id, secret_key = load_credentials()
-            result = collect_market_context_work_item(
-                item,
+            batch = collect_market_context_event(
+                items,
                 client=AlpacaHistoricalBarsClient(
                     key_id, secret_key, timeout_seconds=30.0
                 ),
                 database_url=database_url,
                 provider_available_until=datetime.fromisoformat(
-                    context["params"]["data_cutoff"].replace("Z", "+00:00")
+                    values["data_cutoff"].replace("Z", "+00:00")
                 ),
             )
-            unavailable = result.coverage_status in {
-                "MARKET_CLOSED",
-                "NO_MARKET_DATA",
-                "FUTURE_SESSION_UNAVAILABLE",
-            }
-            mark_work_item(
-                database_url,
-                PipelineWorkItem(
-                    pipeline_run_id=pipeline_run_id,
-                    economic_event_id=item.event_id,
-                    symbol=item.symbol,
-                    stage=stage,
-                    status="DATA_NOT_AVAILABLE" if unavailable else "SUCCEEDED",
-                    attempt_count=attempt,
-                    input_count=result.session_1m_rows + result.daily_rows,
-                    output_count=(
-                        result.session_1m_rows
-                        + result.derived_3m_rows
-                        + result.derived_5m_rows
-                        + result.daily_rows
+            for item, result in zip(items, batch.results, strict=True):
+                unavailable = result.coverage_status in {
+                    "MARKET_CLOSED",
+                    "NO_MARKET_DATA",
+                    "FUTURE_SESSION_UNAVAILABLE",
+                }
+                mark_work_item(
+                    database_url,
+                    PipelineWorkItem(
+                        pipeline_run_id=pipeline_run_id,
+                        economic_event_id=item.event_id,
+                        symbol=item.symbol,
+                        stage=stage,
+                        status="DATA_NOT_AVAILABLE" if unavailable else "SUCCEEDED",
+                        attempt_count=attempt,
+                        input_count=result.session_1m_rows + result.daily_rows,
+                        output_count=(
+                            result.session_1m_rows
+                            + result.derived_3m_rows
+                            + result.derived_5m_rows
+                            + result.daily_rows
+                        ),
                     ),
-                ),
-            )
-            check_status = "PASS" if result.coverage_status == "COMPLETE" else "WARN"
-            record_pipeline_check(
-                database_url,
-                PipelineCheck(
-                    pipeline_run_id=pipeline_run_id,
-                    economic_event_id=item.event_id,
-                    symbol=item.symbol,
-                    stage=stage,
-                    check_name="collection",
-                    expected_value="COMPLETE",
-                    actual_value=result.coverage_status,
-                    status=check_status,
-                    alert_status="RESOLVED" if attempt > 1 else "NONE",
-                    checked_at=datetime.now(UTC),
-                ),
-            )
-            return asdict(result)
+                )
+                check_status = (
+                    "PASS" if result.coverage_status == "COMPLETE" else "WARN"
+                )
+                record_pipeline_check(
+                    database_url,
+                    PipelineCheck(
+                        pipeline_run_id=pipeline_run_id,
+                        economic_event_id=item.event_id,
+                        symbol=item.symbol,
+                        stage=stage,
+                        check_name="collection",
+                        expected_value="COMPLETE",
+                        actual_value=result.coverage_status,
+                        status=check_status,
+                        alert_status="RESOLVED" if attempt > 1 else "NONE",
+                        checked_at=datetime.now(UTC),
+                    ),
+                )
+            return {
+                "event_id": batch.event_id,
+                "work_item_count": len(batch.results),
+                "pages": batch.pages,
+                "results": [asdict(result) for result in batch.results],
+            }
         except Exception as error:
-            mark_work_item(
-                database_url,
-                PipelineWorkItem(
-                    pipeline_run_id=pipeline_run_id,
-                    economic_event_id=item.event_id,
-                    symbol=item.symbol,
-                    stage=stage,
-                    status="FAILED",
-                    attempt_count=attempt,
-                    error_code=type(error).__name__,
-                    error_message=str(error),
-                ),
-            )
-            record_pipeline_check(
-                database_url,
-                PipelineCheck(
-                    pipeline_run_id=pipeline_run_id,
-                    economic_event_id=item.event_id,
-                    symbol=item.symbol,
-                    stage=stage,
-                    check_name="collection",
-                    expected_value="successful provider request and storage",
-                    actual_value=type(error).__name__,
-                    status="FAIL",
-                    alert_status="OPEN",
-                    checked_at=datetime.now(UTC),
-                ),
-            )
+            for item in items:
+                mark_work_item(
+                    database_url,
+                    PipelineWorkItem(
+                        pipeline_run_id=pipeline_run_id,
+                        economic_event_id=item.event_id,
+                        symbol=item.symbol,
+                        stage=stage,
+                        status="FAILED",
+                        attempt_count=attempt,
+                        error_code=type(error).__name__,
+                        error_message=str(error),
+                    ),
+                )
+                record_pipeline_check(
+                    database_url,
+                    PipelineCheck(
+                        pipeline_run_id=pipeline_run_id,
+                        economic_event_id=item.event_id,
+                        symbol=item.symbol,
+                        stage=stage,
+                        check_name="collection",
+                        expected_value="successful provider request and storage",
+                        actual_value=type(error).__name__,
+                        status="FAIL",
+                        alert_status="OPEN",
+                        checked_at=datetime.now(UTC),
+                    ),
+                )
             finish_pipeline_run(database_url, pipeline_run_id, "FAILED", datetime.now(UTC))
             raise
 
@@ -268,17 +301,19 @@ def build_market_context_backfill_pipeline():
                     (pipeline_run_id,),
                 )
                 open_alerts = int(cursor.fetchone()[0])
+        expected_work_items = sum(item["work_item_count"] for item in results)
         accepted = statuses.get("SUCCEEDED", 0) + statuses.get("DATA_NOT_AVAILABLE", 0)
-        if accepted != len(results) or statuses.get("FAILED", 0) or open_alerts:
+        if accepted != expected_work_items or statuses.get("FAILED", 0) or open_alerts:
             finish_pipeline_run(database_url, pipeline_run_id, "FAILED", datetime.now(UTC))
             raise RuntimeError(
-                f"pipeline verification failed: expected={len(results)} "
+                f"pipeline verification failed: expected={expected_work_items} "
                 f"accepted={accepted} failed={statuses.get('FAILED', 0)} "
                 f"open_alerts={open_alerts}"
             )
         return {
             "pipeline_run_id": pipeline_run_id,
-            "selected_work_items": len(results),
+            "selected_events": len(results),
+            "selected_work_items": expected_work_items,
             "accepted_work_items": accepted,
             "open_alerts": open_alerts,
         }

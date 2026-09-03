@@ -24,7 +24,7 @@ from src.historical_bars import (
 from src.live_market_smoke import _read_env_file, load_credentials
 from src.macro_event_impact import (
     ANALYSIS_VERSION,
-    SYMBOLS,
+    CPI_BASELINE_SYMBOLS,
     BarPoint,
     ImpactMetric,
     calculate_event_impacts,
@@ -32,6 +32,7 @@ from src.macro_event_impact import (
 
 
 BASELINE_VERSION = "same_weekday_1_2_3w_v1"
+SYMBOLS = CPI_BASELINE_SYMBOLS
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ def collect_baselines(
                 release.event_id,
                 matched_at,
                 bars_as_points(bars),
+                symbols=SYMBOLS,
             )
             baseline_impacts.extend(
                 BaselineImpact(offset_weeks, matched_at, metric)

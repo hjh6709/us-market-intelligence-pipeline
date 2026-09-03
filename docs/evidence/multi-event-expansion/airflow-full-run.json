@@ -1,0 +1,57 @@
+{
+  "executed_at": "2026-09-03",
+  "market_context": {
+    "dag_id": "market_context_backfill_pipeline",
+    "run_id": "manual__2026-09-03T10:49:17.886200+00:00",
+    "state": "success",
+    "pipeline_duration_seconds": 522.660,
+    "mapped_event_tasks": 202,
+    "event_symbol_work_items": 2020,
+    "work_item_status": {
+      "SUCCEEDED": 1980,
+      "DATA_NOT_AVAILABLE": 40,
+      "FAILED": 0
+    },
+    "coverage_reason": {
+      "COMPLETE": 1980,
+      "MARKET_CLOSED": 30,
+      "FUTURE_SESSION_UNAVAILABLE": 10
+    },
+    "quality_checks": {
+      "PASS_NONE": 1980,
+      "WARN_NONE": 40,
+      "FAIL_OPEN": 0
+    },
+    "verification": {
+      "selected_events": 202,
+      "selected_work_items": 2020,
+      "accepted_work_items": 2020,
+      "open_alerts": 0
+    },
+    "note": "Duration comes from PostgreSQL pipeline_runs timestamps. An explicitly supplied future logical_date made Airflow's metadata duration unsuitable for this run."
+  },
+  "macro_context": {
+    "dag_id": "macro_context_backfill_pipeline",
+    "run_id": "manual__2026-09-03T10:59:15.482993+00:00",
+    "state": "success",
+    "duration_seconds": 14.835,
+    "mapped_event_tasks": 202,
+    "expected_contexts": 2020,
+    "stored_contexts": 0,
+    "reused_contexts": 2020,
+    "verification_task": "success",
+    "note": "Idempotent mode verified existing point-in-time rows and did not repeat 2,020 external FRED/ALFRED requests."
+  },
+  "airflow_task_instances": {
+    "market_context_backfill_pipeline": {
+      "mapped_collect_success": 202,
+      "unmapped_success": 5,
+      "failed": 0
+    },
+    "macro_context_backfill_pipeline": {
+      "mapped_collect_success": 202,
+      "unmapped_success": 2,
+      "failed": 0
+    }
+  }
+}

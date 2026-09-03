@@ -1,0 +1,31 @@
+{
+  "executed_at": "2026-09-03T04:16:00Z",
+  "market_context": {
+    "dag_id": "market_context_backfill_pipeline",
+    "run_id": "manual__2026-09-03T04:24:31.015487+00:00",
+    "state": "success",
+    "event_type": "FOMC",
+    "release_date": "2026-07-29",
+    "symbols": ["SPY", "TLT"],
+    "mapped_event_tasks": 1,
+    "provider_requests_before_pagination": 2,
+    "session_1m_rows": 362,
+    "derived_3m_rows": 122,
+    "derived_5m_rows": 74,
+    "daily_rows": 30,
+    "complete_symbols": 2,
+    "accepted_work_items": 2,
+    "open_alerts": 0
+  },
+  "macro_context": {
+    "dag_id": "macro_context_backfill_pipeline",
+    "run_id": "manual__2026-09-03T04:14:01.625756+00:00",
+    "state": "success",
+    "event_type": "FOMC",
+    "release_date": "2026-07-29",
+    "series": ["DGS2"],
+    "stored_contexts": 1
+  },
+  "contains_api_keys": false,
+  "contains_prices": false
+}

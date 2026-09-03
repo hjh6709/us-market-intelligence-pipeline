@@ -1,6 +1,6 @@
 # API Data Source Catalog
 
-상태: market ingestion, CPI point-in-time ingestion and historical SIP backfill implemented; Employment/PCE/FOMC official manifests and multi-symbol collection plan implemented
+상태: market ingestion, 202개 공식 발표 manifest, 10종목 SIP bar 수집과 10개 FRED·ALFRED series 결합 구현
 
 검증일: 2026-08-24
 
@@ -14,7 +14,7 @@
 | Alpaca Historical Stock REST | trade, quote, bar와 IEX/SIP 등 feed 선택 | 실제 IEX/SIP trade replay, IEX/SIP `1Min` bar warm-up과 지연 검증 | historical raw trade/quote 장기 보관 제외 |
 | Alpaca Asset/Calendar/Clock | symbol metadata, 거래일, open/close, 현재 개장 상태 | active/tradable symbol 확인, 정규장·휴장·조기종료 판정 | Stage A에서는 주문 가능성·margin·계좌 정보 사용하지 않음 |
 | BLS·BEA·Federal Reserve 공식 일정 | release date/time, reference period, official URL | CPI·고용·FOMC의 정확한 발표 시각 | forecast 추정과 비공식 timestamp 제외 |
-| FRED/ALFRED API | series metadata, observations, revisions/vintage, release dates | 9개 series metadata, observations, vintage | 정확한 장중 발표 시각으로 단독 사용하지 않음; forecast 추정 제외 |
+| FRED/ALFRED API | series metadata, observations, revisions/vintage, release dates | 10개 series metadata, observations, vintage | 정확한 장중 발표 시각으로 단독 사용하지 않음; forecast 추정 제외 |
 | Alpaca News REST/WebSocket — 선택 | 기사 metadata, symbol, headline, summary, content, URL | 구현 시 metadata와 summary, URL, symbols | 전체 본문 저장·재배포 제외 |
 | Groq — 선택 | 입력 text에 대한 LLM output | 뉴스의 제한된 structured classification | 시장 원천 데이터 공급자가 아니며 가격/거시 데이터를 제공하지 않음 |
 | Replay fixture | 우리가 만든 raw event | 정상·급등·중복·지연·오류 payload | 외부 API가 아님 |
@@ -62,7 +62,7 @@ Kafka `raw.market.v1`은 이 provider payload를 수정하지 않고 common enve
 | Kafka key | `S` | symbol을 그대로 사용해 종목 내 순서 유지 |
 | `source_event_id` | `i` | 문자열로 변환 |
 | `event_timestamp` | `t` | timezone-aware UTC로 parse 가능해야 함 |
-| `event_id` | source, feed, `T`, `S`, `i`, `t` | canonical serialization의 SHA-256. provider ID의 전역 유일성을 가정하지 않음 |
+| `event_id` | source, feed, `T`, `S`, `x`, `i`, `t` | 거래소를 포함한 canonical serialization의 SHA-256. provider ID의 전역 유일성을 가정하지 않음 |
 | `payload` | 수신 JSON object | field를 삭제·rename하지 않고 그대로 보존 |
 
 ## 3. Alpaca Historical Stock REST
@@ -84,7 +84,7 @@ Historical Trades는 요청한 `feed`의 과거 실제 거래로 ingestion을 �
 
 | Parameter | 제공 기능 | MVP 값 |
 | --- | --- | --- |
-| `symbols` | comma-separated 종목 | 최종 allowlist 약 22개 |
+| `symbols` | comma-separated 종목 | 현재 분석 universe 10개 |
 | `timeframe` | minute/hour/day/week/month 집계 | `1Min` |
 | `start`, `end` | RFC-3339/날짜 범위 | warm-up 20거래일 또는 reconciliation window |
 | `feed` | `iex`, `sip` 등 data feed | 요청 목적에 따라 명시적으로 `iex` 또는 `sip` |
@@ -127,7 +127,7 @@ Stage A에서는 주문·계좌 기능을 사용하지 않는다. Calendar 결�
 
 공통 내부 field는 `economic_event_id`, `event_type`, `reference_period`, `scheduled_at`, `released_at`, `original_timezone`, `release_source`, `release_source_url`, `ingested_at`이다. 정확한 발표 시각을 공식 출처에서 확인하지 못하면 임의로 만들지 않고 `OFFICIAL_RELEASE_TIME_MISSING`을 기록한다.
 
-공식 발표 manifest 현황은 CPI 55회, 2026년 완료 고용보고서 8회, PCE 9회, FOMC statement 5회다. 기존 수집 완료 범위는 CPI 55회와 4종목이며, 신규 22회와 10종목 전체는 수집 계획 단계로 구분한다. `config/market_event_catalog.json`과 `config/market_universe.json`이 각각 이벤트와 종목의 단일 입력 명세다.
+공식 발표 manifest는 2022년부터 2026년 8월까지 CPI 55회, 고용보고서 55회, PCE 55회, FOMC statement 37회, 총 202회다. 10종목의 분석용 1분·3분·5분·일봉 수집을 완료했다. event type별 `config/*_releases.json`과 `config/market_universe.json`이 이벤트와 종목의 입력 명세다.
 
 ## 6. FRED / ALFRED API
 
@@ -160,9 +160,9 @@ realtime_start, realtime_end, date, value
 
 `value`는 문자열이며 결측은 `.`으로 올 수 있으므로 `.`을 `null`로 바꾸고 나머지를 Decimal 계열 숫자로 검증한다. `date`는 관측 대상일이지 실제 발표 timestamp가 아니다. FRED release date도 source가 제공한 날짜이며 FRED에서 이용 가능해진 정확한 시각을 보장한다고 가정하지 않는다. 정확한 `released_at`은 공식 기관 일정에서 가져오고, revision 추적을 위해 realtime/vintage 정보를 버리지 않는다.
 
-### 첫 구현과 확장 후보
+### 현재 연결한 series
 
-첫 vertical slice는 CPI 발표 12회에 필요한 `CPIAUCSL`, `CPILFESL`만 수집한다. 아래 나머지 series는 CPI 경로의 시점 정합성·멱등성·시장 window 검증이 끝난 뒤 같은 계약으로 확장하는 후보이며, 현재 수집 완료로 표시하지 않는다.
+첫 vertical slice는 CPI 발표 12회의 `CPIAUCSL`, `CPILFESL`로 시작했습니다. 현재는 같은 계약으로 아래 10개 series를 공식 발표 202회에 연결합니다. 이 값들은 발표 당시의 경제 환경이며 각 발표의 전망치·실제값·surprise를 뜻하지 않습니다.
 
 | Series | 공식 의미 | 빈도·단위 | 프로젝트 활용 |
 | --- | --- | --- | --- |
@@ -171,6 +171,7 @@ realtime_start, realtime_end, date, value
 | [`PCEPI`](https://fred.stlouisfed.org/series/PCEPI) | PCE 물가지수 | 월간, SA index | PCE 물가 환경 |
 | [`PCEPILFE`](https://fred.stlouisfed.org/series/PCEPILFE) | 식품·에너지 제외 PCE | 월간, SA index | 근원 PCE 환경 |
 | [`UNRATE`](https://fred.stlouisfed.org/series/UNRATE) | 실업률 | 월간, SA percent | 고용 환경 |
+| [`PAYEMS`](https://fred.stlouisfed.org/series/PAYEMS) | 비농업부문 총고용 | 월간, SA thousands | 고용 규모 환경 |
 | [`DFF`](https://fred.stlouisfed.org/series/DFF) | Effective Federal Funds Rate | 일간, percent | 정책금리 환경 |
 | [`DGS2`](https://fred.stlouisfed.org/series/DGS2) | 2년 미 국채 constant maturity 금리 | 일간, percent | 단기 금리 환경 |
 | [`DGS10`](https://fred.stlouisfed.org/series/DGS10) | 10년 미 국채 constant maturity 금리 | 일간, percent | 장기 금리와 `DGS10-DGS2` |
@@ -234,7 +235,7 @@ price and volume spike
 | Alpaca IEX WebSocket | 22종목 subscription, raw field/type, trade ID 안정성, condition/tape, reconnect |
 | Alpaca Historical | IEX/SIP 권한, `end` 제한, pagination, bar field, `adjustment=raw` |
 | Asset/Calendar/Clock | inactive symbol, holiday, early close, DST, current session |
-| FRED | API key, 9개 series metadata/frequency/units, `.` 결측, revision field, 429 |
+| FRED | API key, 10개 series metadata/frequency/units, `.` 결측, revision field, 429 |
 | Official release schedules | CPI·고용·FOMC의 정확한 ET/UTC 시각, reference period, source URL, page format change |
 | News — 선택 | entitlement, symbol filter, content 제외, pagination, storage terms |
 

@@ -22,6 +22,26 @@ class ArchiveReplayResult:
     events_per_second: float
 
 
+def build_archive_replay_key(
+    manifest: ArchiveManifest,
+    event_timestamp: str,
+    *,
+    segment_minutes: int = 15,
+) -> str:
+    """Build a deterministic key that preserves order inside one time segment."""
+    if segment_minutes < 1:
+        raise ValueError("segment_minutes must be positive")
+    start = datetime.fromisoformat(manifest.partition.start.replace("Z", "+00:00"))
+    event_at = datetime.fromisoformat(event_timestamp.replace("Z", "+00:00"))
+    segment = int((event_at - start).total_seconds() // (segment_minutes * 60))
+    if segment < 0:
+        raise ValueError("event timestamp precedes archive partition start")
+    return (
+        f"{manifest.partition.event_type}|{manifest.partition.release_date}|"
+        f"{manifest.partition.symbol}|segment-{segment:02d}"
+    )
+
+
 def replay_archive(
     manifests: Sequence[ArchiveManifest],
     *,
@@ -36,8 +56,16 @@ def replay_archive(
     published = 0
     for manifest in manifests:
         for payload in read_archive_records(manifest):
+            envelope = build_market_envelope(
+                payload, manifest.partition.feed, clock(), trace_id
+            )
+            envelope["economic_event"] = {
+                "event_type": manifest.partition.event_type,
+                "release_date": manifest.partition.release_date,
+            }
             publisher.publish(
-                build_market_envelope(payload, manifest.partition.feed, clock(), trace_id)
+                envelope,
+                key=build_archive_replay_key(manifest, str(payload["t"])),
             )
             published += 1
     duration = monotonic() - started

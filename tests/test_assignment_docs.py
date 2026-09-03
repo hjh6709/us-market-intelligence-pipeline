@@ -26,34 +26,32 @@ class AssignmentDocumentationTest(unittest.TestCase):
 
         for phrase in (
             "# 6차시 과제 — 부하·복구 결과 보완 및 전체 흐름 점검",
-            "## 1. 정상 입력과 결과",
-            "## 2. 더 큰 입력과 실행 환경",
-            "## 3. 실패 원인과 탐지",
-            "## 4. 재실행 위치와 무결성",
-            "## 5. 현재 실제 연결과 남은 작업",
+            "## 1. 기준 실행과 부하·복구 결과",
+            "## 2. 이번에 확장한 실제 데이터",
+            "## 3. 장애 재현과 복구",
+            "## 4. Airflow 자동화와 확인 결과",
+            "## 6. 최신 데이터 모델과 남은 작업",
             "118,118",
             "7,360,804",
             "22,260",
-            "77회 × 10종목",
-            "1분봉 117,566",
-            "3분봉 43,184",
-            "5분봉 26,883",
-            "일봉 고유 8,740",
-            "OPEN → RESOLVED",
-            "경제발표 1건 × 종목 1개",
-            "588행",
-            "Kafka v2 파티션 비교",
-            "전체 경제 이벤트 영향 계산",
+            "202회 × 10종목",
+            "308,512",
+            "112,593",
+            "70,090",
+            "30,250",
+            "FAILED / OPEN → SUCCEEDED / RESOLVED",
+            "경제발표 1건",
+            "33.9%",
+            "전망치와 실제값",
             "백테스트",
         ):
             self.assertIn(phrase, assignment)
 
         self.assertIn("docs/load-recovery-assignment.md", readme)
-        self.assertIn("Raw trades → Parquet → Kafka → Spark → PostgreSQL", diagram)
-        self.assertIn("Official events → Airflow → Alpaca bars", diagram)
-        self.assertIn("미구현 · 후속 검증", diagram)
+        self.assertIn("Kafka v2 · 6 partitions", diagram)
+        self.assertIn("CPI 55 · 고용 55 · PCE 55 · FOMC 37", diagram)
+        self.assertIn("Surprise · 통제군 → Paper trading", diagram)
         self.assertIn("7,360,804", script)
-        self.assertIn("588", script)
         self.assertIn("OPEN", script)
         self.assertIn("RESOLVED", script)
 
@@ -83,22 +81,15 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "![CPI 발표 구간 SIP Kafka Spark 처리 경로]",
             readme,
         )
-        self.assertIn("### A. 경제지표 발표 영향 분석 데이터", readme)
-        self.assertIn("### B. Kafka·Spark 원시 거래 처리 데이터", readme)
-        self.assertIn(
-            "여러 발표일과 4개 종목을 합한, 이미 집계된 1분봉 전체",
-            readme,
-        )
-        self.assertIn("NVDA에서 실제로 발생한 개별 체결 한 건", readme)
-        self.assertIn("Spark 1분 집계 121행", readme)
-        self.assertIn("### C. Airflow 다종목 자동화 실행", readme)
-        self.assertIn("Dynamic Task Mapping", readme)
-        self.assertIn('"tickers":["SPY","QQQ","SMH","NVDA"]', readme)
-        self.assertIn("원시 체결 118,118건과 1분봉 472행", readme)
+        self.assertIn("### A. Kafka·Spark 원시 체결 처리", readme)
+        self.assertIn("### B. 202개 발표·10종목 시장 데이터", readme)
+        self.assertIn("### C. Airflow 자동화", readme)
+        self.assertIn("발표-종목 구간", readme)
+        self.assertIn("308,512", readme)
+        self.assertIn("118,118 / 118,118", readme)
         self.assertIn("uv sync --extra airflow", readme)
-        self.assertIn("airflow dags test market_sip_replay_pipeline", readme)
-        self.assertIn("Airflow schedule과 누락 구간 자동 backfill·알림 추가", readme)
-        self.assertNotIn("Airflow로 수집·재실행·품질 검사를 자동화", readme)
+        self.assertIn("airflow dags test market_context_backfill_pipeline", readme)
+        self.assertIn("market_context_backfill_orchestrator", readme)
 
     def test_kafka_assignment_uses_the_cpi_release_window(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
@@ -106,8 +97,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("README는 프로젝트 전체 구조와 실행 진입점만 설명", readme)
-        self.assertIn("3차시 Kafka·Spark 과제 문서", readme)
+        self.assertIn("3차시 Kafka·Spark 과제", readme)
         self.assertIn("# 3차시 Kafka·Spark 과제", assignment)
         self.assertIn("실제 IEX 거래 10건", assignment)
         self.assertIn("## 전체 프로젝트에서의 과제 경계", assignment)
@@ -241,15 +231,15 @@ class AssignmentDocumentationTest(unittest.TestCase):
     def test_architecture_source_distinguishes_current_and_planned_flow(self) -> None:
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(encoding="utf-8")
 
-        self.assertIn("BLS · ALFRED · Alpaca SIP", diagram)
-        self.assertIn("raw.market-sip.v1", diagram)
-        self.assertIn("Spark Batch / Streaming", diagram)
+        self.assertIn("BLS · BEA · Federal Reserve", diagram)
+        self.assertIn("Kafka v2 · 6 partitions", diagram)
+        self.assertIn("Spark", diagram)
         self.assertIn("market_bars", diagram)
-        self.assertIn("economic_events", diagram)
-        self.assertIn("macro_event_impacts", diagram)
-        self.assertIn("현재 구현", diagram)
-        self.assertIn("후속 확장", diagram)
-        self.assertIn("Airflow orchestration", diagram)
+        self.assertIn("Official event catalog", diagram)
+        self.assertIn("macro_event_contexts", diagram)
+        self.assertIn("Surprise · 통제군 → Paper trading", diagram)
+        self.assertIn("비용 포함 backtest", diagram)
+        self.assertIn("Airflow / Python", diagram)
 
         assignment_diagram = Path(
             "docs/diagrams/cpi-sip-kafka-spark-assignment.svg"

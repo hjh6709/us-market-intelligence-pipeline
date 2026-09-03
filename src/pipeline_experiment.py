@@ -38,6 +38,8 @@ class ExperimentResult:
     postgres_business_key_duplicates: int
     duration_seconds: float
     events_per_second: float
+    kafka_partition_counts: dict[int, int] | None = None
+    kafka_max_partition_share: float | None = None
     error_type: str | None = None
     error_message: str | None = None
 
@@ -135,6 +137,7 @@ def run_experiment(
             publisher.close(timeout_seconds=120.0)
         published = replay.published_trades
         offset_ranges = publisher.offset_ranges
+        partition_counts = publisher.partition_counts
 
         consumer = Consumer(
             {
@@ -192,6 +195,11 @@ def run_experiment(
             postgres_business_key_duplicates=_business_key_duplicates(database_url),
             duration_seconds=round(duration, 6),
             events_per_second=round(expected / duration, 3),
+            kafka_partition_counts=partition_counts,
+            kafka_max_partition_share=round(
+                max(partition_counts.values()) / published,
+                6,
+            ) if published and partition_counts else None,
         )
     except Exception as error:
         return failed_result(

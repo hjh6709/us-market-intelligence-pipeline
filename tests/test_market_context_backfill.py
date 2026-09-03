@@ -5,6 +5,8 @@ from decimal import Decimal
 from src.economic_event_schedule import load_event_catalog
 from src.historical_bars import HistoricalBar
 from src.market_context_backfill import (
+    build_yearly_backfill_configs,
+    collect_market_context_event,
     collect_market_context_work_item,
     select_market_context_work,
 )
@@ -50,6 +52,27 @@ class MarketContextBackfillTest(unittest.TestCase):
         )
         self.assertEqual(work[0].event_id, self.release.event_id)
 
+    def test_multi_year_request_is_split_without_changing_other_parameters(self) -> None:
+        configs = build_yearly_backfill_configs(
+            {
+                "event_types": ["CPI", "FOMC"],
+                "release_from": "2022-06-01",
+                "release_to": "2024-03-31",
+                "symbols": ["SPY", "TLT"],
+                "feed": "sip",
+            }
+        )
+
+        self.assertEqual(
+            [(item["release_from"], item["release_to"]) for item in configs],
+            [
+                ("2022-06-01", "2022-12-31"),
+                ("2023-01-01", "2023-12-31"),
+                ("2024-01-01", "2024-03-31"),
+            ],
+        )
+        self.assertTrue(all(item["symbols"] == ["SPY", "TLT"] for item in configs))
+
     def test_one_work_item_preserves_partial_daily_coverage(self) -> None:
         item = select_market_context_work(
             {
@@ -93,6 +116,50 @@ class MarketContextBackfillTest(unittest.TestCase):
         self.assertFalse(result.fallback_used)
         self.assertEqual(len(stored), 13)
         self.assertEqual(len(derived), 2)
+
+    def test_event_batch_fetches_multiple_symbols_in_two_requests(self) -> None:
+        items = select_market_context_work(
+            {
+                "event_types": ["FOMC"],
+                "release_from": "2026-07-29",
+                "release_to": "2026-07-29",
+                "symbols": ["SPY", "TLT"],
+                "feed": "sip",
+            }
+        )
+        session_start = self.release.released_at - timedelta(minutes=60)
+        session_bars = [
+            bar(symbol, session_start + timedelta(minutes=offset))
+            for symbol in ("SPY", "TLT")
+            for offset in range(3)
+        ]
+        daily_start = datetime(2026, 7, 20, 4, tzinfo=UTC)
+        daily_bars = [
+            bar(symbol, daily_start + timedelta(days=offset))
+            for symbol in ("SPY", "TLT")
+            for offset in range(15)
+        ]
+        responses = iter([(session_bars, 1), (daily_bars, 1)])
+        requests = []
+
+        result = collect_market_context_event(
+            items,
+            client=object(),
+            database_url="postgresql://test",
+            provider_available_until=datetime(2026, 9, 3, tzinfo=UTC),
+            fetcher=lambda *_args, **kwargs: requests.append(kwargs["symbols"])
+            or next(responses),
+            historical_writer=lambda rows, **_kwargs: len(rows),
+            derived_writer=lambda rows, **_kwargs: len(rows),
+        )
+
+        self.assertEqual(requests, [("SPY", "TLT"), ("SPY", "TLT")])
+        self.assertEqual(result.pages, 2)
+        self.assertEqual(len(result.results), 2)
+        self.assertEqual(
+            [(item.symbol, item.session_1m_rows) for item in result.results],
+            [("SPY", 3), ("TLT", 3)],
+        )
 
 
 if __name__ == "__main__":

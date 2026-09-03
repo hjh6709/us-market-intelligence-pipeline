@@ -10,7 +10,7 @@ import time
 
 import psycopg
 
-from src.cpi_ingestion import CpiRelease
+from src.economic_event_schedule import EconomicRelease
 from src.fred_client import FredClient, MacroObservation
 
 
@@ -90,7 +90,7 @@ def select_latest_available(
 
 def fetch_event_macro_context(
     client: FredClient,
-    releases: Sequence[CpiRelease],
+    releases: Sequence[EconomicRelease],
     *,
     series: dict[str, MacroSeriesSpec] = MACRO_SERIES,
     request_interval_seconds: float = 0.0,

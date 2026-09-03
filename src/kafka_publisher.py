@@ -37,12 +37,15 @@ class KafkaPublisher:
         self._producer = producer if producer is not None else Producer(config)
         self._delivery_errors: list[str] = []
         self._delivered_ranges: dict[tuple[str, int], list[int]] = {}
+        self._partition_counts: dict[int, int] = {}
 
     def _on_delivery(self, error: Any, message: Any) -> None:
         if error is not None:
             self._delivery_errors.append(str(error))
             return
         key = (message.topic(), int(message.partition()))
+        partition = int(message.partition())
+        self._partition_counts[partition] = self._partition_counts.get(partition, 0) + 1
         offset = int(message.offset())
         bounds = self._delivered_ranges.setdefault(key, [offset, offset + 1])
         bounds[0] = min(bounds[0], offset)
@@ -61,8 +64,18 @@ class KafkaPublisher:
             for (topic, partition), bounds in sorted(self._delivered_ranges.items())
         ]
 
-    def publish(self, envelope: Mapping[str, Any]) -> None:
-        symbol = str(envelope["payload"]["S"])
+    @property
+    def partition_counts(self) -> dict[int, int]:
+        """Return callback-confirmed record counts for each Kafka partition."""
+        return dict(sorted(self._partition_counts.items()))
+
+    def publish(
+        self,
+        envelope: Mapping[str, Any],
+        *,
+        key: str | None = None,
+    ) -> None:
+        routing_key = key or str(envelope["payload"]["S"])
         value = json.dumps(
             envelope,
             separators=(",", ":"),
@@ -73,7 +86,7 @@ class KafkaPublisher:
             try:
                 self._producer.produce(
                     self.topic,
-                    key=symbol.encode("utf-8"),
+                    key=routing_key.encode("utf-8"),
                     value=value,
                     on_delivery=self._on_delivery,
                 )

@@ -1,0 +1,91 @@
+{
+  "generated_at": "2026-09-03T10:14:11.797868Z",
+  "contains_prices": false,
+  "market_context": {
+    "release_from": "2022-01-01",
+    "release_to": "2026-08-26",
+    "event_counts": {
+      "CPI": 55,
+      "EMPLOYMENT": 55,
+      "FOMC": 37,
+      "PCE": 55
+    },
+    "release_count": 202,
+    "symbols": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "TLT",
+      "XLF",
+      "SMH",
+      "GLD",
+      "NVDA",
+      "AAPL",
+      "JPM"
+    ],
+    "symbol_count": 10,
+    "work_item_count": 2020,
+    "pages": 404,
+    "selected_bar_counts": {
+      "DAILY_15_SESSIONS": 30250,
+      "SESSION_1MIN": 308512
+    },
+    "derived_bar_counts": {
+      "3m": 112593,
+      "5m": 70090
+    },
+    "derived_partial_counts": {
+      "3m": 19178,
+      "5m": 16215
+    }
+  },
+  "coverage_status_counts": {
+    "COMPLETE": 1980,
+    "FUTURE_SESSION_UNAVAILABLE": 10,
+    "MARKET_CLOSED": 30
+  },
+  "kafka_v2_spark_validation": {
+    "experiment_run_id": "local-v2-routing-20260903",
+    "raw_input_trades": 118118,
+    "kafka_published": 118118,
+    "kafka_consumed": 118118,
+    "spark_input": 118118,
+    "spark_invalid": 0,
+    "spark_duplicates": 0,
+    "spark_output_bars": 472,
+    "postgres_stored_bars": 472,
+    "postgres_business_key_duplicates": 0,
+    "duration_seconds": 18.666279,
+    "events_per_second": 6327.881,
+    "kafka_partition_counts": {
+      "0": 40069,
+      "1": 29314,
+      "2": 15098,
+      "3": 5580,
+      "4": 9793,
+      "5": 18264
+    },
+    "kafka_max_partition_share": 0.339229
+  },
+  "database": {
+    "economic_events_by_type": {
+      "CPI": 55,
+      "EMPLOYMENT": 55,
+      "FOMC": 37,
+      "PCE": 55
+    },
+    "macro_contexts_by_event_type": {
+      "CPI": 550,
+      "EMPLOYMENT": 550,
+      "FOMC": 370,
+      "PCE": 550
+    },
+    "alpaca_sip_market_bars_by_timeframe": {
+      "1d": 11680,
+      "1m": 323126,
+      "3m": 112593,
+      "5m": 70090
+    },
+    "market_bar_business_key_duplicates": 0
+  }
+}
