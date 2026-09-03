@@ -34,9 +34,9 @@
 
 `MARKET_CLOSED` 날짜는 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment입니다. 누락이나 미래 값을 합성하지 않았습니다.
 
-## Airflow 실제 smoke
+## Airflow 실제 실행
 
-`market_context_backfill_pipeline`을 FOMC 2026-07-29와 SPY·TLT로 실행했습니다.
+먼저 `market_context_backfill_pipeline`을 FOMC 2026-07-29와 SPY·TLT로 smoke 실행했습니다.
 
 | 항목 | 결과 |
 | --- | ---: |
@@ -46,7 +46,20 @@
 | 1m / 3m / 5m / 1d | 362 / 122 / 74 / 30 |
 | 성공 work item / 미해결 alert | 2 / 0 |
 
-전체 202회 시장 데이터는 DAG와 같은 `collect_market_context_event` 함수를 사용하는 CLI로 전수 실행했습니다. Airflow의 전체 202개 mapped task를 실행했다고 주장하지 않습니다. 실제 Airflow run ID와 task 상태는 [6차시 Airflow 증거](../sixth-assignment/README.md)에 있습니다.
+이후 같은 DAG를 공식 발표 202회와 10종목 전체로 실행했습니다. 발표별 mapped task 202개가 종목별 work item 2,020개를 522.660초에 처리했습니다. 1,980개는 성공, 30개는 휴장, 10개는 실행 시점에 미래 거래일 미도래로 기록됐고 실패와 미해결 alert는 0개였습니다. 거시 DAG도 mapped task 202개가 기존 point-in-time context 2,020개를 재사용해 14.835초에 검증했습니다. 기계 판독 결과와 run ID는 [airflow-full-run.json](airflow-full-run.json)에 있습니다.
+
+## 이벤트 분석·탐색용 전략 결과
+
+| 항목 | 결과 |
+| --- | ---: |
+| 이벤트 구간 지표 | 8,080행 |
+| 전략 결과 / 실행 가능 | 2,020 / 1,988행 |
+| 전·후 coverage 모두 COMPLETE | 911행 |
+| 왕복 비용 | 10bp |
+| 평균 / 중앙값 순수익률 | -0.1565% / -0.1251% |
+| 순수익 양수 비율 | 39.34% |
+
+전략은 발표 전 60분 방향을 따라 발표 후 60분 보유하는 단순 기준입니다. 발표 후 가격을 신호에 사용하지 않았지만, 전망치·surprise나 슬리피지는 포함하지 않았습니다. 성과가 음수이므로 수익 전략으로 주장하지 않습니다.
 
 ## Kafka v2 실제 검증
 
@@ -78,6 +91,8 @@ Parquet SHA-256: 77059c190cf58c9a90a2e52fb6abd3c26e6bf1979d240b680c5a21f1824bc1f
 ## 공개 파일
 
 - [전체 확장 기계 판독 요약](full-expansion-summary.json)
+- [이벤트 분석·백테스트 집계](event-analysis.json)
+- [Airflow 202개 task 전체 실행](airflow-full-run.json)
 - [Kafka v2 실행 결과](../load-recovery/v2-partition-routing.json)
 - [Airflow 확장 smoke](../sixth-assignment/airflow-expansion-smoke.json)
 - [FOMC·TLT 원시 수집 요약](fomc-tlt-2026-07-29.json)

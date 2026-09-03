@@ -4,7 +4,7 @@
 
 | 파일 | 용도 |
 | --- | --- |
-| `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 부하 경로, 202회·10종목 시장 데이터, 발표 시점 경제 맥락과 미구현 분석을 구분 |
+| `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 부하 경로, 202회·10종목 시장 데이터, 발표 시점 경제 맥락, 실행한 이벤트 분석과 미구현 실거래를 구분 |
 | `pipeline-architecture.png` | 루트 README에서 사용하는 전체 프로젝트 렌더 결과 |
 | `cpi-sip-kafka-spark-assignment.svg` | 한 CPI 발표일의 Kafka·Spark 과제 실행 정본 |
 | `cpi-sip-kafka-spark-assignment.png` | 과제 문서와 발표에서 사용하는 실행 결과 렌더 |

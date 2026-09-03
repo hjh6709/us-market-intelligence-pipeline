@@ -30,7 +30,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
             "## 2. 이번에 확장한 실제 데이터",
             "## 3. 장애 재현과 복구",
             "## 4. Airflow 자동화와 확인 결과",
-            "## 5. 최신 데이터 모델과 남은 작업",
+            "## 6. 최신 데이터 모델과 남은 작업",
             "118,118",
             "7,360,804",
             "22,260",
@@ -50,7 +50,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("docs/load-recovery-assignment.md", readme)
         self.assertIn("Kafka v2 · 6 partitions", diagram)
         self.assertIn("CPI 55 · 고용 55 · PCE 55 · FOMC 37", diagram)
-        self.assertIn("아직 미구현 · 분석과 자동매매 경계", diagram)
+        self.assertIn("Surprise · 통제군 → Paper trading", diagram)
         self.assertIn("7,360,804", script)
         self.assertIn("OPEN", script)
         self.assertIn("RESOLVED", script)
@@ -237,8 +237,8 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("market_bars", diagram)
         self.assertIn("Official event catalog", diagram)
         self.assertIn("macro_event_contexts", diagram)
-        self.assertIn("아직 미구현", diagram)
-        self.assertIn("Backtest", diagram)
+        self.assertIn("Surprise · 통제군 → Paper trading", diagram)
+        self.assertIn("비용 포함 backtest", diagram)
         self.assertIn("Airflow / Python", diagram)
 
         assignment_diagram = Path(

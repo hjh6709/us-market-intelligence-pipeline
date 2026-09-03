@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
   <title id="title">U.S. Economic Event Market Reaction Pipeline</title>
-  <desc id="desc">현재 실행한 원시 체결, 시장 데이터, 경제 맥락 경로와 아직 미구현인 분석 및 백테스트를 구분한 구성도</desc>
+  <desc id="desc">현재 실행한 원시 체결, 시장 데이터, 경제 맥락, 이벤트 분석과 탐색용 백테스트를 구분한 구성도</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#334155"/></marker>
     <marker id="future-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#7c3aed"/></marker>
@@ -23,7 +23,7 @@
   </defs>
   <rect width="1600" height="1080" fill="#fff"/>
   <text x="52" y="58" class="title">U.S. Economic Event Market Reaction Pipeline</text>
-  <text x="52" y="88" class="subtitle">실행한 세 경로는 실선, 아직 검증하지 않은 분석·자동매매는 점선으로 표시</text>
+  <text x="52" y="88" class="subtitle">실제 실행한 수집·처리·분석은 실선, 아직 구현하지 않은 실거래 단계는 점선으로 표시</text>
 
   <rect x="36" y="120" width="1528" height="235" rx="18" class="lane"/>
   <text x="58" y="155" class="section">A · 원시 체결 정확성·부하 검증</text>
@@ -55,7 +55,7 @@
   <text x="1418" y="508" text-anchor="middle" class="box-title">PostgreSQL</text><text x="1418" y="536" text-anchor="middle" class="copy">bars · work · checks</text><text x="1418" y="564" text-anchor="middle" class="metric">Upsert · coverage</text>
   <path d="M343 535H383" class="flow"/><path d="M668 535H708" class="flow"/><path d="M993 535H1033" class="flow"/><path d="M1273 535H1313" class="flow"/>
   <rect x="383" y="610" width="890" height="25" rx="8" class="evidence"/>
-  <text x="828" y="628" text-anchor="middle" class="copy">Airflow smoke: FOMC 1회 × SPY·TLT · work 2 성공 · open alert 0</text>
+  <text x="828" y="628" text-anchor="middle" class="copy">Airflow 전체 실행: 202 mapped tasks · 2,020 work items · 결과 검증</text>
 
   <rect x="36" y="680" width="1528" height="180" rx="18" class="lane"/>
   <text x="58" y="715" class="section">C · 발표 당시 경제 상황</text>
@@ -67,13 +67,13 @@
   <text x="1320" y="776" text-anchor="middle" class="box-title">macro_event_contexts</text><text x="1320" y="803" text-anchor="middle" class="metric">202 × 10 = 2,020행</text>
   <path d="M445 785H635" class="flow"/><path d="M965 785H1155" class="flow"/>
 
-  <rect x="36" y="890" width="1528" height="145" rx="18" class="future"/>
-  <text x="58" y="925" class="section">아직 미구현 · 분석과 자동매매 경계</text>
-  <rect x="90" y="952" width="360" height="58" rx="12" class="future"/>
-  <text x="270" y="977" text-anchor="middle" class="box-title">전망치 · 실제값 · surprise</text><text x="270" y="998" text-anchor="middle" class="copy">신뢰 가능한 point-in-time 출처 필요</text>
-  <rect x="620" y="952" width="360" height="58" rx="12" class="future"/>
-  <text x="800" y="977" text-anchor="middle" class="box-title">Event study · 통계 검정</text><text x="800" y="998" text-anchor="middle" class="copy">비발표일 비교 · 다른 사건 통제</text>
-  <rect x="1150" y="952" width="360" height="58" rx="12" class="future"/>
-  <text x="1330" y="977" text-anchor="middle" class="box-title">Backtest → Paper trading</text><text x="1330" y="998" text-anchor="middle" class="copy">비용 · 슬리피지 · 위험 한도</text>
-  <path d="M450 981H620" class="future-flow"/><path d="M980 981H1150" class="future-flow"/>
+  <rect x="36" y="890" width="1528" height="145" rx="18" class="lane"/>
+  <text x="58" y="925" class="section">D · 이벤트 반응 분석과 전략 검증 경계</text>
+  <rect x="90" y="952" width="390" height="58" rx="12" class="store"/>
+  <text x="285" y="977" text-anchor="middle" class="box-title">Event-window metrics</text><text x="285" y="998" text-anchor="middle" class="metric">202 × 10 × 4 = 8,080행</text>
+  <rect x="605" y="952" width="390" height="58" rx="12" class="evidence"/>
+  <text x="800" y="977" text-anchor="middle" class="box-title">탐색용 비용 포함 backtest</text><text x="800" y="998" text-anchor="middle" class="copy">평균 -0.1565% · 수익 주장 아님</text>
+  <rect x="1120" y="952" width="390" height="58" rx="12" class="future"/>
+  <text x="1315" y="977" text-anchor="middle" class="box-title">Surprise · 통제군 → Paper trading</text><text x="1315" y="998" text-anchor="middle" class="copy">point-in-time 출처와 추가 검증 필요</text>
+  <path d="M480 981H605" class="flow"/><path d="M995 981H1120" class="future-flow"/>
 </svg>

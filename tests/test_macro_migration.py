@@ -62,6 +62,16 @@ class MacroMigrationTest(unittest.TestCase):
         self.assertIn("pipeline_run_checks", migration)
         self.assertIn("'NONE','OPEN','RESOLVED'", migration.replace(" ", ""))
 
+    def test_strategy_migration_tracks_cost_and_coverage(self) -> None:
+        migration = Path("db/migrations/007_event_strategy_results.sql").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS event_strategy_results", migration)
+        self.assertIn("transaction_cost_bps", migration)
+        self.assertIn("coverage_status", migration)
+        self.assertIn("strategy_version", migration)
+
 
 if __name__ == "__main__":
     unittest.main()

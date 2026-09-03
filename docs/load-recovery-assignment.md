@@ -8,7 +8,7 @@
 
 ![최신 전체 데이터 파이프라인](diagrams/pipeline-architecture.png)
 
-현재 실행 경로는 세 개입니다.
+현재 실행 경로는 네 개입니다.
 
 ```text
 A. 원시 체결 검증
@@ -19,6 +19,9 @@ B. 분석용 시장 데이터
 
 C. 발표 당시 경제 상황
 공식 발표 202회 → Airflow/Python → FRED·ALFRED 10 series → PostgreSQL
+
+D. 이벤트 분석 결과
+PostgreSQL 1m → 이벤트 전후 지표 8,080행 → 탐색 전략 결과 2,020행
 ```
 
 ## 과제 요구사항 한눈에 보기
@@ -29,10 +32,11 @@ C. 발표 당시 경제 상황
 | 오류·미처리 건수 | 형식 오류 0, 수정 후 실제 중복 0, DB business key 중복 0 | [식별키 수정 증거](evidence/pipeline-review/README.md) |
 | 실패 단계와 복구 | Spark heap, DB 중단, mock API 503를 재현하고 해당 단계부터 재실행 | 3절 |
 | fallback 또는 alert | mock 503에서 `FAILED / OPEN → SUCCEEDED / RESOLVED` | [Airflow·alert 증거](evidence/sixth-assignment/README.md) |
-| 최신 구성도·데이터 모델 | 위 구성도와 5절 | 이 문서 |
-| Kafka·Spark·저장·Airflow 확인 | 단계별 건수, 실제 run ID, SQL 확인법 | 1·2·4·6절 |
+| 최신 구성도·데이터 모델 | 위 구성도와 6절 | 이 문서 |
+| Kafka·Spark·저장·Airflow 확인 | 단계별 건수, 실제 run ID, SQL 확인법 | 1·2·4·7절 |
 | 이번 신규 확장 | 공식 발표 202회 × 10종목, 1m·3m·5m·1d, Kafka v2 | [확장 요약](evidence/multi-event-expansion/README.md) |
-| 아직 실행되지 않는 단계 | event-study 통계 검정과 전략 백테스트 | 5절 |
+| 최종 결과 연결 | 이벤트 구간 지표 8,080행과 비용 포함 탐색 전략 2,020행 | 5절 |
+| 아직 실행되지 않는 단계 | 전망치·surprise, 통제군 검정, paper/live 주문 | 6절 |
 
 ## 1. 기준 실행과 부하·복구 결과
 
@@ -152,7 +156,7 @@ fixture는 재시도·상태 전이만 검증하며 실제 시장 데이터나 f
 - DB 관측 단위: 경제발표 × 종목별 work item과 품질검사
 - 다년 실행: orchestrator가 연도별 child DAG run으로 분리
 
-실제 smoke run은 FOMC 2026-07-29의 SPY·TLT로 수행했습니다.
+먼저 smoke run은 FOMC 2026-07-29의 SPY·TLT로 수행했습니다.
 
 | 결과 | 값 |
 | --- | ---: |
@@ -163,9 +167,33 @@ fixture는 재시도·상태 전이만 검증하며 실제 시장 데이터나 f
 
 `macro_context_backfill_pipeline`은 발표별 FRED·ALFRED 수집을 자동화하고 `fred_api_pool`로 호출 동시성을 제한합니다. FOMC 2026-07-29 × DGS2 한 건의 실제 Airflow 실행과 저장을 확인했습니다.
 
-전체 202회 × 10종목 시장 데이터와 202회 × 10 series 경제 맥락은 동일한 구현 함수를 사용하는 CLI로 전수 실행했습니다. 경제 맥락은 CPI 550행, 고용 550행, PCE 550행, FOMC 370행으로 총 2,020행입니다. **Airflow에서 202개 mapped task 전체를 다시 실행했다고 주장하지 않습니다.** 실제 Airflow 증거는 위 smoke이고, DAG는 동일 입력을 연도별·발표별로 재실행할 수 있게 구성했습니다.
+전체 202회 × 10종목 시장 데이터와 202회 × 10 series 경제 맥락은 먼저 동일한 구현 함수를 사용하는 CLI로 전수 실행했습니다. 경제 맥락은 CPI 550행, 고용 550행, PCE 550행, FOMC 370행으로 총 2,020행입니다.
 
-## 5. 최신 데이터 모델과 남은 작업
+그다음 시장 DAG도 **202개 발표 task 전체**를 실제 실행했습니다. 각 task는 10종목을 묶어 조회하고 DB에는 종목별 2,020개 work item을 기록합니다. 522.660초 뒤 1,980개 성공, 30개 휴장, 10개 미래 거래일 미도래, 실패 0개, 미해결 alert 0개로 검증됐습니다. 경제 맥락 DAG는 이미 저장된 point-in-time 값을 재사용하는 멱등 모드로 202개 발표 task를 실행하고, 마지막 검증 task가 2,020개 context를 모두 확인했습니다. 이 실행은 14.835초였고 외부 API를 다시 호출하지 않았습니다. 실행 run ID와 task 상태는 [전체 Airflow 증거](evidence/multi-event-expansion/airflow-full-run.json)에 남겼습니다.
+
+## 5. 이벤트 반응 분석과 탐색용 백테스트
+
+`market_bars`와 `economic_events.released_at`을 연결해 발표·종목별 네 구간을 계산했습니다.
+
+| 구간 | 의미 |
+| --- | --- |
+| PRE_60M | 발표 전 60분의 첫 실제 시가부터 마지막 실제 종가 |
+| POST_5M / 30M / 60M | 발표 직전 마지막 종가를 기준으로 발표 후 각 시점까지 |
+
+수익률·거래량·분 단위 수익률 변동성·SPY 대비 수익률과 coverage를 `macro_event_impacts`에 **8,080행** 저장했습니다. 발표 전 데이터가 없는 32행, 발표일 휴장 등 발표 후 60분 데이터가 없는 30행도 값을 만들지 않고 상태로 남겼습니다.
+
+전망치나 surprise가 없으므로 경제지표 방향을 맞히는 전략으로 만들지 않았습니다. 시점 누수가 없는 가장 단순한 기준으로 발표 전 60분 가격 방향을 따라 진입하고 발표 60분 후 청산했으며, 왕복 거래비용 10bp를 차감했습니다.
+
+| 결과 | 값 |
+| --- | ---: |
+| 전체 / 실행 가능 | 2,020 / 1,988 |
+| 전·후 coverage 모두 COMPLETE | 911 |
+| 평균 / 중앙값 순수익률 | -0.1565% / -0.1251% |
+| 순수익 양수 비율 | 39.34% |
+
+네 발표 유형 모두 평균 순수익률이 음수였습니다(CPI -0.1858%, 고용 -0.1781%, PCE -0.1360%, FOMC -0.1118%). 따라서 현재 규칙에는 수익성이 없다고 기록합니다. 이 값은 독립적인 발표-종목별 결과이며 동시 포지션과 자본 배분을 합친 포트폴리오 수익률이 아닙니다. 경제지표의 인과 효과나 미래 예상 수익률로도 해석하지 않습니다.
+
+## 6. 최신 데이터 모델과 남은 작업
 
 | 테이블 | 한 행 | business key |
 | --- | --- | --- |
@@ -175,6 +203,8 @@ fixture는 재시도·상태 전이만 검증하며 실제 시장 데이터나 f
 | `pipeline_runs` | 실행 한 번 | pipeline run ID |
 | `pipeline_work_items` | 실행의 event·symbol·stage | run·event·symbol·stage |
 | `pipeline_run_checks` | 품질검사·alert | run·event·symbol·stage·check |
+| `macro_event_impacts` | 발표·종목·구간별 반응 | event·symbol·window·analysis version |
+| `event_strategy_results` | 발표·종목별 기준 전략 결과 | event·symbol·strategy·version |
 
 현재 완료:
 
@@ -182,18 +212,19 @@ fixture는 재시도·상태 전이만 검증하며 실제 시장 데이터나 f
 - 10종목의 발표 장중·전후 7거래일 데이터 전수 실행
 - 1분봉에서 3분봉·5분봉 생성과 coverage 저장
 - Kafka v2 파티션 개선 실험과 Spark·PostgreSQL 검증
-- Airflow 시장·거시 DAG 구현과 실제 소규모 실행
+- Airflow 시장·거시 DAG의 202개 발표 task 전체 실행과 최종 건수 검증
+- 8,080개 이벤트 구간 지표와 비용 포함 탐색 전략 2,020개 실행
 - 실패·재시도·alert·멱등 Upsert 확인
 
 아직 미완료:
 
 - 발표별 시장 전망치와 실제값으로 surprise 계산
 - 비발표일 비교군·통계적 유의성·다른 사건 통제
-- 거래비용·슬리피지·시점 누수를 반영한 백테스트
+- 호가 기반 슬리피지·동시 포지션·자본 배분을 포함한 포트폴리오 백테스트
 - 운영 알림 채널과 검증 archive fallback
 - paper/live 주문 실행
 
-## 6. 실행과 최종 결과 확인
+## 7. 실행과 최종 결과 확인
 
 ```bash
 # 서비스
@@ -212,6 +243,11 @@ docker compose up -d --wait postgres kafka kafka-init
 
 # 공개 가능한 집계와 DB 중복 확인
 .venv/bin/python scripts/evidence/export_multi_event_summary.py
+
+# 이벤트 반응과 탐색 전략
+.venv/bin/python -m src.macro_event_impact
+.venv/bin/python -m src.event_strategy_backtest
+.venv/bin/python -m scripts.evidence.export_event_analysis
 
 # 테스트
 .venv/bin/python -m unittest discover -s tests -v

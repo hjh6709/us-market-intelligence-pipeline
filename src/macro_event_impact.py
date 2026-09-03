@@ -1,4 +1,4 @@
-"""Calculate reproducible CPI event-window metrics from stored SIP minute bars."""
+"""Calculate reproducible economic-event metrics from stored SIP minute bars."""
 
 from __future__ import annotations
 
@@ -18,8 +18,12 @@ from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.live_market_smoke import _read_env_file
 
 
-ANALYSIS_VERSION = "cpi_sip_v1"
-SYMBOLS = ("SPY", "QQQ", "SMH", "NVDA")
+ANALYSIS_VERSION = "multi_event_sip_v1"
+DEFAULT_EVENT_TYPES = ("CPI", "EMPLOYMENT", "PCE", "FOMC")
+DEFAULT_SYMBOLS = (
+    "SPY", "QQQ", "IWM", "TLT", "XLF", "SMH", "GLD", "NVDA", "AAPL", "JPM"
+)
+CPI_BASELINE_SYMBOLS = ("SPY", "QQQ", "SMH", "NVDA")
 WINDOWS = (
     ("PRE_60M", -60, 0),
     ("POST_5M", 0, 5),
@@ -159,9 +163,12 @@ def calculate_event_impacts(
     economic_event_id: str,
     released_at: datetime,
     bars_by_symbol: Mapping[str, Sequence[BarPoint]],
+    *,
+    symbols: Sequence[str] = DEFAULT_SYMBOLS,
+    benchmark_symbol: str = "SPY",
 ) -> list[ImpactMetric]:
     metrics = []
-    for symbol in SYMBOLS:
+    for symbol in symbols:
         bars = bars_by_symbol.get(symbol, ())
         pre_metric = calculate_metric(
             economic_event_id=economic_event_id,
@@ -195,7 +202,7 @@ def calculate_event_impacts(
     benchmark_by_window = {
         metric.window_name: metric.return_pct
         for metric in metrics
-        if metric.symbol == "SPY"
+        if metric.symbol == benchmark_symbol
     }
     return [
         replace(
@@ -212,15 +219,27 @@ def calculate_event_impacts(
     ]
 
 
-def calculate_and_store(database_url: str) -> tuple[int, int]:
+def calculate_and_store(
+    database_url: str,
+    *,
+    event_types: Sequence[str] = DEFAULT_EVENT_TYPES,
+    symbols: Sequence[str] = DEFAULT_SYMBOLS,
+) -> tuple[int, int]:
+    normalized_event_types = tuple(value.strip().upper() for value in event_types)
+    normalized_symbols = tuple(value.strip().upper() for value in symbols)
+    if not normalized_event_types or not normalized_symbols:
+        raise ValueError("event_types and symbols must not be empty")
+    if "SPY" not in normalized_symbols:
+        raise ValueError("symbols must include SPY as the benchmark")
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         events = connection.execute(
             """
             SELECT economic_event_id, released_at
             FROM economic_events
-            WHERE event_type = 'CPI' AND quality_status = 'READY'
+            WHERE event_type = ANY(%s) AND quality_status = 'READY'
             ORDER BY released_at
-            """
+            """,
+            (list(normalized_event_types),),
         ).fetchall()
         all_metrics = []
         for economic_event_id, released_at in events:
@@ -236,9 +255,9 @@ def calculate_and_store(database_url: str) -> tuple[int, int]:
                   AND bar_start < %s + INTERVAL '60 minutes'
                 ORDER BY symbol, bar_start
                 """,
-                (list(SYMBOLS), released_at, released_at),
+                (list(normalized_symbols), released_at, released_at),
             ).fetchall()
-            bars_by_symbol = {symbol: [] for symbol in SYMBOLS}
+            bars_by_symbol = {symbol: [] for symbol in normalized_symbols}
             for symbol, bar_start, open_price, close_price, volume in rows:
                 bars_by_symbol[symbol].append(
                     BarPoint(bar_start, open_price, close_price, volume)
@@ -248,6 +267,7 @@ def calculate_and_store(database_url: str) -> tuple[int, int]:
                     economic_event_id,
                     released_at,
                     bars_by_symbol,
+                    symbols=normalized_symbols,
                 )
             )
 
@@ -319,6 +339,10 @@ def _population_stddev(values: Sequence[Decimal]) -> Decimal | None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
+    parser.add_argument(
+        "--event-types", nargs="+", default=list(DEFAULT_EVENT_TYPES)
+    )
+    parser.add_argument("--symbols", nargs="+", default=list(DEFAULT_SYMBOLS))
     args = parser.parse_args(argv)
     file_values = _read_env_file(args.env_file)
     database_url = (
@@ -326,7 +350,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         or file_values.get("DATABASE_URL")
         or DEFAULT_DATABASE_URL
     )
-    events, impacts = calculate_and_store(database_url)
+    events, impacts = calculate_and_store(
+        database_url,
+        event_types=args.event_types,
+        symbols=args.symbols,
+    )
     print(json.dumps({"economic_events": events, "event_impacts_upserted": impacts}))
     return 0
 

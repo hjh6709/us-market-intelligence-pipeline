@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 import os
 from pathlib import Path
 
+import psycopg
 from airflow.sdk import Param, dag, get_current_context, task
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
@@ -56,6 +57,7 @@ def _restore_release(values: dict) -> EconomicRelease:
             minItems=1,
             uniqueItems=True,
         ),
+        "force_refresh": Param(False, type="boolean"),
     },
     tags=["macro", "economic-events", "fred", "alfred", "backfill"],
 )
@@ -85,6 +87,7 @@ def build_macro_context_backfill_pipeline():
             values["release_date"] = release.release_date.isoformat()
             values["released_at"] = release.released_at.isoformat()
             values["series"] = list(params["series"])
+            values["force_refresh"] = bool(params["force_refresh"])
             work.append(values)
         return work
 
@@ -99,7 +102,26 @@ def build_macro_context_backfill_pipeline():
 
         release_values = dict(values)
         series_ids = release_values.pop("series")
+        force_refresh = release_values.pop("force_refresh")
         release = _restore_release(release_values)
+        database_url = _database_url()
+        if not force_refresh:
+            with psycopg.connect(database_url, connect_timeout=5) as connection:
+                existing = connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM macro_event_contexts
+                    WHERE economic_event_id = %s AND series_id = ANY(%s)
+                    """,
+                    (release.event_id, series_ids),
+                ).fetchone()[0]
+            if existing == len(series_ids):
+                return {
+                    "event_id": release.event_id,
+                    "event_type": release.event_type,
+                    "stored_contexts": 0,
+                    "reused_contexts": existing,
+                }
         fred_api_key, database_url = _settings(os.environ, Path(".env"))
         selected = {series_id: MACRO_SERIES[series_id] for series_id in series_ids}
         contexts = fetch_event_macro_context(
@@ -114,9 +136,29 @@ def build_macro_context_backfill_pipeline():
             "event_id": release.event_id,
             "event_type": release.event_type,
             "stored_contexts": stored,
+            "reused_contexts": 0,
         }
 
-    collect_event_macro_context.expand(values=build_event_work_items())
+    @task(task_id="verify_macro_context")
+    def verify_macro_context(results: list[dict]) -> dict:
+        expected = len(results) * len(get_current_context()["params"]["series"])
+        accounted = sum(
+            item["stored_contexts"] + item["reused_contexts"] for item in results
+        )
+        if accounted != expected:
+            raise RuntimeError(
+                f"macro context verification failed: expected={expected}, "
+                f"accounted={accounted}"
+            )
+        return {
+            "events": len(results),
+            "expected_contexts": expected,
+            "stored_contexts": sum(item["stored_contexts"] for item in results),
+            "reused_contexts": sum(item["reused_contexts"] for item in results),
+        }
+
+    results = collect_event_macro_context.expand(values=build_event_work_items())
+    verify_macro_context(results)
 
 
 macro_context_backfill_pipeline = build_macro_context_backfill_pipeline()

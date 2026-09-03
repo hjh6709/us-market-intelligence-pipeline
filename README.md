@@ -1,16 +1,17 @@
 # U.S. Economic Event Market Reaction Pipeline
 
-미국의 CPI·고용보고서·PCE·FOMC 발표 시각과 시장 반응을 같은 시간축으로 연결하는 데이터 파이프라인입니다. 장기 목표는 자동매매 전략 연구이지만, 현재 구현 범위는 **수집·전처리·저장·재실행·품질 확인**까지입니다. 아직 경제지표가 주가를 움직였다는 인과 결론이나 예상 수익률을 만들지 않습니다.
+미국의 CPI·고용보고서·PCE·FOMC 발표 시각과 시장 반응을 같은 시간축으로 연결하는 데이터 파이프라인입니다. 수집·전처리·저장·재실행·품질 확인에 더해 이벤트 구간 분석과 탐색용 기준 전략까지 실행했습니다. 아직 경제지표가 주가를 움직였다는 인과 결론이나 미래 예상 수익률을 주장하지 않습니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 30초 요약
 
-현재는 목적이 다른 세 경로가 실제로 동작합니다.
+현재는 목적이 다른 네 경로가 실제로 동작합니다.
 
 1. **원시 체결 검증:** 과거 SIP 개별 체결을 Parquet에 보관하고 Kafka로 재생해 Spark가 1분봉을 만듭니다.
 2. **시장 반응 데이터:** 공식 발표 202회와 10종목을 기준으로 Alpaca SIP 1분봉·일봉을 수집하고 3분봉·5분봉을 만듭니다.
 3. **경제 상황 데이터:** 각 발표 시점에 이용 가능했던 FRED·ALFRED 10개 지표를 PostgreSQL에 연결합니다.
+4. **분석·기준 전략:** 발표 전후 5·30·60분 반응을 계산하고, 발표 전 가격 방향만 사용하는 탐색 전략을 비용 포함으로 검증합니다.
 
 이번 확장 실행 결과는 다음과 같습니다.
 
@@ -25,6 +26,9 @@
 | Kafka v2 검증 | **118,118건 발행 = 수신 = Spark 입력** |
 | Kafka 최대 파티션 비중 | 기존 97.5% → v2 **33.9%** |
 | 발표 시점 경제 맥락 | 202회 × 10 series = **2,020행** |
+| Airflow 전체 실행 | 시장 202 tasks·522.660초 / 거시 202 tasks·14.835초 |
+| 이벤트 구간 지표 | 202회 × 10종목 × 4구간 = **8,080행** |
+| 탐색 전략 | 실행 가능 1,988행, 비용 차감 평균 **-0.1565%** |
 
 `선택 합계`는 각 발표를 기준으로 조회한 행을 더한 값입니다. 인접한 발표가 같은 시장 시각이나 거래일을 공유할 수 있으므로 PostgreSQL은 동일한 business key를 한 번만 저장합니다. 따라서 테이블의 고유 행 수와 선택 합계는 서로 다른 지표입니다.
 
@@ -43,7 +47,7 @@
 - 시장 데이터의 종목·feed·시간 범위와 결측 사유를 기록합니다.
 - Kafka와 Spark로 원시 체결의 전달·검증·1분 집계를 재현합니다.
 - 같은 입력을 다시 실행해도 PostgreSQL에 중복 저장되지 않게 합니다.
-- 분석 결과는 후속 통계 검정과 백테스트의 입력으로 제공합니다.
+- 분석 결과와 성과가 없었던 기준 전략도 재현 가능한 결과로 보존합니다.
 
 ## 현재 분석 범위
 
@@ -69,6 +73,9 @@ B. 분석용 시장 데이터
 
 C. 발표 시점 경제 상황
 공식 발표 목록 → Airflow → FRED·ALFRED → PostgreSQL macro_event_contexts
+
+D. 이벤트 분석
+market_bars + economic_events → 구간 수익률·거래량·변동성 → 탐색용 비용 포함 backtest
 ```
 
 원시 체결 경로와 분석용 bar 경로는 행의 의미가 다릅니다. `7,360,804건`은 CPI 55회 × 4종목의 **개별 체결** 부하 입력이고, `308,512행`은 202회 × 10종목의 이벤트별 **1분봉 선택 합계**입니다. 두 숫자를 더하거나 직접 비교하지 않습니다.
@@ -122,9 +129,15 @@ Alpaca 다종목 Bars API를 사용해 한 발표마다 1분봉과 일봉을 각
 
 `market_context_backfill_pipeline`은 event type, 날짜 범위, 종목 목록, feed, 데이터 기준시각을 입력받습니다. **경제발표 한 건을 Airflow task 하나로 만들고 그 안에서 10종목을 묶어 조회**합니다. DB에는 종목별 work item과 품질검사를 따로 기록하므로 실패 범위를 확인할 수 있습니다.
 
-FOMC 2026-07-29의 `SPY`, `TLT`를 실제 실행해 1분봉 362행, 3분봉 122행, 5분봉 74행, 일봉 30행을 저장했습니다. work item 2개가 성공했고 미해결 alert는 0개였습니다.
+FOMC 2026-07-29의 `SPY`, `TLT` smoke 후, 공식 발표 202회 전체를 실제 실행했습니다. 시장 DAG의 mapped task 202개는 종목별 work item 2,020개를 522.660초에 처리했고, 1,980개 성공과 이유가 확인된 40개 미제공 상태를 모두 수용했습니다. 실패와 미해결 alert는 0개였습니다.
 
-`macro_context_backfill_pipeline`은 발표별 FRED·ALFRED 값을 수집합니다. 외부 API 호출량을 제한하기 위해 `fred_api_pool`을 사용합니다. 전체 CLI 실행에서는 CPI 550행, 고용 550행, PCE 550행, FOMC 370행으로 총 2,020개 context를 저장했습니다.
+`macro_context_backfill_pipeline`은 발표별 FRED·ALFRED 값을 수집합니다. 외부 API 호출량을 제한하기 위해 `fred_api_pool`을 사용합니다. 전체 CLI 실행에서는 CPI 550행, 고용 550행, PCE 550행, FOMC 370행으로 총 2,020개 context를 저장했습니다. Airflow 전체 실행에서는 이미 검증된 2,020개를 재호출하지 않는 멱등 모드로 202개 mapped task와 최종 검증 task를 14.835초에 완료했습니다.
+
+### D. 이벤트 분석과 탐색용 기준 전략
+
+공식 발표 시각을 기준으로 각 종목의 발표 전 60분과 발표 후 5·30·60분 수익률, 거래량, 변동성, SPY 대비 수익률을 계산해 8,080행을 저장했습니다.
+
+전망치·surprise가 없는 상태에서 미래 정보를 쓰지 않기 위해, 발표 전 60분 수익률이 양수면 long, 음수면 short로 진입해 발표 60분 후 청산하는 단순 기준만 실행했습니다. 왕복 비용 10bp를 차감한 1,988개 실행 가능 결과의 평균은 -0.1565%, 중앙값은 -0.1251%, 양수 비율은 39.34%였습니다. 이는 수익 전략이 아니라 현재 규칙이 작동하지 않았다는 검증 결과입니다. 여러 종목을 합친 포트폴리오 성과나 예상 수익률로 해석하지 않습니다.
 
 ## 실행 방법
 
@@ -181,6 +194,11 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 .venv/bin/python scripts/evidence/export_multi_event_summary.py
+
+# 이벤트 구간 8,080행과 탐색 전략 2,020행 생성
+.venv/bin/python -m src.macro_event_impact
+.venv/bin/python -m src.event_strategy_backtest
+.venv/bin/python -m scripts.evidence.export_event_analysis
 ```
 
 ## 저장 모델
@@ -193,12 +211,14 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 | `pipeline_runs` | 파이프라인 실행 한 번 | pipeline run ID |
 | `pipeline_work_items` | 실행 안의 event·symbol·stage 작업 | run·event·symbol·stage |
 | `pipeline_run_checks` | 품질검사와 alert 상태 | run·event·symbol·stage·check |
+| `macro_event_impacts` | 발표·종목·구간별 시장 반응 | event·symbol·window·analysis version |
+| `event_strategy_results` | 발표·종목별 탐색 전략 결과 | event·symbol·strategy·version |
 
 ## 다음 단계
 
 - 발표별 실제값·시장 전망치·surprise를 신뢰할 수 있는 point-in-time 출처로 추가
-- 발표일과 비발표일의 동일 시간대를 비교하는 통계 검정
-- 거래비용·슬리피지·시점 누수를 반영한 전략 백테스트
+- 비발표일 비교군과 다른 사건을 통제한 통계 검정
+- 호가 기반 슬리피지·포트폴리오 제약을 반영한 전략 검증
 - 검증된 archive fallback과 운영 알림 채널 연결
 - 충분한 검증 뒤 paper trading, 그다음 별도 승인 하에 실거래 검토
 

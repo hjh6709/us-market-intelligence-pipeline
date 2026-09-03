@@ -16,7 +16,11 @@ class MacroContextBackfillDagTest(unittest.TestCase):
         self.assertEqual(dag.dag_id, "macro_context_backfill_pipeline")
         self.assertEqual(
             set(dag.task_ids),
-            {"build_event_work_items", "collect_event_macro_context"},
+            {
+                "build_event_work_items",
+                "collect_event_macro_context",
+                "verify_macro_context",
+            },
         )
         mapped = dag.get_task("collect_event_macro_context")
         self.assertEqual(type(mapped).__name__, "DecoratedMappedOperator")
