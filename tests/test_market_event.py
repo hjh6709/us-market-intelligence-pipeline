@@ -44,6 +44,21 @@ class MarketEventTest(unittest.TestCase):
 
         self.assertNotEqual(first_id, second_id)
 
+    def test_event_id_changes_when_trade_id_is_reused_by_another_exchange(self) -> None:
+        first = dict(RAW_TRADE, i=2684, x="P", t="2022-01-12T12:52:53.487Z")
+        second = dict(RAW_TRADE, i=2684, x="T", t="2022-01-12T12:52:53.487Z")
+
+        first_id = build_market_envelope(first, "sip", NOW)["event_id"]
+        second_id = build_market_envelope(second, "sip", NOW)["event_id"]
+
+        self.assertNotEqual(first_id, second_id)
+
+    def test_event_id_is_stable_for_the_same_provider_trade(self) -> None:
+        first_id = build_market_envelope(RAW_TRADE, "sip", NOW)["event_id"]
+        second_id = build_market_envelope(RAW_TRADE, "sip", NOW)["event_id"]
+
+        self.assertEqual(first_id, second_id)
+
     def test_rejects_missing_routing_field(self) -> None:
         incomplete = {key: value for key, value in RAW_TRADE.items() if key != "S"}
 

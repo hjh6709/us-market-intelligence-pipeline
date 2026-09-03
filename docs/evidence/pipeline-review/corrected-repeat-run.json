@@ -1,0 +1,20 @@
+{
+  "executed_at": "2026-09-01",
+  "run_id": "local-baseline-event-id-v2-repeat-20260901",
+  "environment": "local",
+  "status": "succeeded",
+  "raw_input_trades": 118118,
+  "kafka_published": 118118,
+  "kafka_consumed": 118118,
+  "spark_input": 118118,
+  "spark_invalid": 0,
+  "spark_duplicates": 0,
+  "spark_output_bars": 472,
+  "postgres_stored_bars": 472,
+  "postgres_total_bars_after_upsert": 22260,
+  "postgres_business_key_duplicates": 0,
+  "result_hash_before": "0e40961df007996bcb812532a4049193",
+  "result_hash_after": "0e40961df007996bcb812532a4049193",
+  "duration_seconds": 17.502314,
+  "events_per_second": 6748.708
+}

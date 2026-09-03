@@ -16,7 +16,7 @@ def build_market_envelope(
     trace_id: str | None = None,
 ) -> dict[str, Any]:
     """Wrap an unchanged provider trade in the project's raw-event contract."""
-    for name in ("T", "S", "i", "t"):
+    for name in ("T", "S", "i", "x", "t"):
         if name not in payload:
             raise ValueError(f"Missing routing field: {name}")
 
@@ -25,6 +25,7 @@ def build_market_envelope(
         feed,
         "market.trade.raw",
         payload["S"],
+        payload["x"],
         str(payload["i"]),
         payload["t"],
     ]

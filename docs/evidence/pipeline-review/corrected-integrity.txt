@@ -1,0 +1,13 @@
+수정 후 PostgreSQL 무결성 확인 (2026-09-01)
+
+market_bar_rows: 22260
+duplicate_business_keys: 0
+result_hash: 0e40961df007996bcb812532a4049193
+point_in_time_violations: 0
+same_day_daily_series_observations: 0
+
+해석:
+- event_id에 exchange를 포함해 전체 7,360,804건을 다시 처리한 결과입니다.
+- 기존 결과 hash는 식별키 충돌로 서로 다른 체결 49건을 제외한 결과이므로 폐기합니다.
+- 위 hash는 수정된 집계 결과의 기준값입니다.
+- 기준 입력 118,118건을 다시 Upsert한 뒤에도 행 수와 위 hash가 그대로 유지됐습니다.

@@ -12,7 +12,8 @@
 4. 이번 Kafka·Spark 과제에서는 2026-08-12 CPI 구간의 NVDA 개별 체결 58,036건을 다시 흘려보내 121개 1분봉으로 만들고, Alpaca가 제공한 1분봉과 모두 일치하는지 확인했습니다.
 5. Airflow 과제에서는 같은 121분 구간을 `SPY`, `QQQ`, `SMH`, `NVDA`로 확장해 총 118,118건을 한 DAG에서 처리하고 472개 1분봉을 저장했습니다.
 6. 부하·복구 과제에서는 실제 CPI 발표 55회로 범위를 넓혀 SIP 체결 7,360,804건을 GCP에서 처리하고 22,260개 1분봉을 저장했습니다. PostgreSQL 중단 후 같은 입력으로 복구해 최종 고유키 중복 0건을 확인했습니다.
-7. 전체 흐름 보완에서는 77회·10종목 분석용 수집 코드를 `경제발표 1건 × 종목 1개` Airflow 작업으로 연결하고, FOMC·SPY·TLT 동일 입력 재실행에서 588행·동일 hash·중복 0건을 확인했습니다.
+7. 전체 흐름 점검에서 기존 거래 식별키가 거래소가 다른 체결 49건을 중복으로 오인한 문제를 발견했습니다. 식별키에 거래소를 추가하고 7,360,804건 전체를 다시 처리해 실제 중복 0건과 최종 22,260행을 확인했습니다.
+8. 분석용 수집 코드는 `경제발표 1건 × 종목 1개` Airflow 작업으로 연결했습니다. FOMC 1회 × SPY·TLT를 같은 입력으로 재실행해 588행·동일 hash·중복 0건을 확인했습니다.
 
 검증된 실시간 범위는 **Alpaca IEX WebSocket → Kafka 10건**까지입니다. 58,036건과 PostgreSQL의 121개 1분봉은 실시간 수신 결과가 아니라, 과거 SIP 체결을 Kafka에 다시 넣어 처리한 결과입니다.
 
@@ -21,8 +22,9 @@
 처음 보는 경우 아래 순서로 보면 됩니다.
 
 1. 아래의 아키텍처 그림으로 전체 데이터 흐름을 확인합니다.
-2. [6차시 전체 흐름 점검 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구와 현재 연결 범위를 읽습니다.
-3. [신규 Airflow·alert 실행 증거](docs/evidence/sixth-assignment/README.md)에서 실제 run ID와 재실행 hash를 확인합니다.
+2. [6차시 제출 문서](docs/load-recovery-assignment.md)에서 기준·부하·장애·복구와 Airflow 보완 범위를 읽습니다.
+3. [식별키 점검 문서](docs/pipeline-review-assignment.md)에서 49건 오인 원인과 수정 후 전체 재실행 결과를 확인합니다.
+4. [신규 Airflow·alert 실행 증거](docs/evidence/sixth-assignment/README.md)에서 실제 run ID와 재실행 hash를 확인합니다.
 
 원시 체결을 Kafka·Spark로 재생한 부하 검증 범위는 **CPI 공식 발표 55회 × 4종목**입니다. 분석용 provider bar는 별도 경로로 범위를 넓혀 `CPI 55 + 고용 8 + PCE 9 + FOMC 5 = 77개 발표`와 10종목, 총 770개 발표-종목 구간을 실제 수집·저장했습니다. PostgreSQL에서 해당 발표 시각 범위를 재조회해 1분봉 117,566행, 3분봉 43,184행, 5분봉 26,883행을 확인했습니다.
 
@@ -32,7 +34,7 @@
 
 - BLS의 공식 발표 일정과 ALFRED의 당시 공개값을 당시 시점 기준(point-in-time)으로 보존합니다.
 - Alpaca SIP 시장 데이터를 같은 발표 시각에 맞춰 수집합니다.
-- Kafka와 Spark를 통해 원시 거래의 전달·검증·중복 제거·1분 집계를 재현합니다.
+- Kafka와 Spark를 통해 원시 거래의 전달·검증·결정적 식별·1분 집계를 재현합니다.
 - PostgreSQL에 경제 이벤트, 시장 데이터와 분석 결과를 같은 입력으로 다시 실행해도 중복되지 않게 저장합니다.
 - 관측 결과는 인과관계나 주문 신호로 단정하지 않고 후속 백테스트 입력으로 제공합니다.
 
@@ -92,7 +94,7 @@ Spark batch
 PostgreSQL market_bars
 ```
 
-같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증·중복 제거·1분 집계합니다.
+같은 CPI 발표 구간의 SIP 원시 체결 전체를 Kafka·Spark로 재생합니다. 이미 만들어진 1분봉을 Kafka에 넣는 것이 아니라, Spark가 원시 체결을 직접 검증하고 `source·feed·종목·거래소·거래 ID·시각`으로 동일 체결을 판별한 뒤 1분 집계합니다.
 
 현재 `market_sip_replay_pipeline` Airflow DAG는 `tickers`, `start`, `end`, `feed`를 입력받습니다. `tickers` 목록의 각 종목에는 Dynamic Task Mapping으로 독립된 수집 → Kafka 검증 → Spark 집계 → PostgreSQL 검증 작업이 만들어집니다. 따라서 네 종목을 한 번의 DAG 실행으로 처리하면서도 종목별 실패 지점과 재실행 범위를 구분할 수 있습니다.
 
@@ -177,11 +179,13 @@ Historical SIP 1분봉 5,320행은 **여러 발표일과 4개 종목을 합한, 
 | --- | ---: | ---: |
 | 원시 체결 | 118,118 | 7,360,804 |
 | Kafka 발행·수신·Spark 입력 | 모두 118,118 | 모두 7,360,804 |
-| Spark 원본 중복 탐지 | 0 | 49 |
+| Spark 실제 중복(수정 후 전체 재실행) | 0 | 0 |
 | PostgreSQL 1분봉 | 472 | 22,260 |
 | DB 고유키 중복 | 0 | 0 |
 
-GCP PostgreSQL을 중지한 실행은 `failed`로 기록됐고 저장 행은 0건이었습니다. DB 복구 후 같은 입력을 Upsert해 전체 22,260행과 고유키 중복 0건이 유지됐습니다. 상세 수치와 캡처는 [5차시 부하·장애·복구 과제 문서](docs/load-recovery-assignment.md)에 있습니다.
+GCP PostgreSQL을 중지한 실행은 `failed`로 기록됐고 저장 행은 0건이었습니다. DB 복구 후 같은 입력을 Upsert해 전체 22,260행과 고유키 중복 0건이 유지됐습니다.
+
+5차시 GCP 실행 당시에는 거래소 코드가 `event_id`에 없어 서로 다른 체결 49건을 중복으로 잘못 분류했습니다. 6차시 점검에서 거래소 코드를 추가하고 전체 7,360,804건을 다시 처리한 결과 실제 중복은 0건이었습니다. GCP의 시간·부하 기록은 당시 실행 증거로 유지하되, 현재 정확성 기준은 [6차시 전체 흐름 점검 문서](docs/pipeline-review-assignment.md)의 수정 후 결과입니다.
 
 각 원시 replay 구간은 121개의 예상 1분 구간이지만, 한 분의 모든 체결이 Odd Lot이면 OHLC·VWAP 가격을 만들 수 없어 완성된 `market_bars` 행을 생성하지 않습니다. 원시 체결은 Parquet과 Kafka 처리 건수에 남아 있습니다. 분석용 1분봉은 그대로 유지하면서 3분봉과 5분봉을 실제 생성했으며, 없는 분을 채우지 않고 각 파생봉에 `COMPLETE` 또는 `PARTIAL` coverage를 저장했습니다.
 
@@ -302,6 +306,8 @@ README는 프로젝트 전체 구조와 실행 진입점만 설명합니다. 회
 - [6차시 부하·복구 보완 및 전체 흐름 점검](docs/load-recovery-assignment.md)
 - [GCP 부하·복구 실제 실행 증거](docs/evidence/load-recovery/README.md)
 - [Airflow event-symbol·alert·멱등성 실제 증거](docs/evidence/sixth-assignment/README.md)
+- [식별키 수정 및 전체 재실행 점검](docs/pipeline-review-assignment.md)
+- [식별키 수정 후 전체 재실행 증거](docs/evidence/pipeline-review/README.md)
 - [CPI 구간 Kafka·Spark 실행 결과](docs/test-results/2026-08-24-cpi-kafka-spark.md)
 - [재현 명령과 PostgreSQL 검증 SQL 안내](docs/evidence/cpi-kafka-spark/README.md)
 - [과제 제출 체크리스트](docs/submission-checklist.md)

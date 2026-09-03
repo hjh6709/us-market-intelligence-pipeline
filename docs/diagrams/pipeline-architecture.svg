@@ -14,7 +14,7 @@
 
   <rect x="36" y="125" width="1528" height="265" rx="18" class="lane"/>
   <text x="58" y="160" class="section">현재 구현 A · 원시 체결 전달·집계 검증</text>
-  <text x="58" y="185" class="copy">CPI 55회 × 4종목 · GCP 부하 실행</text>
+  <text x="58" y="185" class="copy">CPI 55회 × 4종목 · GCP 부하 기록 + 식별키 수정 후 전체 재실행</text>
   <rect x="58" y="215" width="250" height="125" rx="14" class="source"/>
   <text x="183" y="247" text-anchor="middle" class="box-title">Alpaca SIP trades</text><text x="183" y="275" text-anchor="middle" class="copy">실제 개별 체결</text><text x="183" y="306" text-anchor="middle" class="metric">7,360,804건</text>
   <rect x="348" y="215" width="235" height="125" rx="14" class="raw"/>
@@ -22,7 +22,7 @@
   <rect x="623" y="215" width="235" height="125" rx="14" class="process"/>
   <text x="741" y="247" text-anchor="middle" class="box-title">Kafka</text><text x="741" y="275" text-anchor="middle" class="copy">raw.market-sip.v1</text><text x="741" y="306" text-anchor="middle" class="metric">발행 = 수신</text>
   <rect x="898" y="215" width="270" height="125" rx="14" class="process"/>
-  <text x="1033" y="247" text-anchor="middle" class="box-title">Spark Batch / Streaming</text><text x="1033" y="275" text-anchor="middle" class="copy">검증·중복·SIP 조건·1분 집계</text><text x="1033" y="306" text-anchor="middle" class="metric">원본 중복 49 제거</text>
+  <text x="1033" y="247" text-anchor="middle" class="box-title">Spark Batch / Streaming</text><text x="1033" y="275" text-anchor="middle" class="copy">검증·exchange 포함 event_id·1분 집계</text><text x="1033" y="306" text-anchor="middle" class="metric">수정 후 실제 중복 0</text>
   <rect x="1208" y="215" width="315" height="125" rx="14" class="store"/>
   <text x="1366" y="247" text-anchor="middle" class="box-title">PostgreSQL market_bars</text><text x="1366" y="275" text-anchor="middle" class="copy">business key Upsert</text><text x="1366" y="306" text-anchor="middle" class="metric">1분봉 22,260 · 중복 0</text>
   <path d="M308 278 H348" class="flow"/><path d="M583 278 H623" class="flow"/><path d="M858 278 H898" class="flow"/><path d="M1168 278 H1208" class="flow"/>
