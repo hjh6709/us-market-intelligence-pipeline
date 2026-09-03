@@ -52,6 +52,16 @@ class MacroMigrationTest(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS macro_event_contexts", migration)
         self.assertIn("PRIMARY KEY (economic_event_id, series_id)", migration)
 
+    def test_pipeline_run_migration_tracks_alert_state(self) -> None:
+        migration = Path("db/migrations/006_pipeline_runs.sql").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("pipeline_runs", migration)
+        self.assertIn("pipeline_work_items", migration)
+        self.assertIn("pipeline_run_checks", migration)
+        self.assertIn("'NONE','OPEN','RESOLVED'", migration.replace(" ", ""))
+
 
 if __name__ == "__main__":
     unittest.main()
