@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 
 
 POOLS = {
@@ -17,6 +18,8 @@ def main() -> int:
     for name, slots in POOLS.items():
         subprocess.run(
             [
+                sys.executable,
+                "-m",
                 "airflow",
                 "pools",
                 "set",

@@ -1,0 +1,16 @@
+{
+  "pipeline_run_id": "alert-drill-0ab76a02d86b",
+  "work_item": {
+    "economic_event_id": "FOMC|2026-07|2026-07-29T18:00:00Z",
+    "symbol": "SPY",
+    "stage": "ALERT_DRILL"
+  },
+  "work_status": "SUCCEEDED",
+  "attempt_count": 2,
+  "error_code": null,
+  "check_status": "PASS",
+  "alert_status": "RESOLVED",
+  "stored_rows": 1,
+  "business_key_duplicates": 0,
+  "data_label": "committed synthetic fixture; no external API request"
+}

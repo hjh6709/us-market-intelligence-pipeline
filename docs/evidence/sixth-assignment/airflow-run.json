@@ -1,0 +1,48 @@
+{
+  "executed_at": "2026-09-03T03:19:42Z",
+  "dag_id": "market_context_backfill_pipeline",
+  "config": {
+    "event_types": ["FOMC"],
+    "release_from": "2026-07-29",
+    "release_to": "2026-07-29",
+    "symbols": ["SPY", "TLT"],
+    "feed": "sip",
+    "data_cutoff": "2026-09-03T00:00:00Z"
+  },
+  "runs": [
+    {
+      "pipeline_run_id": "manual__2026-09-03T03:17:23.958595+00:00",
+      "status": "SUCCEEDED",
+      "selected_work_items": 2,
+      "accepted_work_items": 2,
+      "open_alerts": 0
+    },
+    {
+      "pipeline_run_id": "manual__2026-09-03T03:19:36.605225+00:00",
+      "status": "SUCCEEDED",
+      "selected_work_items": 2,
+      "accepted_work_items": 2,
+      "open_alerts": 0
+    }
+  ],
+  "per_symbol_result": {
+    "session_1m_rows": 181,
+    "derived_3m_rows": 61,
+    "derived_5m_rows": 37,
+    "daily_rows": 15,
+    "coverage_status": "COMPLETE"
+  },
+  "idempotency": {
+    "rows_after_first_run": 588,
+    "hash_after_first_run": "ee58892b2b1c6fab311d773b32722f52",
+    "rows_after_second_run": 588,
+    "hash_after_second_run": "ee58892b2b1c6fab311d773b32722f52",
+    "business_key_duplicates": 0
+  },
+  "notes": [
+    "An initial CLI attempt failed before task execution because Airflow dags_folder pointed to airflow-runtime/dags; the repository dags path was then supplied explicitly.",
+    "A separate successful smoke run preceded the two runs used for the idempotency comparison.",
+    "Both recorded runs used Alpaca Historical Bars API and local PostgreSQL.",
+    "No API key, database URL, or raw price value is included."
+  ]
+}
