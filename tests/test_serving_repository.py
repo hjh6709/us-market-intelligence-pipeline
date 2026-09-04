@@ -54,6 +54,17 @@ class ConnectFactory:
 
 
 class PostgresServingRepositoryTest(unittest.TestCase):
+    def test_list_symbols_uses_canonical_analysis_version(self):
+        connect = ConnectFactory([[["NVDA"], ["SPY"]]])
+        repo = PostgresServingRepository("postgresql://unused", connect=connect)
+
+        symbols = repo.list_symbols("event-1")
+
+        sql, params = connect.connection.executions[-1]
+        self.assertIn("analysis_version = %s", sql)
+        self.assertEqual(params, ("event-1", "multi_event_sip_v1"))
+        self.assertEqual(symbols, ["NVDA", "SPY"])
+
     def test_list_events_uses_bound_parameters_for_filters(self):
         released_at = datetime(2026, 8, 12, 12, 30, tzinfo=timezone.utc)
         connect = ConnectFactory(

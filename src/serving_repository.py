@@ -8,6 +8,7 @@ import psycopg
 
 STRATEGY_NAME = "pre60_momentum_post60"
 STRATEGY_VERSION = "v1"
+ANALYSIS_VERSION = "multi_event_sip_v1"
 ALLOWED_TIMEFRAMES = frozenset({"1m", "3m", "5m"})
 
 
@@ -144,11 +145,11 @@ class PostgresServingRepository:
         sql = """
             SELECT DISTINCT symbol
             FROM macro_event_impacts
-            WHERE economic_event_id = %s
+            WHERE economic_event_id = %s AND analysis_version = %s
             ORDER BY symbol
         """
         with self._connection() as connection, connection.cursor() as cursor:
-            cursor.execute(sql, (event_id,))
+            cursor.execute(sql, (event_id, ANALYSIS_VERSION))
             return [row[0] for row in cursor.fetchall()]
 
     def get_impacts(self, event_id: str, symbol: str) -> list[ImpactRecord]:
@@ -162,7 +163,7 @@ class PostgresServingRepository:
             ORDER BY window_start
         """
         with self._connection() as connection, connection.cursor() as cursor:
-            cursor.execute(sql, (event_id, symbol, "multi_event_sip_v1"))
+            cursor.execute(sql, (event_id, symbol, ANALYSIS_VERSION))
             return [ImpactRecord(*row) for row in cursor.fetchall()]
 
     def get_macro_context(self, event_id: str) -> list[MacroContextRecord]:
