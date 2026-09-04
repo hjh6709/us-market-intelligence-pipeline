@@ -1,8 +1,9 @@
 import unittest
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
-from src.event_strategy_backtest import calculate_strategy_result
+from src.event_strategy_backtest import calculate_and_store, calculate_strategy_result
 
 
 class EventStrategyBacktestTest(unittest.TestCase):
@@ -66,6 +67,24 @@ class EventStrategyBacktestTest(unittest.TestCase):
         self.assertEqual(result.signal, 0)
         self.assertIsNone(result.net_return_pct)
         self.assertEqual(result.coverage_status, "NOT_ELIGIBLE")
+
+    @patch("src.event_strategy_backtest.psycopg.connect")
+    def test_storage_query_filters_selected_event_and_symbol(
+        self, connect: MagicMock
+    ) -> None:
+        connection = connect.return_value.__enter__.return_value
+        connection.execute.return_value.fetchall.return_value = []
+        connection.cursor.return_value.__enter__.return_value = MagicMock()
+
+        result = calculate_and_store(
+            "postgresql://unused", event_ids=["event"], symbols=["NVDA"]
+        )
+
+        sql, params = connection.execute.call_args.args
+        self.assertIn("pre.economic_event_id = ANY", sql)
+        self.assertIn("pre.symbol = ANY", sql)
+        self.assertEqual(params, ("multi_event_sip_v1", ["event"], ["NVDA"]))
+        self.assertEqual(result["rows"], 0)
 
 
 if __name__ == "__main__":

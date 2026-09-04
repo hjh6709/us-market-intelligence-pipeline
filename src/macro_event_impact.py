@@ -224,22 +224,34 @@ def calculate_and_store(
     *,
     event_types: Sequence[str] = DEFAULT_EVENT_TYPES,
     symbols: Sequence[str] = DEFAULT_SYMBOLS,
+    event_ids: Sequence[str] | None = None,
 ) -> tuple[int, int]:
     normalized_event_types = tuple(value.strip().upper() for value in event_types)
-    normalized_symbols = tuple(value.strip().upper() for value in symbols)
-    if not normalized_event_types or not normalized_symbols:
+    requested_symbols = tuple(value.strip().upper() for value in symbols)
+    normalized_event_ids = (
+        tuple(value.strip() for value in event_ids) if event_ids is not None else None
+    )
+    if not normalized_event_types or not requested_symbols:
         raise ValueError("event_types and symbols must not be empty")
-    if "SPY" not in normalized_symbols:
-        raise ValueError("symbols must include SPY as the benchmark")
+    if normalized_event_ids is not None and not normalized_event_ids:
+        raise ValueError("event_ids must not be empty when provided")
+    processing_symbols = tuple(dict.fromkeys(("SPY", *requested_symbols)))
+    event_id_filter = (
+        "AND economic_event_id = ANY(%s)" if normalized_event_ids is not None else ""
+    )
+    event_params: tuple[object, ...] = (list(normalized_event_types),)
+    if normalized_event_ids is not None:
+        event_params += (list(normalized_event_ids),)
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         events = connection.execute(
-            """
+            f"""
             SELECT economic_event_id, released_at
             FROM economic_events
             WHERE event_type = ANY(%s) AND quality_status = 'READY'
+              {event_id_filter}
             ORDER BY released_at
             """,
-            (list(normalized_event_types),),
+            event_params,
         ).fetchall()
         all_metrics = []
         for economic_event_id, released_at in events:
@@ -255,9 +267,9 @@ def calculate_and_store(
                   AND bar_start < %s + INTERVAL '60 minutes'
                 ORDER BY symbol, bar_start
                 """,
-                (list(normalized_symbols), released_at, released_at),
+                (list(processing_symbols), released_at, released_at),
             ).fetchall()
-            bars_by_symbol = {symbol: [] for symbol in normalized_symbols}
+            bars_by_symbol = {symbol: [] for symbol in processing_symbols}
             for symbol, bar_start, open_price, close_price, volume in rows:
                 bars_by_symbol[symbol].append(
                     BarPoint(bar_start, open_price, close_price, volume)
@@ -267,7 +279,7 @@ def calculate_and_store(
                     economic_event_id,
                     released_at,
                     bars_by_symbol,
-                    symbols=normalized_symbols,
+                    symbols=processing_symbols,
                 )
             )
 
@@ -325,7 +337,10 @@ def calculate_and_store(
                     for metric in all_metrics
                 ],
             )
-    return len(events), len(all_metrics)
+    requested_impact_count = sum(
+        metric.symbol in requested_symbols for metric in all_metrics
+    )
+    return len(events), requested_impact_count
 
 
 def _population_stddev(values: Sequence[Decimal]) -> Decimal | None:
