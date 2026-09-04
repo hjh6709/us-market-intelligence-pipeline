@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Macro Pulse — 경제 발표와 시장 반응</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f4f7fb;
+      --muted: #9facbc;
+      --line: rgba(255, 255, 255, .11);
+      --panel: rgba(18, 28, 40, .82);
+      --panel-strong: #152334;
+      --mint: #60e0b0;
+      --blue: #65a9ff;
+      --amber: #ffca70;
+      --red: #ff7d7d;
+      --bg: #07111d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(28, 111, 151, .28), transparent 34rem),
+        radial-gradient(circle at 95% 5%, rgba(42, 122, 96, .2), transparent 30rem),
+        var(--bg);
+      font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .shell { width: min(1440px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 60px; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+    .eyebrow { color: var(--mint); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 8px 0 7px; font-size: clamp(30px, 4vw, 52px); line-height: 1; letter-spacing: -.045em; }
+    .subtitle { color: var(--muted); margin: 0; max-width: 720px; line-height: 1.55; }
+    .stage-pill { padding: 10px 14px; border: 1px solid rgba(255, 202, 112, .35); border-radius: 999px; color: var(--amber); background: rgba(255, 202, 112, .08); font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .controls, .panel { border: 1px solid var(--line); background: var(--panel); box-shadow: 0 20px 60px rgba(0, 0, 0, .22); backdrop-filter: blur(16px); }
+    .controls { display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 14px; padding: 16px; border-radius: 18px; margin-bottom: 18px; }
+    label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    select, button { height: 43px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: #101c2a; font: inherit; padding: 0 12px; }
+    button { align-self: end; padding: 0 20px; color: #04140e; background: var(--mint); border-color: transparent; font-weight: 850; cursor: pointer; }
+    button:disabled { opacity: .45; cursor: wait; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; }
+    .panel { border-radius: 18px; padding: 20px; min-width: 0; }
+    .hero { grid-column: span 12; display: grid; grid-template-columns: 1.25fr repeat(3, 1fr); gap: 12px; }
+    .chart-panel { grid-column: span 8; }
+    .readiness { grid-column: span 4; }
+    .impact-panel { grid-column: span 7; }
+    .macro-panel { grid-column: span 5; }
+    .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    h2 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
+    .metric { padding: 14px; border-radius: 13px; background: rgba(255, 255, 255, .035); border: 1px solid rgba(255, 255, 255, .06); }
+    .metric small { display: block; color: var(--muted); margin-bottom: 8px; }
+    .metric strong { font-size: 20px; letter-spacing: -.025em; }
+    .metric.primary strong { font-size: 26px; }
+    .warning-copy { color: var(--amber); font-size: 12px; font-weight: 700; }
+    .timeframes { display: flex; gap: 7px; }
+    .timeframes button { height: 31px; padding: 0 11px; color: var(--muted); background: transparent; border-color: var(--line); font-size: 12px; }
+    .timeframes button.active { color: #05140f; background: var(--mint); }
+    #price-chart { width: 100%; min-height: 300px; display: block; border-radius: 12px; background: linear-gradient(180deg, rgba(96, 224, 176, .055), transparent); }
+    .chart-note { margin-top: 9px; color: var(--muted); font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { color: var(--muted); font-weight: 650; text-align: left; }
+    th, td { padding: 11px 8px; border-bottom: 1px solid var(--line); }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pass, .fail { display: inline-flex; min-width: 47px; justify-content: center; padding: 4px 7px; border-radius: 999px; font-size: 10px; font-weight: 850; }
+    .pass { color: var(--mint); background: rgba(96, 224, 176, .1); }
+    .fail { color: var(--red); background: rgba(255, 125, 125, .1); }
+    .readiness-head { margin-bottom: 15px; padding: 14px; border-radius: 13px; background: rgba(255, 202, 112, .08); border: 1px solid rgba(255, 202, 112, .2); }
+    .readiness-head strong { color: var(--amber); font-size: 20px; }
+    #readiness-checks { display: grid; gap: 8px; }
+    .check { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+    .reasons { color: var(--muted); font-size: 12px; line-height: 1.5; padding-left: 17px; }
+    .error { display: none; margin-bottom: 16px; padding: 12px 15px; border: 1px solid rgba(255,125,125,.35); border-radius: 12px; color: var(--red); background: rgba(255,125,125,.08); }
+    .empty { fill: var(--muted); font-size: 13px; }
+    @media (max-width: 960px) {
+      .controls { grid-template-columns: 1fr 1fr; }
+      .hero { grid-template-columns: 1fr 1fr; }
+      .chart-panel, .readiness, .impact-panel, .macro-panel { grid-column: span 12; }
+    }
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 22px, 1440px); padding-top: 22px; }
+      header { align-items: flex-start; flex-direction: column; }
+      .controls, .hero { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">U.S. Market Intelligence</div>
+        <h1>Macro Pulse</h1>
+        <p class="subtitle">경제 발표 당시의 시장 반응과 거시 환경을 저장 결과에서 직접 읽습니다. 이 화면은 연구 결과를 설명하며 주문을 전송하지 않습니다.</p>
+      </div>
+      <div class="stage-pill">READ-ONLY · NO BROKER ROUTE</div>
+    </header>
+
+    <section class="controls" aria-label="조회 조건">
+      <label>발표 종류
+        <select id="event-type">
+          <option value="">전체</option><option>CPI</option><option>EMPLOYMENT</option><option>PCE</option><option>FOMC</option>
+        </select>
+      </label>
+      <label>발표일
+        <select id="event-select"><option>불러오는 중…</option></select>
+      </label>
+      <label>종목
+        <select id="symbol-select"><option>—</option></select>
+      </label>
+      <button id="load-button" type="button">저장 결과 조회</button>
+    </section>
+    <div id="error" class="error" role="alert"></div>
+
+    <section class="grid">
+      <article class="panel hero">
+        <div class="metric primary"><small>선택한 발표</small><strong id="event-label">—</strong><div id="event-time" class="chart-note">—</div></div>
+        <div class="metric"><small>연구 신호 — 과거 분석 결과이며 주문이 아닙니다</small><strong id="research-signal">—</strong></div>
+        <div class="metric"><small>과거 시뮬레이션 — 실제 체결 결과가 아닙니다</small><strong id="net-return">—</strong></div>
+        <div class="metric"><small>전체 전략 평균 순수익률</small><strong id="strategy-mean">—</strong><div id="strategy-count" class="chart-note">—</div></div>
+      </article>
+
+      <article class="panel chart-panel">
+        <div class="panel-title">
+          <h2>발표 전 60분 ~ 발표 후 120분 가격</h2>
+          <div class="timeframes" aria-label="봉 선택">
+            <button type="button" data-timeframe="1m" class="active">1분</button>
+            <button type="button" data-timeframe="3m">3분</button>
+            <button type="button" data-timeframe="5m">5분</button>
+          </div>
+        </div>
+        <svg id="price-chart" viewBox="0 0 800 300" role="img" aria-label="선택 종목 가격 차트"></svg>
+        <div id="coverage-note" class="chart-note">실제 거래가 있는 봉만 표시합니다.</div>
+      </article>
+
+      <aside class="panel readiness">
+        <div class="panel-title"><h2>자동매매 준비 상태</h2></div>
+        <div class="readiness-head"><small>현재 운영 단계 / 실제 행동</small><br><strong id="order-action">RESEARCH_ONLY / NO_TRADE</strong></div>
+        <div id="readiness-checks"></div>
+        <ul id="readiness-reasons" class="reasons"></ul>
+      </aside>
+
+      <article class="panel impact-panel">
+        <div class="panel-title"><h2>발표 전후 시장 반응</h2><span class="warning-copy">수익 보장·인과관계 아님</span></div>
+        <div style="overflow:auto"><table>
+          <thead><tr><th>구간</th><th class="num">수익률</th><th class="num">시장 대비</th><th class="num">거래량</th><th>상태</th></tr></thead>
+          <tbody id="impact-body"><tr><td colspan="5">조회 전입니다.</td></tr></tbody>
+        </table></div>
+      </article>
+
+      <article class="panel macro-panel">
+        <div class="panel-title"><h2>발표 당시 알 수 있었던 경제 환경</h2></div>
+        <div style="overflow:auto"><table>
+          <thead><tr><th>지표</th><th>기준일</th><th class="num">값</th></tr></thead>
+          <tbody id="macro-body"><tr><td colspan="3">조회 전입니다.</td></tr></tbody>
+        </table></div>
+      </article>
+    </section>
+  </main>
+  <script>
+    const state = { events: [], timeframe: '1m' };
+    const byId = id => document.getElementById(id);
+    const fmtPct = value => value == null ? '계산 불가' : `${Number(value).toFixed(4)}%`;
+    const fmtNum = value => value == null ? '—' : Number(value).toLocaleString('ko-KR');
+
+    async function getJson(url) {
+      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${response.status}`);
+      }
+      return response.json();
+    }
+
+    function option(value, label) {
+      const node = document.createElement('option');
+      node.value = value; node.textContent = label; return node;
+    }
+
+    async function loadEvents() {
+      const kind = byId('event-type').value;
+      const events = await getJson(`/api/v1/events${kind ? `?event_type=${encodeURIComponent(kind)}` : ''}`);
+      state.events = events;
+      byId('event-select').replaceChildren(...events.map(event => option(event.event_id, `${event.event_type} · ${event.reference_period} · ${new Date(event.released_at).toLocaleDateString('ko-KR')}`)));
+      if (!events.length) byId('event-select').append(option('', '저장된 발표 없음'));
+      await loadSymbols();
+    }
+
+    async function loadSymbols() {
+      const eventId = byId('event-select').value;
+      if (!eventId) return;
+      const symbols = await getJson(`/api/v1/events/${encodeURIComponent(eventId)}/symbols`);
+      byId('symbol-select').replaceChildren(...symbols.map(symbol => option(symbol, symbol)));
+    }
+
+    function drawChart(bars) {
+      const svg = byId('price-chart');
+      svg.replaceChildren();
+      if (!bars.length) {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', '400'); text.setAttribute('y', '150'); text.setAttribute('text-anchor', 'middle'); text.setAttribute('class', 'empty'); text.textContent = '표시할 가격 봉이 없습니다.'; svg.append(text); return;
+      }
+      const values = bars.map(item => Number(item.close));
+      const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
+      const points = values.map((value, index) => `${25 + index * 750 / Math.max(values.length - 1, 1)},${270 - (value - min) * 235 / span}`).join(' ');
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      line.setAttribute('points', points); line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#60e0b0'); line.setAttribute('stroke-width', '3'); line.setAttribute('stroke-linejoin', 'round'); svg.append(line);
+      const partial = bars.filter(item => item.coverage_status === 'PARTIAL').length;
+      byId('coverage-note').textContent = `${bars.length.toLocaleString('ko-KR')}개 ${state.timeframe} 봉 · PARTIAL ${partial.toLocaleString('ko-KR')}개 · 없는 가격은 임의로 채우지 않음`;
+    }
+
+    function renderDetail(detail, summary) {
+      byId('event-label').textContent = `${detail.event.event_type} ${detail.event.reference_period} · ${detail.symbol}`;
+      byId('event-time').textContent = `${new Date(detail.event.released_at).toLocaleString('ko-KR')} · ${detail.event.quality_status || '상태 미기록'}`;
+      byId('research-signal').textContent = detail.research_signal;
+      byId('net-return').textContent = detail.simulation ? fmtPct(detail.simulation.net_return_pct) : '계산 불가';
+      byId('strategy-mean').textContent = fmtPct(summary.mean_net_return_pct);
+      byId('strategy-count').textContent = `계산 가능 ${fmtNum(summary.eligible_count)} / 전체 ${fmtNum(summary.total_count)}`;
+      const readiness = detail.execution_readiness;
+      byId('order-action').textContent = `${readiness.stage} / ${readiness.order_action}`;
+      byId('readiness-checks').replaceChildren(...readiness.checks.map(item => {
+        const row = document.createElement('div'); row.className = 'check';
+        const name = document.createElement('span'); name.textContent = item.name;
+        const status = document.createElement('span'); status.className = item.status.toLowerCase(); status.textContent = item.status;
+        row.append(name, status); return row;
+      }));
+      byId('readiness-reasons').replaceChildren(...readiness.reasons.map(reason => { const li = document.createElement('li'); li.textContent = reason; return li; }));
+      byId('impact-body').replaceChildren(...detail.impacts.map(item => {
+        const row = document.createElement('tr');
+        [item.window_name, fmtPct(item.return_pct), fmtPct(item.excess_return_pct), fmtNum(item.volume), item.coverage_status].forEach((value, index) => { const cell = document.createElement('td'); cell.textContent = value; if ([1,2,3].includes(index)) cell.className = 'num'; row.append(cell); }); return row;
+      }));
+      byId('macro-body').replaceChildren(...detail.macro_context.map(item => {
+        const row = document.createElement('tr');
+        [item.series_name || item.series_id, item.observation_date, fmtNum(item.value)].forEach((value, index) => { const cell = document.createElement('td'); cell.textContent = value; if (index === 2) cell.className = 'num'; row.append(cell); }); return row;
+      }));
+    }
+
+    async function loadResult() {
+      const eventId = byId('event-select').value, symbol = byId('symbol-select').value;
+      if (!eventId || !symbol) return;
+      byId('load-button').disabled = true; byId('error').style.display = 'none';
+      try {
+        const base = `/api/v1/events/${encodeURIComponent(eventId)}/symbols/${encodeURIComponent(symbol)}`;
+        const [detail, bars, summary] = await Promise.all([getJson(base), getJson(`${base}/bars?timeframe=${state.timeframe}`), getJson('/api/v1/strategy/summary')]);
+        renderDetail(detail, summary); drawChart(bars);
+      } catch (error) {
+        byId('error').textContent = `조회 실패: ${error.message}`; byId('error').style.display = 'block';
+      } finally { byId('load-button').disabled = false; }
+    }
+
+    byId('event-type').addEventListener('change', () => loadEvents().then(loadResult).catch(showStartupError));
+    byId('event-select').addEventListener('change', () => loadSymbols().then(loadResult).catch(showStartupError));
+    byId('load-button').addEventListener('click', loadResult);
+    document.querySelectorAll('[data-timeframe]').forEach(button => button.addEventListener('click', () => {
+      state.timeframe = button.dataset.timeframe;
+      document.querySelectorAll('[data-timeframe]').forEach(node => node.classList.toggle('active', node === button));
+      loadResult();
+    }));
+    function showStartupError(error) { byId('error').textContent = `초기화 실패: ${error.message}`; byId('error').style.display = 'block'; }
+    loadEvents().then(loadResult).catch(showStartupError);
+  </script>
+</body>
+</html>

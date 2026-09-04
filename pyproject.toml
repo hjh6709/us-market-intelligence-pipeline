@@ -25,3 +25,6 @@ airflow = [
 
 [tool.setuptools]
 packages = ["src"]
+
+[tool.setuptools.package-data]
+src = ["templates/*.html"]
