@@ -4,7 +4,7 @@
 
 이번 구현의 목표는 새 전략을 추가하는 것이 아니라, 이미 PostgreSQL에 저장한 경제 발표·시장 반응·탐색 전략 결과를 실제 사용자가 조회하는 장면까지 연결하는 것이다.
 
-최종 프로젝트 목표는 실전 자동매매이지만, 현재 탐색 전략은 과거 평균 순수익률이 음수이고 발표별 전망치·실제값 차이도 아직 없으므로 이번 단계에서 주문을 전송하지 않는다. 이번 서빙 결과는 향후 주문 엔진이 사용할 수 있는 동일한 판단 계약을 제공하되, 현재 최종 행동은 안전하게 `NO_TRADE`로 제한한다.
+최종 프로젝트 목표는 실전 자동매매이지만, 현재 탐색 전략은 과거 평균 순수익률이 음수이고 발표별 전망치·실제값 차이도 아직 없으므로 이번 단계에서 주문을 전송하지 않는다. 이번 화면은 단순히 `NO_TRADE`만 보여주는 조회 화면이 아니라, 실제 데이터 결과·과거 전략 시뮬레이션·자동매매 준비 상태를 분리해 보여준다. 서빙 결과는 향후 주문 엔진이 사용할 수 있는 동일한 판단 계약을 제공하되, 현재 운영 단계는 `RESEARCH_ONLY`, 주문 행동은 `NO_TRADE`로 제한한다.
 
 ## 2. 사용자에게 보여줄 결과
 
@@ -14,9 +14,11 @@
 - 선택 종목의 발표 전 60분과 발표 후 5분·30분·60분 수익률
 - 각 구간의 거래량, 변동성, 시장 대비 수익률과 커버리지 상태
 - 발표 시점에 이용 가능했던 FRED·ALFRED 경제 환경
-- 탐색 전략의 신호, 진입·청산 가격, 거래비용 차감 전후 결과와 커버리지
+- 탐색 전략의 신호와 커버리지
 - 전체 탐색 전략의 성과 요약
-- 위험 검사 결과, 최종 행동과 사람이 이해할 수 있는 차단 사유
+- 과거 가상 진입·청산 가격과 거래비용 차감 결과
+- 데이터·전략·주문·복구 준비 상태별 통과 여부
+- 현재 운영 단계, 주문 행동과 사람이 이해할 수 있는 차단 사유
 
 1분·3분·5분봉은 서로 다른 원본처럼 합산하지 않는다. 차트는 PostgreSQL의 `market_bars`를 시간봉별로 조회하며, 파생 봉의 `COMPLETE`·`PARTIAL` 상태를 함께 보여준다.
 
@@ -31,9 +33,10 @@ FastAPI 애플리케이션이 JSON API와 한 장짜리 HTML 대시보드를 함
 3. 발표 전후 수익률·거래량·변동성 표
 4. 1분·3분·5분 가격 차트
 5. 당시 경제 환경 표
-6. 탐색 전략 결과와 안전 판단 카드
+6. 탐색 전략의 과거 시뮬레이션 카드
+7. 자동매매 준비 상태와 주문 행동 카드
 
-화면은 투자 추천 서비스처럼 수익을 약속하지 않는다. `연구 신호`와 `실제 주문 행동`을 시각적으로 분리하고, 현재 행동이 `NO_TRADE`인 이유를 항상 표시한다.
+화면은 투자 추천 서비스처럼 수익을 약속하지 않는다. `연구 신호`, `과거 시뮬레이션`, `실제 주문 행동`을 시각적으로 분리하고, 현재 운영 단계와 행동이 `RESEARCH_ONLY`·`NO_TRADE`인 이유를 항상 표시한다.
 
 ## 4. API 계약
 
@@ -52,18 +55,37 @@ FastAPI 애플리케이션이 JSON API와 한 장짜리 HTML 대시보드를 함
 ```json
 {
   "research_signal": "LONG",
-  "decision": "NO_TRADE",
-  "eligible_for_order": false,
-  "requires_human_approval": false,
-  "reasons": [
-    "exploratory strategy has not passed the performance gate",
-    "consensus-versus-actual surprise is unavailable",
-    "broker execution and position recovery are not implemented"
-  ]
+  "simulation": {
+    "entry_price": "123.450000",
+    "exit_price": "122.800000",
+    "gross_return_pct": "-0.526529",
+    "transaction_cost_bps": "10.0000",
+    "net_return_pct": "-0.626529"
+  },
+  "execution_readiness": {
+    "stage": "RESEARCH_ONLY",
+    "order_action": "NO_TRADE",
+    "eligible_for_order": false,
+    "requires_human_approval": false,
+    "checks": [
+      {"name": "market_data", "status": "PASS"},
+      {"name": "strategy_result", "status": "PASS"},
+      {"name": "strategy_performance", "status": "FAIL"},
+      {"name": "event_surprise", "status": "FAIL"},
+      {"name": "paper_execution", "status": "FAIL"},
+      {"name": "position_recovery", "status": "FAIL"},
+      {"name": "kill_switch", "status": "FAIL"}
+    ],
+    "reasons": [
+      "exploratory strategy has not passed the performance gate",
+      "consensus-versus-actual surprise is unavailable",
+      "broker execution and position recovery are not implemented"
+    ]
+  }
 }
 ```
 
-`research_signal`은 과거 실험에서 계산된 방향일 뿐 주문이 아니다. `decision`만 실제 행동을 나타낸다.
+`research_signal`은 과거 실험에서 계산된 방향일 뿐 주문이 아니다. `simulation`도 해당 과거 구간의 연구 결과다. 실제 행동은 `execution_readiness.order_action`만 나타낸다.
 
 ## 5. 데이터 접근 구조
 
@@ -88,11 +110,11 @@ FastAPI route / HTML dashboard / demo command
 - `event_strategy_results`: 탐색 전략 결과
 - `pipeline_runs`, `pipeline_work_items`, `pipeline_run_checks`: 실행과 품질 상태
 
-`ServingService`는 숫자를 직렬화 가능한 응답으로 조합하고 안전 판단을 계산한다. API와 발표용 실행 명령은 같은 서비스 함수를 사용해 서로 다른 결과가 나오지 않게 한다.
+`ServingService`는 숫자를 직렬화 가능한 응답으로 조합하고 과거 시뮬레이션과 자동매매 준비 상태를 계산한다. API와 발표용 실행 명령은 같은 서비스 함수를 사용해 서로 다른 결과가 나오지 않게 한다.
 
 ## 6. 안전 판단 규칙
 
-이번 버전의 판단은 수익을 예측하는 새 전략이 아니라 현재 자동매매 준비 상태를 점검하는 위험 게이트다.
+이번 버전의 판단은 수익을 예측하는 새 전략이 아니라 현재 자동매매 준비 상태를 점검하는 위험 게이트다. 준비 상태는 각 검사를 `PASS` 또는 `FAIL`로 보여주며, 전체 운영 단계를 별도로 표시한다.
 
 다음 조건을 모두 만족하지 못하면 `NO_TRADE`를 반환한다.
 
@@ -102,7 +124,9 @@ FastAPI route / HTML dashboard / demo command
 - 해당 발표의 전망치·실제값과 surprise가 준비될 것
 - 주문, 체결 추적, 포지션 복구와 긴급 중지 기능이 구현·활성화될 것
 
-현재 저장 상태에서는 마지막 세 조건을 만족하지 않으므로 모든 결과가 `NO_TRADE`다. 이는 하드코딩된 문구가 아니라 준비 상태를 명시적으로 검사한 결과로 표현한다.
+현재 저장 상태에서는 마지막 세 조건을 만족하지 않으므로 운영 단계는 `RESEARCH_ONLY`, 주문 행동은 `NO_TRADE`다. 이는 하드코딩된 문구가 아니라 준비 상태를 명시적으로 검사한 결과로 표현한다.
+
+운영 단계는 향후 `RESEARCH_ONLY` → `PAPER_TRADING` → `HUMAN_APPROVAL` → `LIMITED_LIVE` → `AUTOMATED_LIVE` 순서로만 승격한다. 이번 구현은 다음 단계의 이름과 응답 계약만 정의하며 승격 기능은 제공하지 않는다.
 
 LLM은 주문 방향이나 수량을 결정하지 않는다. 설명 문구도 데이터베이스에 저장된 수치와 결정 규칙에서 생성한다.
 
@@ -126,7 +150,8 @@ LLM은 주문 방향이나 수량을 결정하지 않는다. 설명 문구도 �
 
 - 저장소 계층의 SQL 결과 매핑 테스트
 - 존재하지 않는 발표·종목·봉에 대한 404 및 입력 검증 테스트
-- 전략 신호와 주문 판단이 분리되는지 확인하는 안전 규칙 테스트
+- 전략 신호·과거 시뮬레이션·주문 판단이 분리되는지 확인하는 안전 규칙 테스트
+- 준비 상태의 각 검사가 `PASS`·`FAIL`로 노출되는지 확인하는 테스트
 - 현재 조건에서 주문 가능 결과가 절대 나오지 않는지 확인하는 테스트
 - API 응답 스키마와 대시보드 기본 렌더링 테스트
 - 동일 입력을 두 번 실행했을 때 최종 행 수가 증가하지 않는 통합 테스트
@@ -145,7 +170,7 @@ LLM은 주문 방향이나 수량을 결정하지 않는다. 설명 문구도 �
 
 발표에서는 다음을 명확히 구분한다.
 
-- 실제 구현: 저장 결과 조회, 상세 API, 대시보드, 안전 판단, 한 번의 재현 실행
+- 실제 구현: 저장 결과 조회, 상세 API, 대시보드, 과거 시뮬레이션, 자동매매 준비 상태, 한 번의 재현 실행
 - 과거 실행 증거: Kafka·Spark 부하, 장애·복구, Airflow 전체 실행
 - 다음 단계: Slack 승인, Alpaca 모의주문, 주문·부분 체결·포지션 복구, 실전 자동매매
 
@@ -168,13 +193,15 @@ LLM은 주문 방향이나 수량을 결정하지 않는다. 설명 문구도 �
 서빙 계층 이후에는 동일한 판단 계약을 확장한다.
 
 ```text
-NO_TRADE
+RESEARCH_ONLY / NO_TRADE
   ↓ 전략·데이터 승인
-PAPER_TRADE
+PAPER_TRADING
   ↓ 모의주문·체결·복구 검증
-APPROVAL_REQUIRED
+HUMAN_APPROVAL
   ↓ Slack 사람 승인과 소액 제한
-LIVE_TRADE
+LIMITED_LIVE
+  ↓ 운영 안정성 검증
+AUTOMATED_LIVE
 ```
 
 주문 엔진은 전략 엔진과 분리하고 증권사별 어댑터를 둔다. 실전 전환 전에는 최대 주문 금액, 최대 보유 종목, 일일 손실 한도, 중복 주문 방지, 거래 시간 확인, 긴급 중지, 주문 접수·부분 체결·완전 체결 상태, 재시작 후 계좌 대사를 검증한다.
