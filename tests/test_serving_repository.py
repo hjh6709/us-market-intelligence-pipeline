@@ -100,10 +100,13 @@ class PostgresServingRepositoryTest(unittest.TestCase):
 
         bars = repo.get_bars("event-1", "NVDA", "1m")
 
-        _sql, params = connect.connection.executions[-1]
+        sql, params = connect.connection.executions[-1]
+        self.assertIn("source = %s", sql)
+        self.assertIn("feed = %s", sql)
         self.assertEqual(params[0:2], ("NVDA", "1m"))
-        self.assertEqual(params[2], released_at.replace(hour=11, minute=30))
-        self.assertEqual(params[3], released_at.replace(hour=14, minute=30))
+        self.assertEqual(params[2:4], ("alpaca", "sip"))
+        self.assertEqual(params[4], released_at.replace(hour=11, minute=30))
+        self.assertEqual(params[5], released_at.replace(hour=14, minute=30))
         self.assertEqual(bars[0].close, Decimal("180.5"))
 
         with self.assertRaises(ValueError):

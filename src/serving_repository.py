@@ -227,9 +227,10 @@ class PostgresServingRepository:
                        volume, source_bar_count, expected_bar_count, coverage_status
                 FROM market_bars
                 WHERE symbol = %s AND timeframe = %s
+                  AND source = %s AND feed = %s
                   AND bar_start >= %s AND bar_start < %s
-                ORDER BY bar_start, source, feed
+                ORDER BY bar_start
                 """,
-                (symbol, timeframe, start, end),
+                (symbol, timeframe, "alpaca", "sip", start, end),
             )
             return [BarRecord(*row) for row in cursor.fetchall()]
