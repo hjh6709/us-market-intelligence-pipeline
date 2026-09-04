@@ -1,0 +1,93 @@
+{
+  "event": {
+    "event_id": "CPI|2026-07|2026-08-12T12:30:00Z",
+    "event_type": "CPI",
+    "reference_period": "2026-07",
+    "released_at": "2026-08-12T12:30:00Z",
+    "source": "bls",
+    "quality_status": "READY"
+  },
+  "symbol": "NVDA",
+  "impacts": [
+    {
+      "window_name": "PRE_60M",
+      "return_pct": "0.23606419",
+      "market_return_pct": "0.17859895",
+      "excess_return_pct": "0.05746524",
+      "volume": "381064",
+      "realized_volatility": "0.03379999",
+      "coverage_status": "COMPLETE"
+    },
+    {
+      "window_name": "POST_5M",
+      "return_pct": "0.09555010",
+      "market_return_pct": "-0.01292825",
+      "excess_return_pct": "0.10847834",
+      "volume": "262991",
+      "realized_volatility": "0.12766314",
+      "coverage_status": "COMPLETE"
+    },
+    {
+      "window_name": "POST_30M",
+      "return_pct": "0.40495040",
+      "market_return_pct": "0.06464124",
+      "excess_return_pct": "0.34030916",
+      "volume": "980564",
+      "realized_volatility": "0.07882028",
+      "coverage_status": "COMPLETE"
+    },
+    {
+      "window_name": "POST_60M",
+      "return_pct": "0.57785058",
+      "market_return_pct": "0.15513898",
+      "excess_return_pct": "0.42271160",
+      "volume": "1731595",
+      "realized_volatility": "0.07821679",
+      "coverage_status": "COMPLETE"
+    }
+  ],
+  "macro_context": [
+    {"series_id": "CPIAUCSL", "series_name": "Consumer Price Index", "observation_date": "2026-07-01", "value": "332.813", "vintage_date": "2026-08-12"},
+    {"series_id": "CPILFESL", "series_name": "Core Consumer Price Index", "observation_date": "2026-07-01", "value": "336.789", "vintage_date": "2026-08-12"},
+    {"series_id": "DFF", "series_name": "Effective Federal Funds Rate", "observation_date": "2026-08-11", "value": "3.63", "vintage_date": "2026-08-12"},
+    {"series_id": "DGS10", "series_name": "10-Year Treasury Constant Maturity Rate", "observation_date": "2026-08-11", "value": "4.7", "vintage_date": "2026-08-12"},
+    {"series_id": "DGS2", "series_name": "2-Year Treasury Constant Maturity Rate", "observation_date": "2026-08-11", "value": "4.22", "vintage_date": "2026-08-12"},
+    {"series_id": "PAYEMS", "series_name": "All Employees, Total Nonfarm", "observation_date": "2026-07-01", "value": "158858", "vintage_date": "2026-08-12"},
+    {"series_id": "PCEPI", "series_name": "Personal Consumption Expenditures Price Index", "observation_date": "2026-06-01", "value": "131.392", "vintage_date": "2026-08-12"},
+    {"series_id": "PCEPILFE", "series_name": "Core PCE Price Index", "observation_date": "2026-06-01", "value": "130.266", "vintage_date": "2026-08-12"},
+    {"series_id": "UNRATE", "series_name": "Unemployment Rate", "observation_date": "2026-07-01", "value": "4.1", "vintage_date": "2026-08-12"},
+    {"series_id": "VIXCLS", "series_name": "CBOE Volatility Index", "observation_date": "2026-08-11", "value": "15.28", "vintage_date": "2026-08-12"}
+  ],
+  "research_signal": "LONG",
+  "simulation": {
+    "entry_price": "219.780000",
+    "exit_price": "221.050000",
+    "gross_return_pct": "0.57785058",
+    "transaction_cost_bps": "10.0000",
+    "net_return_pct": "0.47785058",
+    "coverage_status": "COMPLETE"
+  },
+  "execution_readiness": {
+    "stage": "RESEARCH_ONLY",
+    "order_action": "NO_TRADE",
+    "eligible_for_order": false,
+    "requires_human_approval": false,
+    "checks": [
+      {"name": "market_data", "status": "PASS", "reason": null},
+      {"name": "strategy_result", "status": "PASS", "reason": null},
+      {"name": "strategy_performance", "status": "FAIL", "reason": "exploratory strategy has not passed the strategy performance gate"},
+      {"name": "event_surprise", "status": "FAIL", "reason": "consensus-versus-actual event surprise is unavailable"},
+      {"name": "paper_execution", "status": "FAIL", "reason": "paper execution is not implemented and verified"},
+      {"name": "position_recovery", "status": "FAIL", "reason": "position recovery is not implemented and verified"},
+      {"name": "kill_switch", "status": "FAIL", "reason": "kill switch is not implemented and verified"}
+    ],
+    "reasons": [
+      "exploratory strategy has not passed the strategy performance gate",
+      "consensus-versus-actual event surprise is unavailable",
+      "paper execution is not implemented and verified",
+      "position recovery is not implemented and verified",
+      "kill switch is not implemented and verified",
+      "release-level execution lock keeps this service research-only"
+    ]
+  }
+}

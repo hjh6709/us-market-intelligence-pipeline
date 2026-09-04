@@ -1,10 +1,12 @@
 import unittest
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 from src.macro_event_impact import (
     BarPoint,
     calculate_event_impacts,
+    calculate_and_store,
     calculate_metric,
 )
 
@@ -96,6 +98,32 @@ class MacroEventImpactTest(unittest.TestCase):
         self.assertIsNone(post_metric.return_pct)
         self.assertIsNone(post_metric.open_price)
         self.assertEqual(post_metric.coverage_status, "MISSING_PRE_RELEASE_BASELINE")
+
+    @patch("src.macro_event_impact.psycopg.connect")
+    def test_analysis_queries_are_filtered_to_selected_event_and_symbol(
+        self, connect: MagicMock
+    ) -> None:
+        connection = connect.return_value.__enter__.return_value
+        connection.execute.side_effect = [
+            MagicMock(fetchall=MagicMock(return_value=[("event", self.released_at)])),
+            MagicMock(fetchall=MagicMock(return_value=[])),
+        ]
+        connection.cursor.return_value.__enter__.return_value = MagicMock()
+
+        event_count, requested_impact_count = calculate_and_store(
+            "postgresql://unused",
+            event_ids=["event"],
+            symbols=["NVDA"],
+        )
+
+        event_sql, event_params = connection.execute.call_args_list[0].args
+        bars_sql, bars_params = connection.execute.call_args_list[1].args
+        self.assertIn("economic_event_id = ANY", event_sql)
+        self.assertEqual(event_params[-1], ["event"])
+        self.assertIn("symbol = ANY", bars_sql)
+        self.assertEqual(set(bars_params[0]), {"SPY", "NVDA"})
+        self.assertEqual(event_count, 1)
+        self.assertEqual(requested_impact_count, 4)
 
 
 if __name__ == "__main__":

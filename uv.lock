@@ -663,9 +663,12 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "confluent-kafka" },
+    { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyarrow" },
     { name = "pyspark" },
+    { name = "uvicorn" },
     { name = "websockets" },
 ]
 
@@ -678,9 +681,12 @@ airflow = [
 requires-dist = [
     { name = "apache-airflow", marker = "extra == 'airflow'", specifier = "==3.3.0" },
     { name = "confluent-kafka", specifier = ">=2.15,<3" },
+    { name = "fastapi", specifier = ">=0.115,<1" },
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pyarrow", specifier = ">=21,<22" },
     { name = "pyspark", specifier = "==4.2.0" },
+    { name = "uvicorn", specifier = ">=0.34,<1" },
     { name = "websockets", specifier = ">=15,<16" },
 ]
 provides-extras = ["airflow"]

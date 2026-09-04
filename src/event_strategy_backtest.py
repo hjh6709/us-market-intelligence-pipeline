@@ -112,10 +112,31 @@ def calculate_and_store(
     database_url: str,
     *,
     transaction_cost_bps: Decimal = DEFAULT_TRANSACTION_COST_BPS,
+    event_ids: Sequence[str] | None = None,
+    symbols: Sequence[str] | None = None,
 ) -> dict[str, object]:
+    normalized_event_ids = (
+        tuple(value.strip() for value in event_ids) if event_ids is not None else None
+    )
+    normalized_symbols = (
+        tuple(value.strip().upper() for value in symbols) if symbols is not None else None
+    )
+    if normalized_event_ids is not None and not normalized_event_ids:
+        raise ValueError("event_ids must not be empty when provided")
+    if normalized_symbols is not None and not normalized_symbols:
+        raise ValueError("symbols must not be empty when provided")
+    filters = []
+    params: list[object] = [ANALYSIS_VERSION]
+    if normalized_event_ids is not None:
+        filters.append("AND pre.economic_event_id = ANY(%s)")
+        params.append(list(normalized_event_ids))
+    if normalized_symbols is not None:
+        filters.append("AND pre.symbol = ANY(%s)")
+        params.append(list(normalized_symbols))
+    selected_filters = "\n              ".join(filters)
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT
                 pre.economic_event_id,
                 pre.symbol,
@@ -136,9 +157,10 @@ def calculate_and_store(
             WHERE pre.analysis_version = %s
               AND pre.window_name = 'PRE_60M'
               AND post.window_name = 'POST_60M'
+              {selected_filters}
             ORDER BY pre.economic_event_id, pre.symbol
             """,
-            (ANALYSIS_VERSION,),
+            tuple(params),
         ).fetchall()
         results = [
             calculate_strategy_result(

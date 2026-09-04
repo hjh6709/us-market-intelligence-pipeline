@@ -14,6 +14,32 @@ from scripts.evidence.export_actual_market_bars import (
 
 
 class AssignmentDocumentationTest(unittest.TestCase):
+    def test_seventh_assignment_documents_actual_serving_and_boundaries(self) -> None:
+        assignment = Path("docs/serving-layer-assignment.md").read_text(
+            encoding="utf-8"
+        )
+        script = Path("docs/09.07_대본.md").read_text(encoding="utf-8")
+        readme = Path("README.md").read_text(encoding="utf-8")
+        diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(
+            encoding="utf-8"
+        )
+
+        for phrase in (
+            "입력 → 처리 → 저장 → 읽기",
+            "RESEARCH_ONLY",
+            "NO_TRADE",
+            "모의주문",
+            "실전 자동매매",
+            "0.30초",
+            "180개",
+        ):
+            self.assertIn(phrase, assignment)
+        self.assertIn("docs/serving-layer-assignment.md", readme)
+        self.assertIn("Serving API · Dashboard", diagram)
+        self.assertIn("향후 주문 계층", diagram)
+        self.assertIn("RESEARCH_ONLY / NO_TRADE", script)
+        self.assertNotIn("\nㅋ\n", script)
+
     def test_sixth_assignment_separates_executed_paths_and_remaining_work(self) -> None:
         assignment = Path("docs/load-recovery-assignment.md").read_text(
             encoding="utf-8"

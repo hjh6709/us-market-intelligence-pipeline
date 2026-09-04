@@ -1,17 +1,18 @@
 # U.S. Economic Event Market Reaction Pipeline
 
-미국의 CPI·고용보고서·PCE·FOMC 발표 시각과 시장 반응을 같은 시간축으로 연결하는 데이터 파이프라인입니다. 수집·전처리·저장·재실행·품질 확인에 더해 이벤트 구간 분석과 탐색용 기준 전략까지 실행했습니다. 아직 경제지표가 주가를 움직였다는 인과 결론이나 미래 예상 수익률을 주장하지 않습니다.
+미국의 CPI·고용보고서·PCE·FOMC 발표 시각과 시장 반응을 같은 시간축으로 연결하는 데이터 파이프라인입니다. 수집·전처리·저장·재실행·품질 확인뿐 아니라 저장 결과를 읽는 FastAPI와 웹 대시보드까지 연결했습니다. 최종 목표는 자동매매이지만 현재 전략 성과와 주문 안전장치가 준비되지 않았으므로 운영 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`입니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 30초 요약
 
-현재는 목적이 다른 네 경로가 실제로 동작합니다.
+현재는 목적이 다른 다섯 경로가 실제로 동작합니다.
 
 1. **원시 체결 검증:** 과거 SIP 개별 체결을 Parquet에 보관하고 Kafka로 재생해 Spark가 1분봉을 만듭니다.
 2. **시장 반응 데이터:** 공식 발표 202회와 10종목을 기준으로 Alpaca SIP 1분봉·일봉을 수집하고 3분봉·5분봉을 만듭니다.
 3. **경제 상황 데이터:** 각 발표 시점에 이용 가능했던 FRED·ALFRED 10개 지표를 PostgreSQL에 연결합니다.
 4. **분석·기준 전략:** 발표 전후 5·30·60분 반응을 계산하고, 발표 전 가격 방향만 사용하는 탐색 전략을 비용 포함으로 검증합니다.
+5. **서빙:** PostgreSQL의 최종 결과를 읽기 전용 JSON API와 `Macro Pulse` 대시보드에서 조회합니다.
 
 이번 확장 실행 결과는 다음과 같습니다.
 
@@ -29,16 +30,18 @@
 | Airflow 전체 실행 | 시장 202 tasks·522.660초 / 거시 202 tasks·14.835초 |
 | 이벤트 구간 지표 | 202회 × 10종목 × 4구간 = **8,080행** |
 | 탐색 전략 | 실행 가능 1,988행, 비용 차감 평균 **-0.1565%** |
+| 단일 서빙 시연 | CPI 1회 × NVDA 1종목, 처리·저장·재조회 **0.30초** |
+| 자동매매 준비 상태 | **RESEARCH_ONLY / NO_TRADE** |
 
 `선택 합계`는 각 발표를 기준으로 조회한 행을 더한 값입니다. 인접한 발표가 같은 시장 시각이나 거래일을 공유할 수 있으므로 PostgreSQL은 동일한 business key를 한 번만 저장합니다. 따라서 테이블의 고유 행 수와 선택 합계는 서로 다른 지표입니다.
 
 ## 이번 제출부터 확인하기
 
-1. [6차시 제출 문서](docs/load-recovery-assignment.md): 요구사항, 실행 결과, 장애·복구, 남은 작업
-2. [전체 확장 증거](docs/evidence/multi-event-expansion/README.md): 202회 × 10종목의 공개 가능한 집계
-3. [Kafka v2 결과](docs/evidence/load-recovery/v2-partition-routing.json): 실제 파티션별 건수
-4. [Airflow 실행 증거](docs/evidence/sixth-assignment/README.md): 실제 run ID와 작업 결과
-5. [4분 발표 대본](docs/09.03_대본.md)
+1. [7차시 서빙 레이어 제출 문서](docs/serving-layer-assignment.md): 저장 결과 조회, 단일 실행, 자동매매 경계
+2. [7차시 실제 실행 증거](docs/evidence/serving-layer/README.md): JSON 응답, 멱등 실행, 대시보드 캡처
+3. [7차시 4분 발표 대본](docs/09.07_대본.md)
+4. [6차시 부하·복구 제출 문서](docs/load-recovery-assignment.md)
+5. [전체 확장 증거](docs/evidence/multi-event-expansion/README.md)
 
 ## 프로젝트 목표
 
@@ -48,6 +51,7 @@
 - Kafka와 Spark로 원시 체결의 전달·검증·1분 집계를 재현합니다.
 - 같은 입력을 다시 실행해도 PostgreSQL에 중복 저장되지 않게 합니다.
 - 분석 결과와 성과가 없었던 기준 전략도 재현 가능한 결과로 보존합니다.
+- 저장 결과를 API와 대시보드로 제공하고, 연구 신호와 실제 주문 행동을 분리합니다.
 
 ## 현재 분석 범위
 
@@ -76,6 +80,9 @@ C. 발표 시점 경제 상황
 
 D. 이벤트 분석
 market_bars + economic_events → 구간 수익률·거래량·변동성 → 탐색용 비용 포함 backtest
+
+E. 읽기 전용 서빙
+PostgreSQL → ServingService → FastAPI JSON API + Macro Pulse Dashboard
 ```
 
 원시 체결 경로와 분석용 bar 경로는 행의 의미가 다릅니다. `7,360,804건`은 CPI 55회 × 4종목의 **개별 체결** 부하 입력이고, `308,512행`은 202회 × 10종목의 이벤트별 **1분봉 선택 합계**입니다. 두 숫자를 더하거나 직접 비교하지 않습니다.
@@ -189,7 +196,27 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 
 다년 실행은 `market_context_backfill_orchestrator`가 연도별 child run으로 나눕니다. 각 child DAG는 발표별 task를 만들고, 실패한 연도나 발표 범위만 다시 실행할 수 있습니다.
 
-### 5. 검증
+### 5. 저장 결과를 읽는 API와 대시보드
+
+외부 API나 증권사 주문 API 없이 로컬 PostgreSQL의 저장 결과만 읽습니다.
+
+```bash
+.venv/bin/uvicorn src.serving_api:app --host 127.0.0.1 --port 8000
+```
+
+브라우저에서 `http://127.0.0.1:8000/`을 열면 발표·종목을 선택해 1분·3분·5분봉, 발표 전후 반응, 경제 환경, 전략 시뮬레이션과 자동매매 준비 상태를 확인할 수 있습니다. JSON API 명세는 `http://127.0.0.1:8000/docs`에서 봅니다.
+
+발표용 입력 → 처리 → 저장 → 읽기 시연은 다음 한 명령으로 끝납니다.
+
+```bash
+.venv/bin/python scripts/run_serving_demo.py \
+  --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
+  --symbol NVDA
+```
+
+실제 측정 시간은 0.30초였고, 같은 입력을 반복해도 영향 고유키 4개와 전략 고유키 1개가 유지됐습니다.
+
+### 6. 검증
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
@@ -220,7 +247,9 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 - 비발표일 비교군과 다른 사건을 통제한 통계 검정
 - 호가 기반 슬리피지·포트폴리오 제약을 반영한 전략 검증
 - 검증된 archive fallback과 운영 알림 채널 연결
-- 충분한 검증 뒤 paper trading, 그다음 별도 승인 하에 실거래 검토
+- `RESEARCH_ONLY` 다음에 Alpaca 모의주문과 주문·부분 체결·포지션 복구 검증
+- 최대 주문 금액·보유 종목 수·일일 손실 한도·중복 주문 방지·긴급 중지 구현
+- Slack 사람 승인 단계를 거친 뒤 소액 `LIMITED_LIVE`, 충분한 운영 검증 후 `AUTOMATED_LIVE` 검토
 
 ## 구현·과제 증거
 
@@ -229,9 +258,11 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 - [5차시 부하·장애·복구 과제](docs/load-recovery-assignment.md)
 - [식별키 수정 후 전체 재실행](docs/pipeline-review-assignment.md)
 - [다중 경제 이벤트 확장](docs/multi-event-expansion.md)
+- [7차시 서빙 레이어와 최종 발표](docs/serving-layer-assignment.md)
+- [7차시 실제 API·대시보드 증거](docs/evidence/serving-layer/README.md)
 
 ## 면책 및 출처 고지
 
-교육·연구용 프로젝트이며 투자 조언이 아닙니다. 현재 계좌·주문 API를 호출하지 않습니다.
+교육·연구용 프로젝트이며 투자 조언이 아닙니다. 현재 계좌·주문 API를 호출하지 않으며 대시보드의 `LONG/SHORT`는 과거 분석 신호일 뿐 주문이 아닙니다.
 
 This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
