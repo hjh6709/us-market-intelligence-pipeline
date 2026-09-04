@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1290" viewBox="0 0 1600 1290" role="img" aria-labelledby="title desc">
   <title id="title">U.S. Economic Event Market Reaction Pipeline</title>
-  <desc id="desc">현재 실행한 원시 체결, 시장 데이터, 경제 맥락, 이벤트 분석과 탐색용 백테스트를 구분한 구성도</desc>
+  <desc id="desc">현재 실행한 원시 체결, 시장 데이터, 경제 맥락, 이벤트 분석과 서빙 경로를 향후 주문 계층과 구분한 구성도</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#334155"/></marker>
     <marker id="future-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#7c3aed"/></marker>
@@ -21,7 +21,7 @@
       .future-flow{fill:none;stroke:#7c3aed;stroke-width:2.3;stroke-dasharray:8 6;marker-end:url(#future-arrow)}
     </style>
   </defs>
-  <rect width="1600" height="1080" fill="#fff"/>
+  <rect width="1600" height="1290" fill="#fff"/>
   <text x="52" y="58" class="title">U.S. Economic Event Market Reaction Pipeline</text>
   <text x="52" y="88" class="subtitle">실제 실행한 수집·처리·분석은 실선, 아직 구현하지 않은 실거래 단계는 점선으로 표시</text>
 
@@ -68,12 +68,25 @@
   <path d="M445 785H635" class="flow"/><path d="M965 785H1155" class="flow"/>
 
   <rect x="36" y="890" width="1528" height="145" rx="18" class="lane"/>
-  <text x="58" y="925" class="section">D · 이벤트 반응 분석과 전략 검증 경계</text>
+  <text x="58" y="925" class="section">D · 이벤트 반응 분석과 전략 검증</text>
   <rect x="90" y="952" width="390" height="58" rx="12" class="store"/>
   <text x="285" y="977" text-anchor="middle" class="box-title">Event-window metrics</text><text x="285" y="998" text-anchor="middle" class="metric">202 × 10 × 4 = 8,080행</text>
   <rect x="605" y="952" width="390" height="58" rx="12" class="evidence"/>
   <text x="800" y="977" text-anchor="middle" class="box-title">탐색용 비용 포함 backtest</text><text x="800" y="998" text-anchor="middle" class="copy">평균 -0.1565% · 수익 주장 아님</text>
-  <rect x="1120" y="952" width="390" height="58" rx="12" class="future"/>
-  <text x="1315" y="977" text-anchor="middle" class="box-title">Surprise · 통제군 → Paper trading</text><text x="1315" y="998" text-anchor="middle" class="copy">point-in-time 출처와 추가 검증 필요</text>
-  <path d="M480 981H605" class="flow"/><path d="M995 981H1120" class="future-flow"/>
+  <rect x="1120" y="952" width="390" height="58" rx="12" class="store"/>
+  <text x="1315" y="977" text-anchor="middle" class="box-title">event_strategy_results</text><text x="1315" y="998" text-anchor="middle" class="copy">2,020행 · Upsert · 연구 신호</text>
+  <path d="M480 981H605" class="flow"/><path d="M995 981H1120" class="flow"/>
+
+  <rect x="36" y="1065" width="1528" height="180" rx="18" class="lane"/>
+  <text x="58" y="1100" class="section">E · 저장 결과 서빙과 향후 주문 계층</text>
+  <rect x="70" y="1125" width="270" height="85" rx="14" class="store"/>
+  <text x="205" y="1157" text-anchor="middle" class="box-title">PostgreSQL final tables</text><text x="205" y="1185" text-anchor="middle" class="copy">event · bars · context · impact · strategy</text>
+  <rect x="385" y="1125" width="300" height="85" rx="14" class="process"/>
+  <text x="535" y="1157" text-anchor="middle" class="box-title">Serving API · Dashboard</text><text x="535" y="1185" text-anchor="middle" class="metric">RESEARCH_ONLY · NO_TRADE</text>
+  <path d="M340 1168H385" class="flow"/>
+  <rect x="750" y="1125" width="765" height="85" rx="14" class="future"/>
+  <text x="1133" y="1153" text-anchor="middle" class="box-title">향후 주문 계층</text>
+  <text x="1133" y="1177" text-anchor="middle" class="copy">Surprise · 통제군 → Paper trading → Risk engine → Slack 승인</text>
+  <text x="1133" y="1198" text-anchor="middle" class="copy">Broker adapter → 주문·체결·포지션 복구 → Limited live → Automated live</text>
+  <path d="M685 1168H750" class="future-flow"/>
 </svg>
