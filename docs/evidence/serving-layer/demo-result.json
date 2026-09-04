@@ -1,0 +1,27 @@
+{
+  "input": {
+    "event_id": "CPI|2026-07|2026-08-12T12:30:00Z",
+    "symbol": "NVDA"
+  },
+  "processing": {
+    "events": 1,
+    "symbols": 1,
+    "impact_rows_upserted": 4
+  },
+  "storage": {
+    "strategy_rows_upserted": 1,
+    "duplicate_business_keys": 0
+  },
+  "read": {
+    "impact_rows": 4,
+    "bar_timeframes": [
+      "1m",
+      "3m",
+      "5m"
+    ]
+  },
+  "result": {
+    "stage": "RESEARCH_ONLY",
+    "order_action": "NO_TRADE"
+  }
+}
