@@ -15,8 +15,8 @@
       {
         "id": "context-path",
         "label": "이벤트 컨텍스트 수집",
-        "focus": ["providers", "airflow", "postgres"],
-        "note": "202개 발표와 10개 종목의 시장·거시경제 컨텍스트를 수집하고 저장합니다."
+        "focus": ["providers", "airflow", "derived", "postgres"],
+        "note": "시장·거시경제 컨텍스트를 수집하고 Python으로 3분봉·5분봉을 생성해 저장합니다."
       },
       {
         "id": "load-path",
@@ -55,6 +55,19 @@
       ]
     },
     {
+      "id": "derived",
+      "type": "backend",
+      "label": "Python 파생봉 생성",
+      "sublabel": "provider 1m → 3m/5m",
+      "tag": "source counts preserved",
+      "pos": [540, 90],
+      "size": [190, 76],
+      "sources": [
+        {"path": "src/market_context_backfill.py", "label": "backfill caller"},
+        {"path": "src/derived_bars.py", "label": "derived aggregation"}
+      ]
+    },
+    {
       "id": "trade-files",
       "type": "cloud",
       "label": "SIP 체결 Parquet",
@@ -73,12 +86,13 @@
     {
       "id": "spark",
       "type": "backend",
-      "label": "가공 레이어",
-      "sublabel": "Spark 집계 · 1m→3m/5m",
+      "label": "Spark 원시 체결 집계",
+      "sublabel": "SIP trades → 1m OHLCV",
       "pos": [520, 410],
       "size": [185, 72],
       "sources": [
-        {"path": "src/derived_bars.py", "label": "derived aggregation"}
+        {"path": "src/spark_market_processor.py", "label": "Spark processor"},
+        {"path": "src/preprocess.py", "line": 265, "label": "minute aggregation"}
       ]
     },
     {
@@ -132,7 +146,7 @@
     {
       "kind": "region",
       "label": "수집·처리 레이어",
-      "wraps": ["airflow", "kafka", "spark"]
+      "wraps": ["airflow", "derived", "kafka", "spark"]
     },
     {
       "kind": "region",
@@ -142,7 +156,9 @@
   ],
   "connections": [
     {"id": "provider-collection", "from": "providers", "to": "airflow", "label": "일정·SIP bars·vintage macro", "variant": "emphasis", "labelAt": [295, 185]},
-    {"id": "context-storage", "from": "airflow", "to": "postgres", "label": "수집 결과 + coverage metadata", "variant": "emphasis"},
+    {"id": "context-storage", "from": "airflow", "to": "postgres", "label": "1m·1d·macro + coverage", "variant": "emphasis"},
+    {"id": "derive-bars", "from": "airflow", "to": "derived", "variant": "emphasis"},
+    {"id": "derived-storage", "from": "derived", "to": "postgres", "label": "3m·5m + source counts", "variant": "emphasis", "fromSide": "bottom", "toSide": "top"},
     {"id": "trade-replay", "from": "trade-files", "to": "kafka", "label": "실제 체결 재생", "labelAt": [250, 496]},
     {"id": "stream-processing", "from": "kafka", "to": "spark", "label": "partitioned events", "labelAt": [498, 500]},
     {"id": "bar-storage", "from": "spark", "to": "postgres", "label": "bars upsert", "fromSide": "top", "toSide": "bottom", "labelAt": [630, 385]},

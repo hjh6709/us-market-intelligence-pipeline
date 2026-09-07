@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "perceptual-visual-review",
+  "status": "pass",
+  "reviewed_at": "2026-09-07",
+  "artifact": {
+    "path": "session7-architecture.html",
+    "sha256": "88f06703b7e552ef0d4af557932c5c21ee6315c023475baf98f4f707ad1b1b75",
+    "bytes": 719912
+  },
+  "automated_browser_receipt": "session7-architecture.visual-check.json",
+  "inspected_captures": [
+    "session7-architecture.visual-check.1440x900.light.png",
+    "session7-architecture.visual-check.1440x900.dark.png",
+    "session7-architecture.visual-check.2048x1320.light.png",
+    "session7-architecture.visual-check.2048x1320.dark.png"
+  ],
+  "observations": [
+    "The provider/Airflow/Python derived-bar path is visually separate from the Parquet/Kafka/Spark raw-trade path.",
+    "Spark is labeled only as SIP trades to 1m OHLCV; Python is labeled as provider 1m to 3m/5m.",
+    "No clipped labels, opaque-node crossings, ambiguous shared corridors, or theme-specific readability defects were observed.",
+    "The diagram remains balanced without a conspicuous empty lower band at the largest capture."
+  ],
+  "correction_rounds": 1
+}

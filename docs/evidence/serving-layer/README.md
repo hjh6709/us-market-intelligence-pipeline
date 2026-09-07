@@ -33,7 +33,7 @@
 - 실행 명령:
 
 ```bash
-.venv/bin/python scripts/run_serving_demo.py \
+.venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
   --symbol NVDA \
   --output docs/evidence/serving-layer/demo-result.json

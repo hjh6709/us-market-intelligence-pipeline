@@ -53,7 +53,7 @@
 7차시 발표는 [최신 구성도·단계별 건수·검증 한계](docs/serving-layer-assignment.md)와
 [발표 대본](docs/09.07_대본.md)을 기준으로 합니다. 최종 DB 재계산·저장·읽기 실행은
 0.43초, 영향 4행·전략 1행·중복 0이었고 `/health`와 상세 API도 HTTP 200이었습니다.
-이는 외부 수집을 제외한 소규모 시연입니다. [69.84초 사전 녹화](docs/evidence/session7-demo/session7-submission-demo.webm)도 제공합니다.
+이는 외부 수집을 제외한 소규모 시연입니다. [70.32초 사전 녹화](docs/evidence/session7-demo/session7-submission-demo.webm)도 제공합니다.
 기존 736만 원시 체결 부하 실험과 202회 × 10종목의 공급자 봉 수집은 별도 경로입니다.
 봉이 없는 분을 모두 무거래로 해석하지 않으며, odd lot 포함 연구용 봉 비교는 아직 계획입니다.
 
@@ -238,7 +238,7 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
 발표용 입력 → 처리 → 저장 → 읽기 시연은 다음 한 명령으로 끝납니다.
 
 ```bash
-.venv/bin/python scripts/run_serving_demo.py \
+.venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
   --symbol NVDA
 ```

@@ -7,7 +7,7 @@ PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영�
 현재 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률은 주문이 아니며, 서빙 API에는 브로커 주문 경로가 없다.
 별도 모의주문 연결시험은 대시보드와 분리돼 있고, 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
 
-[대화형 Archify 구성도](diagrams/session7-architecture.html) · [69.84초 시연 영상](evidence/session7-demo/session7-submission-demo.webm) · [최종 실행 JSON](evidence/serving-layer/final-verification-20260907.json)
+[대화형 Archify 구성도](diagrams/session7-architecture.html) · [70.32초 시연 영상](evidence/session7-demo/session7-submission-demo.webm) · [최종 실행 JSON](evidence/serving-layer/final-verification-20260907.json)
 
 ![CPI 2026-07 · NVDA 저장 결과를 읽은 Macro Pulse](evidence/serving-layer/dashboard-cpi-nvda-20260907.png)
 
@@ -36,7 +36,7 @@ PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영�
 
 ![Archify가 merged main 소스를 검증해 생성한 최신 구성도](diagrams/session7-architecture.visual-check.1440x900.dark.png)
 
-Archify 구성도는 병합된 `main` SHA `7f55721ddcfea021487664429a188776465ee0d4`와 소스 경로 9개를 연결해 검증했다. showcase artifact check 9/9, composition 오류·경고 0, 1440×900·1600×1000·1920×1080·2048×1320 라이트 화면과 양 끝 해상도 다크 화면의 containment 검사를 통과했다.
+Archify 구성도는 병합된 `main` SHA `7f55721ddcfea021487664429a188776465ee0d4`와 소스 참조 12개를 연결해 검증했다. showcase artifact check 9/9, composition 오류·경고 0, 1440×900·1600×1000·1920×1080·2048×1320 라이트 화면과 양 끝 해상도 다크 화면의 containment 검사를 통과했다. 자동 receipt의 시각 검토는 계약상 `pending`이며, 별도 artifact-bound 수동 검토에서 라이트·다크 캡처의 경로 분리와 가독성을 확인했다.
 
 ```text
 공식 제공처 → Airflow → 시장·경제 context ─┐
@@ -78,7 +78,7 @@ PR #28 병합 후 collection과 observed coverage를 분리했다.
 ## 3. 입력 → 처리 → 저장 → 읽기: 한 번의 실행 기록
 
 ```bash
-.venv/bin/python scripts/run_serving_demo.py \
+.venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
   --symbol NVDA \
   --output /tmp/serving-demo-rehearsal.json
@@ -157,5 +157,6 @@ curl -fsS http://127.0.0.1:8000/health
 - [최종 서빙 증거 설명](evidence/serving-layer/README.md)
 - [Archify HTML](diagrams/session7-architecture.html)
 - [Archify 자동 브라우저 receipt](diagrams/session7-architecture.visual-check.json)
-- [69.84초 WebM](evidence/session7-demo/session7-submission-demo.webm)
+- [Archify 수동 시각 검토 기록](diagrams/session7-architecture.manual-review.json)
+- [70.32초 WebM](evidence/session7-demo/session7-submission-demo.webm)
 - [4분 발표 대본](09.07_대본.md)

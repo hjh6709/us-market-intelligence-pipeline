@@ -16,8 +16,8 @@
 |---|---|---|---|
 | 저장 결과를 읽는 장면 | PASS | FastAPI `/health`와 CPI·NVDA 상세가 HTTP 200, 대시보드 조회 성공 | [최종 HTTP 증거](evidence/serving-layer/final-verification-20260907.json), [전체 캡처](evidence/serving-layer/dashboard-cpi-nvda-20260907.png) |
 | 입력 → 처리 → 저장 → 읽기 | PASS | 1조합 → 영향 4행 → 전략 1행 Upsert → 영향 4행·1m/3m/5m 재조회, 중복 0 | [최종 실행 증거](evidence/serving-layer/final-verification-20260907.json) |
-| 1~2분 안전한 시연 | PASS | 실제 CLI 0.43초, 전체 화면 녹화 69.84초 | [WebM](evidence/session7-demo/session7-submission-demo.webm) |
-| 최신 구성도 | PASS | merged main `7f55721`의 소스 9개를 Archify가 검증, showcase 9/9 | [HTML](diagrams/session7-architecture.html), [검증 receipt](diagrams/session7-architecture.visual-check.json) |
+| 1~2분 안전한 시연 | PASS | 실제 CLI 0.43초, 단일 실행 출력과 저장 결과 조회를 담은 녹화 70.32초 | [WebM](evidence/session7-demo/session7-submission-demo.webm) |
+| 최신 구성도 | PASS | merged main `7f55721`의 소스 참조 12개를 Archify가 검증, showcase 9/9 | [HTML](diagrams/session7-architecture.html), [자동 검증 receipt](diagrams/session7-architecture.visual-check.json), [수동 시각 검토](diagrams/session7-architecture.manual-review.json) |
 | 단계별·최종 건수 표 | PASS | 202 releases, 10 symbols, 2,020 work items, 8,080 impacts 등 계층별 표기 | [발표 문서](serving-layer-assignment.md) |
 | 부하·장애·복구와 한계 | PASS | 실제 체결 부하 범위와 202×10 bar 범위를 분리하고 미보장 항목 표기 | [발표 문서 4절](serving-layer-assignment.md#4-부하장애복구에서-확인한-것) |
 | README 실행법·구성·확인법 | PASS | 로컬 실행, API URL, 시연 명령, 증거 링크 반영 | [README](../README.md) |
@@ -33,7 +33,7 @@
 | 파생 봉 | 3m 112,593 / 5m 70,090 | 각각 PARTIAL 19,178 / 16,215 |
 | PostgreSQL 고유 시장 봉 | 1m 323,126 / 3m 112,593 / 5m 70,090 / 1d 11,680 | business key 기준 실제 저장 행 |
 | 경제 환경 | 2,020 | 202 events × 10 series |
-| 이벤트 영향 | 8,080 | COMPLETE 5,366, PARTIAL 2,557, NO_DATA 152, baseline 부족 5 |
+| 이벤트 영향 | 8,080 | COMPLETE 5,366, PARTIAL 2,557, NO_MARKET_DATA 152, baseline 부족 5 |
 | 탐색 전략 | 2,020 중 계산 가능 1,988 | 전체 평균 -0.15649%, COMPLETE 입력 911 |
 
 위 숫자는 행의 의미가 다르므로 합쳐서 하나의 “전체 원본 건수”로 말하지 않는다.
@@ -63,7 +63,7 @@ PR #28은 `main`의 `7f55721ddcfea021487664429a188776465ee0d4`로 병합됐다. 
 5. 실패하면 재수집·장애 재현을 하지 말고 저장된 캡처와 JSON을 보여주며 사전 증거라고 밝힌다.
 
 ```bash
-.venv/bin/python scripts/run_serving_demo.py \
+.venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
   --symbol NVDA \
   --output /tmp/serving-demo-rehearsal.json
