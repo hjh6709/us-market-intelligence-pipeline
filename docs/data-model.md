@@ -115,6 +115,10 @@ Unique key: `(symbol, bar_start, timeframe, source, feed)`.
 
 3분봉·5분봉에는 `source_bar_count`, `expected_bar_count`, `coverage_status`를 저장한다. 각각 실제 포함된 1분봉 수, 완전한 봉에 필요한 분 수, `COMPLETE` 또는 `PARTIAL` 상태다. 결측 분의 가격을 직전 값으로 채워 `COMPLETE`로 만들지 않는다.
 
+Market Context는 provider request 완료와 관측된 price-bar coverage를 분리한다. `session_collection_status`, `daily_collection_status`, `overall_collection_status`는 원래 요청 범위가 정상 pagination 종료까지 수집됐는지를 나타낸다. 정상 종료된 빈 응답이나 sparse 응답은 collection 실패가 아니며, page limit에 token이 남거나 HTTP·payload integrity 오류가 발생하면 예외로 실패한다. provider availability 때문에 원래 범위를 잘라 조회하거나 요청하지 못한 경우에는 collection 상태를 `PARTIAL` 또는 `NOT_AVAILABLE`로 남긴다.
+
+`session_coverage_status`, `daily_coverage_status`, `derived_3m_coverage_status`, `derived_5m_coverage_status`는 실제 관측된 bar 품질을 따로 나타내고 이 네 계층이 모두 완전할 때만 `overall_coverage_status=COMPLETE`로 판정한다. 기존 `coverage_status` 인터페이스는 overall observed-coverage 상태의 호환 별칭이다. derived 계층의 `PARTIAL`은 upstream에 존재하지 않는 1분봉을 채우지 않았다는 품질 정보이지 provider collection 실패를 뜻하지 않는다. 개별 `market_bars.coverage_status`는 하나의 3분·5분 wall-clock bucket이 꽉 찼는지를 뜻하므로, 요청 경계에서 정상적으로 짧아진 bucket과도 의미가 다르다. `macro_event_impacts.coverage_status`의 90% 분석 규칙은 별도의 분석 가능성 판단이며 Market Context collection 완료 판정에 사용하지 않는다.
+
 `alpaca_sip_minute_v1`은 Alpaca의 CTA/UTP sale-condition 표에 따라 각 raw trade가 OHLC 가격 형성 및 volume·trade_count에 반영되는지를 따로 결정한다. 여러 조건이 있으면 가장 엄격한 조건을 사용하며, 알려지지 않은 condition/tape 조합은 조용히 포함하지 않고 집계에서 제외해 별도 건수로 기록한다. VWAP는 가격과 거래량 모두 갱신 가능한 체결만 사용한다.
 
 `is_final`은 configured watermark가 해당 window를 통과해 더 이상 정상 update 대상이 아님을 뜻한다. P0는 append output mode로 watermark를 통과한 final bar만 PostgreSQL에 저장한다. Watermark 안의 late event는 DB에 쓰기 전에 Spark state의 집계에 포함되고, 너무 늦은 event는 별도 metric/DLQ 정책을 따른다. 정상 재시작은 Spark checkpoint에서 복구하며, full historical rebuild는 Kafka retention 안의 raw event 또는 deterministic replay dataset을 사용한다. PostgreSQL bar만으로 raw trades를 완전히 재구성할 수 있다고 가정하지 않는다.
