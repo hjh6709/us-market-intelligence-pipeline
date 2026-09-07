@@ -1,0 +1,31 @@
+{
+  "executed_at": "2026-09-07",
+  "environment": "local_postgresql_fastapi",
+  "input": {
+    "event_id": "CPI|2026-07|2026-08-12T12:30:00Z",
+    "symbol": "NVDA"
+  },
+  "serving_demo": {
+    "impact_rows_upserted": 4,
+    "strategy_rows_upserted": 1,
+    "duplicate_business_keys": 0,
+    "impact_rows_read": 4,
+    "available_timeframes": ["1m", "3m", "5m"],
+    "stage": "RESEARCH_ONLY",
+    "order_action": "NO_TRADE",
+    "elapsed_seconds": 0.43
+  },
+  "http": {
+    "health_status_code": 200,
+    "health_body": {"status": "ok", "database": "ok"},
+    "detail_status_code": 200,
+    "impact_rows": 4,
+    "macro_context_rows": 10,
+    "research_signal": "LONG",
+    "stage": "RESEARCH_ONLY",
+    "order_action": "NO_TRADE"
+  },
+  "external_market_api_calls": 0,
+  "broker_order_calls": 0,
+  "note": "Observed from run_serving_demo.py and HTTP GET against a temporary local uvicorn process on port 8010; the process was stopped after verification."
+}
