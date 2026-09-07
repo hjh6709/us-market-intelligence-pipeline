@@ -115,6 +115,8 @@ Unique key: `(symbol, bar_start, timeframe, source, feed)`.
 
 3분봉·5분봉에는 `source_bar_count`, `expected_bar_count`, `coverage_status`를 저장한다. 각각 실제 포함된 1분봉 수, 완전한 봉에 필요한 분 수, `COMPLETE` 또는 `PARTIAL` 상태다. 결측 분의 가격을 직전 값으로 채워 `COMPLETE`로 만들지 않는다.
 
+Market Context 수집 결과는 `session_coverage_status`, `daily_coverage_status`, `derived_3m_coverage_status`, `derived_5m_coverage_status`를 따로 계산하고 이 네 계층이 모두 완전할 때만 `overall_coverage_status=COMPLETE`로 판정한다. 기존 `coverage_status` 인터페이스는 overall 상태의 호환 별칭이다. 여기서 derived 계층의 상태는 요청 구간에 필요한 각 bucket과 source minute 수가 모두 생성됐는지를 뜻한다. 개별 `market_bars.coverage_status`는 하나의 3분·5분 wall-clock bucket이 꽉 찼는지를 뜻하므로, 요청 경계에서 정상적으로 짧아진 bucket과 의미가 다르다. `macro_event_impacts.coverage_status`의 90% 분석 규칙도 별도의 분석 가능성 판단이며 Market Context 수집 완료 판정에 사용하지 않는다.
+
 `alpaca_sip_minute_v1`은 Alpaca의 CTA/UTP sale-condition 표에 따라 각 raw trade가 OHLC 가격 형성 및 volume·trade_count에 반영되는지를 따로 결정한다. 여러 조건이 있으면 가장 엄격한 조건을 사용하며, 알려지지 않은 condition/tape 조합은 조용히 포함하지 않고 집계에서 제외해 별도 건수로 기록한다. VWAP는 가격과 거래량 모두 갱신 가능한 체결만 사용한다.
 
 `is_final`은 configured watermark가 해당 window를 통과해 더 이상 정상 update 대상이 아님을 뜻한다. P0는 append output mode로 watermark를 통과한 final bar만 PostgreSQL에 저장한다. Watermark 안의 late event는 DB에 쓰기 전에 Spark state의 집계에 포함되고, 너무 늦은 event는 별도 metric/DLQ 정책을 따른다. 정상 재시작은 Spark checkpoint에서 복구하며, full historical rebuild는 Kafka retention 안의 raw event 또는 deterministic replay dataset을 사용한다. PostgreSQL bar만으로 raw trades를 완전히 재구성할 수 있다고 가정하지 않는다.

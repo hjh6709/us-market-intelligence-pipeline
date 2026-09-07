@@ -29,6 +29,20 @@ from src.pipeline_run_tracking import (
 
 
 DEFAULT_SYMBOLS = ["SPY", "QQQ", "IWM", "TLT", "XLF", "SMH", "GLD", "NVDA", "AAPL", "JPM"]
+UNAVAILABLE_COVERAGE_STATUSES = {
+    "MARKET_CLOSED",
+    "NO_MARKET_DATA",
+    "FUTURE_SESSION_UNAVAILABLE",
+}
+
+
+def collection_outcome(coverage_status: str) -> tuple[str, str, str]:
+    """Map overall collection coverage to persisted work/check outcomes."""
+    if coverage_status == "COMPLETE":
+        return "SUCCEEDED", "PASS", "NONE"
+    if coverage_status in UNAVAILABLE_COVERAGE_STATUSES:
+        return "DATA_NOT_AVAILABLE", "WARN", "NONE"
+    return "FAILED", "FAIL", "OPEN"
 
 
 def _database_url() -> str:
@@ -195,11 +209,9 @@ def build_market_context_backfill_pipeline():
                 ),
             )
             for item, result in zip(items, batch.results, strict=True):
-                unavailable = result.coverage_status in {
-                    "MARKET_CLOSED",
-                    "NO_MARKET_DATA",
-                    "FUTURE_SESSION_UNAVAILABLE",
-                }
+                work_status, check_status, alert_status = collection_outcome(
+                    result.overall_coverage_status
+                )
                 mark_work_item(
                     database_url,
                     PipelineWorkItem(
@@ -207,7 +219,7 @@ def build_market_context_backfill_pipeline():
                         economic_event_id=item.event_id,
                         symbol=item.symbol,
                         stage=stage,
-                        status="DATA_NOT_AVAILABLE" if unavailable else "SUCCEEDED",
+                        status=work_status,
                         attempt_count=attempt,
                         input_count=result.session_1m_rows + result.daily_rows,
                         output_count=(
@@ -218,9 +230,6 @@ def build_market_context_backfill_pipeline():
                         ),
                     ),
                 )
-                check_status = (
-                    "PASS" if result.coverage_status == "COMPLETE" else "WARN"
-                )
                 record_pipeline_check(
                     database_url,
                     PipelineCheck(
@@ -230,9 +239,13 @@ def build_market_context_backfill_pipeline():
                         stage=stage,
                         check_name="collection",
                         expected_value="COMPLETE",
-                        actual_value=result.coverage_status,
+                        actual_value=result.overall_coverage_status,
                         status=check_status,
-                        alert_status="RESOLVED" if attempt > 1 else "NONE",
+                        alert_status=(
+                            "RESOLVED"
+                            if attempt > 1 and check_status == "PASS"
+                            else alert_status
+                        ),
                         checked_at=datetime.now(UTC),
                     ),
                 )
