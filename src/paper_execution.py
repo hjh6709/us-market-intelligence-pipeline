@@ -1,6 +1,8 @@
 """Explicit paper connectivity probes. Never consumes historical strategy signals."""
 
 import hashlib
+import re
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -55,6 +57,8 @@ class AlpacaPaperBroker:
                 if not 200 <= response.status_code < 300:
                     raise BrokerUnavailable(f"paper broker HTTP {response.status_code}")
                 if response.status_code == 204:
+                    if method == "GET":
+                        raise BrokerUnavailable("empty paper broker response")
                     return None
                 result = response.json()
                 if not isinstance(result, dict):
@@ -68,6 +72,33 @@ class AlpacaPaperBroker:
         if not result or not result.get("id"):
             raise BrokerUnavailable("paper account unavailable")
         return result
+
+    def clock(self):
+        result = self._request("GET", "/v2/clock")
+        try:
+            if type(result["is_open"]) is not bool:
+                raise ValueError("invalid market state")
+            for field in ("timestamp", "next_open", "next_close"):
+                if datetime.fromisoformat(result[field]).tzinfo is None:
+                    raise ValueError("market timestamps require timezone")
+            return {key: result[key] for key in ("timestamp", "is_open", "next_open", "next_close")}
+        except (KeyError, TypeError, ValueError):
+            raise BrokerUnavailable("market clock unavailable") from None
+
+    def position_qty(self, symbol: str) -> Decimal:
+        if not re.fullmatch(r"[A-Z][A-Z0-9.]{0,9}", symbol):
+            raise ValueError("invalid position symbol")
+        result = self._request("GET", f"/v2/positions/{symbol}")
+        if result is None:
+            # This endpoint returns 404 when this symbol has no open position.
+            return Decimal(0)
+        try:
+            qty = Decimal(str(result["qty"]))
+            if result["symbol"] != symbol or not qty.is_finite():
+                raise ValueError("invalid position")
+            return qty
+        except (KeyError, TypeError, ValueError, ArithmeticError):
+            raise BrokerUnavailable("position snapshot unavailable") from None
 
     def submit(self, client_order_id: str, intent: OrderIntent):
         return self._request("POST", "/v2/orders", json={
@@ -105,6 +136,44 @@ class PaperOrderService:
         self.broker = broker
         self.scope = scope
         self.connect = connect
+
+    def recover(self):
+        """Recover a bounded journal snapshot by GET only, including terminal orders.
+
+        This is not an account-wide reconciliation or an atomic broker snapshot.
+        Existing/manual positions have no opening baseline in this journal.
+        """
+        started = datetime.now(timezone.utc).isoformat()
+        with self.connect(self.database_url, row_factory=dict_row, connect_timeout=5) as db:
+            rows = db.execute(
+                """SELECT intent FROM paper_order_intents WHERE scope=%s
+                   ORDER BY created_at, request_id LIMIT 101""", (self.scope,),
+            ).fetchall()
+        if len(rows) > 100:
+            raise ValueError("recovery probe supports at most 100 journal orders")
+        intents = [OrderIntent(**row["intent"]) for row in rows]
+        orders = [self.run(intent, "reconcile") for intent in intents]
+        positions = []
+        for symbol in sorted({intent.symbol for intent in intents}):
+            fills = sum((Decimal(order["filled_qty"]) for intent, order in zip(intents, orders)
+                         if intent.symbol == symbol), Decimal(0))
+            try:
+                observed = str(self.broker.position_qty(symbol))
+                state = "BASELINE_REQUIRED"
+            except BrokerUnavailable:
+                observed, state = None, "POSITION_UNAVAILABLE"
+            positions.append({"symbol": symbol, "journal_buy_filled_qty": str(fills),
+                              "observed_account_qty": observed,
+                              "comparison_status": state})
+        errors = sum(order["last_error"] is not None for order in orders)
+        pending = sum(order["state"] not in TERMINAL for order in orders)
+        return {"started_at": started, "finished_at": datetime.now(timezone.utc).isoformat(),
+                "journal_orders": len(orders), "order_lookup_errors": errors,
+                "nonterminal_orders": pending, "orders": orders, "positions": positions,
+                "journal_status": "EMPTY" if not orders else (
+                    "ATTENTION_REQUIRED" if errors or pending else "TERMINAL_SNAPSHOT_CONFIRMED"),
+                "position_reconciliation_verified": False,
+                "new_orders_submitted": 0, "live_trading_enabled": False}
 
     def run(self, intent: OrderIntent, action: str = "reconcile", *, enabled=False):
         if action not in {"submit", "reconcile", "cancel"}:
