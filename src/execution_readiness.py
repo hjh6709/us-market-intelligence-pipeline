@@ -48,8 +48,8 @@ def evaluate_execution_readiness(value: ReadinessInput) -> ExecutionReadinessVie
         "strategy_result": "stored strategy result is unavailable",
         "strategy_performance": "exploratory strategy has not passed the strategy performance gate",
         "event_surprise": "consensus-versus-actual event surprise is unavailable",
-        "paper_execution": "paper execution is not implemented and verified",
-        "position_recovery": "position recovery is not implemented and verified",
+        "paper_execution": "strategy-connected paper fills are not verified; standalone connectivity probes are insufficient",
+        "position_recovery": "baseline-aware account position reconciliation is not verified",
         "kill_switch": "kill switch is not implemented and verified",
     }
 
