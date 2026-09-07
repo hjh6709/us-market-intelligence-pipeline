@@ -2,6 +2,15 @@
 
 ## 9월 7일 재확인
 
+`final-verification-20260907.json`은 병합된 coverage corrective 기준 코드에서 마지막으로
+확인한 제출 정본이다. 동일 CPI·NVDA 입력의 계산·Upsert·재조회는 0.43초였고,
+영향 4행·전략 1행·중복 0·1m/3m/5m을 확인했다. 이어서 FastAPI를 실제로 실행해
+`/health`와 상세 API가 모두 HTTP 200임을 확인했다. 외부 데이터 API와 브로커 주문은 호출하지 않았다.
+
+`dashboard-cpi-nvda-20260907.png`은 같은 실행에서 CPI 2026-07·NVDA를 선택해
+저장 결과 조회 버튼을 누른 전체 화면 캡처다. `dashboard.png`은 9월 4일 기존 캡처이며
+두 파일을 같은 실행 증거로 취급하지 않는다.
+
 `api-detail-20260907.json`은 수정된 FastAPI를 로컬에서 실행하고 HTTP GET으로
 실제 PostgreSQL 결과를 읽은 응답이다. `/health`도 HTTP 200, database=ok였다.
 영향 4개 구간·경제 상황 10개·NO_TRADE를 확인했다. 서빙 관련 회귀 테스트 16개가 통과했다.
@@ -51,5 +60,9 @@
 - `demo-result.json`: 입력 → 처리 → 저장 → 읽기의 기계 판독 가능한 결과
 - `api-detail.json`: 같은 발표·종목의 실제 상세 API 응답
 - `dashboard.png`: 1440×1000 화면에서 실제 API를 읽은 대시보드 캡처
+- `rehearsal-20260907.json`: 9월 7일 0.37초 CLI 리허설
+- `api-detail-20260907.json`: 9월 7일 실제 HTTP 상세 응답
+- `final-verification-20260907.json`: 최종 0.43초 CLI와 HTTP 200 통합 증거
+- `dashboard-cpi-nvda-20260907.png`: 최종 CPI·NVDA 전체 화면 캡처
 
 캡처에서 선택 사례의 연구 신호는 `LONG`, 과거 시뮬레이션 순수익률은 `0.47785058%`다. 그러나 전체 전략 평균은 약 `-0.15649%`이고 전망치 대비 실제값, 모의주문, 포지션 복구, 긴급 중지가 준비되지 않았다. 따라서 이 사례의 실제 주문 행동도 `NO_TRADE`다.

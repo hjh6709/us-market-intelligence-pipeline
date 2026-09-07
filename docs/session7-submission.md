@@ -3,43 +3,102 @@
 ## 제출할 링크
 
 - 저장소: [us-market-intelligence-pipeline](https://github.com/hjh6709/us-market-intelligence-pipeline)
-- 발표 자료: [7차시 제출 문서](https://github.com/hjh6709/us-market-intelligence-pipeline/blob/main/docs/serving-layer-assignment.md)
-- 말할 내용: [9월 7일 대본](09.07_대본.md)
+- 발표 자료: [7차시 서빙 레이어와 최종 발표](https://github.com/hjh6709/us-market-intelligence-pipeline/blob/main/docs/serving-layer-assignment.md)
+- 최신 구성도: [Archify 대화형 HTML](diagrams/session7-architecture.html)
+- 발표 대본: [09.07 7차시 발표 대본](09.07_대본.md)
+- 70초 시연 영상: [session7-submission-demo.webm](evidence/session7-demo/session7-submission-demo.webm)
 
-별도 슬라이드 대신 위 발표 문서를 사용한다. 과제에서 README·문서 형식도 허용한다.
-디스코드 공유는 제출자가 직접 한다.
+별도 슬라이드 대신 위 발표 문서를 사용한다. 디스코드 전송은 제출자 계정에서 직접 한다.
 
-## 요구사항과 증거
+## 요구사항별 완료 상태
 
-| 요구사항 | 확인 위치 |
-|---|---|
-| 최종 저장 결과를 읽는 장면 | 제출 문서 대시보드 캡처, 9월 7일 실제 HTTP 응답 |
-| 한 명령의 입력 → 처리 → 저장 → 읽기 | run_serving_demo.py, rehearsal-20260907.json |
-| 단계별 건수 | 입력 1조합 → 영향 4행 → 전략 1행 → 영향 4행 재조회, 중복 0 |
-| 최신 구성도·데이터 모델 | 제출 문서 2절, 구현 경로와 계획 연결 분리 |
-| 부하·장애·복구와 한계 | 제출 문서 4절, 기존 실험과 확장 범위 구분 |
-| 남은 문제·다음 단계 | 제출 문서 7절, odd lot 비교와 자동매매 검증 |
-| 1~2분 이내 시연 | 9월 7일 명령 리허설 0.37초, 브라우저 조작은 별도 |
+| 요구사항 | 상태 | 실제 결과 | 증거 |
+|---|---|---|---|
+| 저장 결과를 읽는 장면 | PASS | FastAPI `/health`와 CPI·NVDA 상세가 HTTP 200, 대시보드 조회 성공 | [최종 HTTP 증거](evidence/serving-layer/final-verification-20260907.json), [전체 캡처](evidence/serving-layer/dashboard-cpi-nvda-20260907.png) |
+| 입력 → 처리 → 저장 → 읽기 | PASS | 1조합 → 영향 4행 → 전략 1행 Upsert → 영향 4행·1m/3m/5m 재조회, 중복 0 | [최종 실행 증거](evidence/serving-layer/final-verification-20260907.json) |
+| 1~2분 안전한 시연 | PASS | 실제 CLI 0.43초, 전체 화면 녹화 69.84초 | [WebM](evidence/session7-demo/session7-submission-demo.webm) |
+| 최신 구성도 | PASS | merged main `7f55721`의 소스 9개를 Archify가 검증, showcase 9/9 | [HTML](diagrams/session7-architecture.html), [검증 receipt](diagrams/session7-architecture.visual-check.json) |
+| 단계별·최종 건수 표 | PASS | 202 releases, 10 symbols, 2,020 work items, 8,080 impacts 등 계층별 표기 | [발표 문서](serving-layer-assignment.md) |
+| 부하·장애·복구와 한계 | PASS | 실제 체결 부하 범위와 202×10 bar 범위를 분리하고 미보장 항목 표기 | [발표 문서 4절](serving-layer-assignment.md#4-부하장애복구에서-확인한-것) |
+| README 실행법·구성·확인법 | PASS | 로컬 실행, API URL, 시연 명령, 증거 링크 반영 | [README](../README.md) |
+| 코드에 없는 기능 구분 | PASS | 자동주문·위험관리·사람 승인·odd-lot 비교는 후속 계획으로 표기 | [발표 문서 7절](serving-layer-assignment.md#7-남은-문제와-다음-단계) |
 
-## 발표 직전
+## 제출 숫자 정본
 
-1. 의존성 설치와 기존 데이터가 있는 PostgreSQL을 미리 준비한다. 발표 중 설치·전체 재수집하지 않는다.
-2. README의 서빙 실행 방법으로 로컬 API를 시작하고 `/health`가 정상인지 확인한다.
-3. 발표 1회·NVDA 1종목으로 제출 문서의 명령을 실행한다. 출력은 `/tmp/serving-demo-rehearsal.json`에 저장해 기존 제출 증거를 덮어쓰지 않는다.
-4. 영향 4행·전략 1행·중복 0을 확인하고 화면에서 같은 발표를 조회한다.
-5. 실패하면 복구에 발표 시간을 모두 쓰지 말고 기존 대시보드 캡처와 실제 JSON을 보여준다. 사전 캡처임을 밝힌다.
+| 구분 | 실제 값 | 해석 |
+|---|---:|---|
+| 공식 발표 / 종목 / work item | 202 / 10 / 2,020 | 분석 범위 |
+| 공급자 요청·페이지 | 404 / 404 | 발표별 1m·1d 다종목 요청; 추가 페이지 없음 |
+| 이벤트별 선택 합계 | 1m 308,512 / daily 30,250 | 인접 이벤트가 같은 DB 행을 공유할 수 있음 |
+| 파생 봉 | 3m 112,593 / 5m 70,090 | 각각 PARTIAL 19,178 / 16,215 |
+| PostgreSQL 고유 시장 봉 | 1m 323,126 / 3m 112,593 / 5m 70,090 / 1d 11,680 | business key 기준 실제 저장 행 |
+| 경제 환경 | 2,020 | 202 events × 10 series |
+| 이벤트 영향 | 8,080 | COMPLETE 5,366, PARTIAL 2,557, NO_DATA 152, baseline 부족 5 |
+| 탐색 전략 | 2,020 중 계산 가능 1,988 | 전체 평균 -0.15649%, COMPLETE 입력 911 |
 
-새 DB에는 기존 저장 데이터가 없으므로 이 시연 명령만으로 동일 결과가 생기지 않는다.
-0.37초는 외부 수집을 제외한 DB 재계산·저장·읽기의 실행 시간이며 모든 환경의 속도 보장은 아니다.
-프로그램 재실행은 같은 결과 키를 갱신하며, 시장 원본이나 계좌를 삭제하는 복구 명령은 사용하지 않는다.
+위 숫자는 행의 의미가 다르므로 합쳐서 하나의 “전체 원본 건수”로 말하지 않는다.
+
+## Coverage 계약 주의사항
+
+PR #28은 `main`의 `7f55721ddcfea021487664429a188776465ee0d4`로 병합됐다. 이제 공급자 요청 완료 여부와 실제 가격 봉 밀도를 분리한다.
+
+- 수집 완료: HTTP 성공, 요청 범위, pagination 종료, truncation·provider failure·off-grid 오류가 없는지로 판단한다.
+- 관측 coverage: 반환된 가격 봉 수와 파생 bucket의 `source_bar_count/expected_bar_count`를 품질 정보로 보존한다.
+- 정상적인 sparse bar만으로 수집 실패 처리하지 않고 가격을 forward fill하지 않는다.
+- macro analysis의 기존 90% 규칙은 별도 분석 사용성 정책이며 변경하지 않았다.
+
+202×10 전체 Airflow 증거의 `COMPLETE 1,980` 분류는 PR #28 이전 계약으로 만들어졌다. DAG 실행 성공·요청 수·저장 건수 증거는 유효하지만, 새 계약의 수집/관측 상태로는 아직 재검증하지 않았다. 전체 전략·백테스트도 이번 corrective로 다시 계산하지 않았다.
+
+## 180분과 181개 후보 시각
+
+- 수집 계약: `[T-60, T+121)`이므로 `T-60`부터 `T+120`까지 **181개 후보 timestamp**다. 공급자가 181개 봉을 모두 반환해야 수집 성공인 것은 아니다.
+- 서빙 차트: `[T-60, T+120)`의 **180분 표시 범위**다. 현재 CPI·NVDA 화면은 1분봉 180개를 읽는다.
+
+## 발표 직전 1분 체크
+
+1. `docker compose up -d --wait postgres`로 기존 데이터가 있는 DB를 확인한다.
+2. API를 시작하고 `curl -fsS http://127.0.0.1:8000/health`에서 `database=ok`를 확인한다.
+3. 대시보드에서 CPI 2026-07·NVDA를 미리 선택한다.
+4. 아래 시연 명령을 한 번 실행하고 영향 4·전략 1·중복 0·`NO_TRADE`를 확인한다.
+5. 실패하면 재수집·장애 재현을 하지 말고 저장된 캡처와 JSON을 보여주며 사전 증거라고 밝힌다.
+
+```bash
+.venv/bin/python scripts/run_serving_demo.py \
+  --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
+  --symbol NVDA \
+  --output /tmp/serving-demo-rehearsal.json
+```
+
+새 DB에는 사전 수집한 시장 데이터가 없으므로 이 명령 하나만으로 같은 결과가 생기지 않는다. 시연은 외부 API·Kafka 대용량 재생·증권사 주문을 호출하지 않는다.
 
 ## 발표에서 하지 않을 주장
 
-- 736만 건이 전체 확장 범위의 원시 체결이라는 주장
-- 봉이 없는 분에는 거래가 전혀 없었다는 주장
-- odd lot이 개인투자자의 거래라는 주장
-- 대시보드 LONG이 현재 자동매수 신호라는 주장
-- 모의주문 접수·취소가 실제 체결·수익성·실전 안전성 검증이라는 주장
+- 특정 부하 실험의 체결 수를 전체 프로젝트 체결 총량이라고 말하지 않는다.
+- 봉이 없는 분을 무거래나 수집 실패로 단정하지 않는다.
+- odd lot을 개인투자자 거래와 동일시하지 않는다.
+- 대시보드 `LONG`을 현재 자동매수 신호라고 말하지 않는다.
+- 모의주문 접수·취소를 실제 체결·수익성·실전 안전성 검증이라고 말하지 않는다.
 
-최종 자동매매는 별도의 완료 기준으로 관리한다. 데이터 정책 비교, 전략 검증,
-실시간 연결, 체결 후 계좌 대사, 총 위험 한도와 긴급 중지 검증이 아직 남아 있다.
+## 제출 전 검증 결과
+
+- 문서·서빙 targeted tests: 21개 통과
+- 전체 unit suite: 192개 통과, 8개 skip
+- PostgreSQL market-bar integration: 3개 통과
+- paper execution·recovery integration: 2개 통과
+- Python compileall 및 Git whitespace 검사: 통과
+- Archify 브라우저 검증: showcase 9/9, composition 오류·경고 0, 지정 viewport overflow 0
+
+Paper integration은 기존 코드의 회귀 검증일 뿐 이번 제출에서 전략과 주문을 연결했다는 뜻은 아니다.
+
+## 디스코드 제출 문구
+
+```text
+[7차시] 미국 경제 발표·시장 반응 파이프라인
+
+저장소: https://github.com/hjh6709/us-market-intelligence-pipeline
+발표 자료: https://github.com/hjh6709/us-market-intelligence-pipeline/blob/main/docs/serving-layer-assignment.md
+
+PostgreSQL 저장 결과를 FastAPI와 Macro Pulse 대시보드에서 실제 조회하도록 연결했습니다.
+입력 1조합 → 영향 4행 → 전략 1행 Upsert → 1m/3m/5m·영향 재조회까지 한 명령 0.43초로 검증했고 중복은 0입니다.
+현재 운영 상태는 RESEARCH_ONLY / NO_TRADE이며, 대용량 실행·외부 API·장애 재현은 저장된 증거로 대체합니다.
+```
