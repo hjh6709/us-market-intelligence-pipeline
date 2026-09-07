@@ -4,6 +4,10 @@
 
 | 파일 | 용도 |
 | --- | --- |
+| `session7-architecture.architecture.json` | merged main `7f55721` 소스 증거를 연결한 Archify 정본 |
+| `session7-architecture.html` | 검색·guided view·trace motion이 있는 제출용 대화형 구성도 |
+| `session7-architecture.visual-check.*` | 4개 데스크톱 viewport와 라이트·다크 자동 브라우저 검증 receipt·캡처 |
+| `session7-architecture.manual-review.json` | 전달된 artifact에 결합한 별도 수동 시각 검토 기록 |
 | `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 부하, 202회·10종목 시장·경제 데이터, 이벤트 분석, 실제 서빙과 미구현 주문 계층을 구분 |
 | `pipeline-architecture.png` | 루트 README에서 사용하는 전체 프로젝트 렌더 결과 |
 | `cpi-sip-kafka-spark-assignment.svg` | 한 CPI 발표일의 Kafka·Spark 과제 실행 정본 |
@@ -26,6 +30,15 @@ Data Source
 - 루트 README에는 전체 프로젝트 그림만 배치하고, 과제 실행 그림은 과제 문서에서만 사용한다.
 
 PNG를 수정한 뒤에는 SVG 정본과 내용이 같은지, 글자가 잘리거나 lane 경계를 침범하지 않는지 확인한다.
+
+## Archify 제출 구성도
+
+7차시 정본은 [Archify](https://github.com/tt-a1i/archify) 2.17로 생성했다.
+showcase validation 9/9, composition 오류·경고 0이며 자동 브라우저 검사는
+1440×900, 1600×1000, 1920×1080, 2048×1320에서 overflow 없음과 라이트·다크 캡처를 확인했다.
+자동 receipt의 `visualReview: pending`은 브라우저 자동 검사가 사람의 시각 판단을 대신하지 않는다는 뜻이다.
+실제 캡처 검토 결과는 별도의 `session7-architecture.manual-review.json`에 artifact hash와 함께 기록한다.
+HTML의 고정 Viewer UI는 영어 fallback이고, 작성한 노드·설명은 한국어다.
 
 ## PNG 생성
 

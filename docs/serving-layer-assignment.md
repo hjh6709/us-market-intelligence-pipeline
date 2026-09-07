@@ -1,202 +1,162 @@
-# 7차시 과제 — 서빙 레이어 완성과 최종 발표 준비
+# 7차시 과제 — 서빙 레이어 완성과 최종 발표
 
 ## 먼저 보는 결론
 
-수집과 저장으로 끝났던 파이프라인을 실제 사용 화면까지 연결했다. PostgreSQL의 경제 발표, 시장 반응, 경제 환경과 탐색 전략 결과를 FastAPI가 읽고 `Macro Pulse` 웹 대시보드가 보여준다.
+PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영향과 탐색 전략 결과를 FastAPI와 `Macro Pulse` 웹 대시보드에서 실제로 읽도록 연결했다. 최종 시연은 입력 1조합을 다시 계산·Upsert·재조회하는 데 0.43초였고, `/health`와 상세 API 모두 HTTP 200이었다.
 
-이번 구현은 실전 자동매매의 마지막 단계가 아니다. 최종 목표는 실전 자동매매지만, 현재 전체 전략의 과거 평균 순수익률은 약 `-0.15649%`이고 전망치 대비 최초 발표값, 전략과 연결된 모의체결, 보유량 대사와 긴급 중지 검증이 남았다. 따라서 연구 화면은 `RESEARCH_ONLY`, 주문 행동은 `NO_TRADE`를 유지한다.
+현재 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률은 주문이 아니며, 서빙 API에는 브로커 주문 경로가 없다.
+별도 모의주문 연결시험은 대시보드와 분리돼 있고, 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
 
-9월 7일 후속 작업에서는 별도 CLI로 실제 Alpaca 모의계좌의 주문 접수·취소와 새 프로세스의 주문 재조회를 확인했다. 체결은 0주다. 이는 과거 전략이나 대시보드와 연결된 자동매매가 아니다. [모의주문 실제 증거와 한계](paper-execution.md)를 별도로 구분한다.
+[대화형 Archify 구성도](diagrams/session7-architecture.html) · [70.32초 시연 영상](evidence/session7-demo/session7-submission-demo.webm) · [최종 실행 JSON](evidence/serving-layer/final-verification-20260907.json)
 
-![CPI 2026-07 · NVDA 저장 결과를 읽은 Macro Pulse 대시보드](evidence/serving-layer/dashboard.png)
+![CPI 2026-07 · NVDA 저장 결과를 읽은 Macro Pulse](evidence/serving-layer/dashboard-cpi-nvda-20260907.png)
 
 ## 1. 문제와 실제 데이터
 
-### 해결하려는 문제
+기존에는 저장 완료를 SQL과 실행 로그로 확인했지만 사용자가 최종 결과를 읽는 장면이 없었다. 이번 과제는 새 전략을 만드는 대신 `수집 → 처리 → 저장 → 분석 → 읽기`를 끝까지 연결하고, 연구 결과와 주문 행동을 분리했다.
 
-기존에는 데이터가 PostgreSQL에 저장됐다는 사실을 SQL과 실행 로그로 확인했다. 그러나 사용자가 발표와 종목을 선택해 결과를 읽는 장면이 없었고, 탐색 전략의 `LONG` 신호가 실제 주문처럼 오해될 수 있었다.
-
-이번 과제에서는 다음 두 문제를 해결했다.
-
-1. 최종 저장 결과를 읽기 전용 API와 브라우저 화면에서 확인한다.
-2. `연구 신호`, `과거 시뮬레이션`, `실제 주문 행동`을 서로 다른 필드와 화면으로 분리한다.
-
-### 전체 데이터 범위
-
-| 데이터 계층 | 검증된 범위 | 의미 |
+| 데이터 계층 | 실제 결과 | 한 행·건수의 의미 |
 |---|---:|---|
-| 공식 경제 발표 | CPI 55 + 고용 55 + PCE 55 + FOMC 37 = 202회 | 한 행이 공식 발표 한 번 |
-| 분석 종목 | 10종목 | SPY, QQQ, IWM, TLT, XLF, SMH, GLD, NVDA, AAPL, JPM |
-| 발표·종목 조합 | 2,020개 | 202회 × 10종목 |
-| SIP 1분봉 선택 합계 | 308,512행 | 발표 T-60분~T+120분에 실제 존재한 봉 |
-| 파생 3분봉 / 5분봉 | 112,593 / 70,090행 | 1분봉을 묶어 생성, 부족한 묶음은 PARTIAL |
-| 경제 환경 | 2,020행 | 발표 202회 × FRED·ALFRED 10개 series |
-| 발표 반응 | 8,080행 | 발표 202회 × 10종목 × 4개 시간 구간 |
-| 탐색 전략 | 전체 2,020행, 계산 가능 1,988행 | 비용 10bp 차감 평균 약 -0.15649% |
+| 공식 발표 | CPI 55 + 고용 55 + PCE 55 + FOMC 37 = 202회 | 공식 발표 한 번 |
+| 종목 / work item | 10 / 2,020 | 202 releases × 10 symbols |
+| 공급자 논리 요청 / 실제 페이지 | 404 / 404 | 발표마다 다종목 1m·1d 요청, 추가 페이지 없음 |
+| SIP 1분봉 선택 합계 | 308,512 | 이벤트 구간에서 반환된 봉의 선택 합계 |
+| SIP 일봉 선택 합계 | 30,250 | 발표 전후 거래일의 이벤트별 선택 합계 |
+| 3분봉 / 5분봉 | 112,593 / 70,090 | 1분봉에서 생성; PARTIAL 19,178 / 16,215 |
+| PostgreSQL 고유 시장 봉 | 1m 323,126 / 3m 112,593 / 5m 70,090 / 1d 11,680 | business key 기준 실제 저장 행 |
+| 경제 환경 | 2,020 | 발표 202회 × FRED·ALFRED 10 series |
+| 이벤트 영향 | 8,080 | 202 × 10 × PRE60·POST5·POST30·POST60 |
+| 탐색 전략 | 2,020 중 계산 가능 1,988 | 비용 10bp 차감 평균 -0.15649% |
 
-이 숫자는 서로 다른 데이터 계층이므로 모두 더해 “전체 원본 건수”라고 말하지 않는다. 3분봉과 5분봉은 1분봉에서 만든 파생 데이터이고, 이벤트별 선택 구간은 서로 겹칠 수 있다.
+이 숫자들은 서로 다른 계층이다. 파생 봉을 원본과 더하지 않고, 이벤트별 선택 합계와 PostgreSQL 고유 행 수도 구분한다. 가까운 발표가 같은 시장 시각을 공유할 수 있기 때문이다.
 
-**확장 범위와 부하 실험 범위는 다르다.** 7,360,804건은 기존 CPI 55회 × 4종목의 개별 체결이다. 확장된 202회 × 10종목은 공급자가 집계한 봉을 수집했다. 확장 범위 전체의 원시 체결을 Kafka·Spark로 처리했다고 주장하지 않는다. 파티션 개선의 33.9%는 별도 118,118건 재생 시험 결과다.
+이벤트 영향 8,080행의 기존 분석 상태는 COMPLETE 5,366, PARTIAL 2,557, NO_MARKET_DATA 152, MISSING_PRE_RELEASE_BASELINE 5다. 탐색 전략 중 COMPLETE 입력은 911개다. 이 분류는 macro analysis의 별도 사용성 정책 결과다.
 
-**봉 없음은 거래 없음과 같지 않다.** 공급자 기준에서 odd lot 조건 `I`는 가격 계산에서는 제외되고 다른 제한 조건이 없으면 거래량에는 반영된다. 해당 분에 가격 반영 가능한 체결이 없으면 봉이 생성되지 않을 수 있다. 공급자 봉만으로 무거래·odd lot-only·수집 누락을 구분하지 않는다. 3분·5분 집계도 제외된 거래 가격을 복원하지 않는다. [공급자 집계 규칙](https://docs.alpaca.markets/us/docs/market-data-faq)
+## 2. 파이프라인 구조와 데이터 모델
 
-## 2. 최신 파이프라인 구조와 데이터 모델
+![Archify가 merged main 소스를 검증해 생성한 최신 구성도](diagrams/session7-architecture.visual-check.1440x900.dark.png)
 
-### 9월 7일 현재 구성 — 구현과 계획 구분
-
-```mermaid
-flowchart TD
-    A[사전 보관 원시 SIP 체결: CPI 55회 × 4종목] --> K[Kafka 재생 → Spark 봉 집계]
-    B[공식 발표 202회 × 10종목] --> AF[Airflow 수집]
-    AF --> M[Alpaca SIP 1분·일봉 → 3분·5분봉]
-    AF --> F[FRED·ALFRED 경제 상황]
-    K --> DB[(PostgreSQL)]
-    M --> DB
-    F --> DB
-    DB --> C[영향·탐색 전략 재계산]
-    C --> DB
-    DB --> S[서빙 계층 → FastAPI → 대시보드]
-    P[별도 사용자 지정 모의주문 CLI] --> AP[Alpaca paper 접수·취소·조회]
-    P <--> J[(주문 기록 테이블)]
-    S -. 계획: 연결 전 .-> R[실시간 전략·위험관리·승인]
-    R -. 계획: 연결 전 .-> P
-```
-
-![수집부터 서빙, 향후 주문 계층까지 구분한 최신 구성도](diagrams/pipeline-architecture.png)
+Archify 구성도는 병합된 `main` SHA `7f55721ddcfea021487664429a188776465ee0d4`와 소스 참조 12개를 연결해 검증했다. showcase artifact check 9/9, composition 오류·경고 0, 1440×900·1600×1000·1920×1080·2048×1320 라이트 화면과 양 끝 해상도 다크 화면의 containment 검사를 통과했다. 자동 receipt의 시각 검토는 계약상 `pending`이며, 별도 artifact-bound 수동 검토에서 라이트·다크 캡처의 경로 분리와 가독성을 확인했다.
 
 ```text
-공식 발표 일정 ─┬─ Airflow → Alpaca SIP 1m·1d → 3m·5m → market_bars
-               └─ Airflow → FRED·ALFRED → macro_event_contexts
-
-저장된 발표 + 시장 봉 + 경제 환경
-  → 발표 전후 영향 계산 → macro_event_impacts
-  → 탐색 전략 계산     → event_strategy_results
-  → ServingService → FastAPI JSON API → Macro Pulse Dashboard
-
-별도 연결시험: 사용자 지정 모의주문 CLI → Alpaca paper
-             ↔ paper_order_intents (접수·취소·재조회, 체결 0주)
-
-향후 연결 계획: 전략 승인 → 위험관리 → Slack 사람 승인 → 증권사 모의주문
-          → 주문·체결·포지션 복구 → 소액 실전 → 자동 실전
+공식 제공처 → Airflow → 시장·경제 context ─┐
+SIP 체결 Parquet → Kafka → Spark·파생 가공 ├→ PostgreSQL
+                                               └→ 이벤트 분석 → FastAPI → Web Dashboard·CLI
 ```
 
-| 테이블 | 한 행의 의미 | 중복을 막는 기준 |
+| 테이블 | 한 행의 의미 | business key |
 |---|---|---|
-| `economic_events` | 공식 발표 한 번 | event type·기준 기간·발표 시각·출처 |
-| `market_bars` | 종목·시각·해상도별 가격 봉 | symbol·bar start·timeframe·source·feed |
-| `macro_event_contexts` | 발표 당시 알 수 있었던 지표 하나 | event ID·series ID |
-| `macro_event_impacts` | 발표·종목·구간별 시장 반응 | event·symbol·window·analysis version |
-| `event_strategy_results` | 발표·종목별 과거 전략 결과 | event·symbol·strategy·version |
-| `paper_order_intents` | 별도 모의 연결시험의 주문 의도·누적 체결 상태 | 계좌 scope·request ID, 고유 client order ID |
+| `economic_events` | 공식 발표 한 번 | event type·reference period·released at |
+| `market_bars` | 종목·시각·해상도별 봉 | symbol·start·timeframe·source·feed |
+| `macro_event_contexts` | 발표 시점에 알 수 있었던 지표 하나 | event ID·series ID |
+| `pipeline_runs` | 파이프라인 실행 한 번 | pipeline run ID |
+| `pipeline_work_items` | 실행 안의 event·symbol·stage | run·event·symbol·stage |
+| `pipeline_run_checks` | 품질검사와 alert | run·event·symbol·stage·check |
+| `macro_event_impacts` | 발표·종목·구간별 반응 | event·symbol·window·analysis version |
+| `event_strategy_results` | 발표·종목별 탐색 결과 | event·symbol·strategy·version |
 
-위 PNG는 연구·서빙 경로의 기존 실행 증거다. 이후 추가된 별도 모의주문 CLI는 위 텍스트 구성도에 표시했다. 이 주문 경로를 대시보드에서 호출하는 연결은 없다.
+FastAPI는 SQL을 직접 실행하지 않는다. `FastAPI → ServingService → PostgresServingRepository → PostgreSQL` 순서로 분리했고 CLI 시연도 같은 서비스·저장소 규칙을 사용한다.
 
-API 라우터가 SQL을 직접 실행하지 않는다. `FastAPI → ServingService → PostgresServingRepository → PostgreSQL` 순서로 분리해 API와 시연 명령이 같은 조회 규칙을 사용한다.
+### Coverage 계약
 
-## 3. 한 번의 실행: 입력 → 처리 → 저장 → 읽기
+PR #28 병합 후 collection과 observed coverage를 분리했다.
 
-실제 DB에 존재하는 `CPI|2026-07|2026-08-12T12:30:00Z`와 `NVDA`를 선택했다.
+| 상태 | 의미 | 실패 조건 |
+|---|---|---|
+| provider/session collection | 요청 범위를 정상적으로 끝까지 수집했는가 | HTTP/retry 실패, pagination truncation, malformed/off-grid timestamp |
+| observed price-bar coverage | 실제 가격 봉이 후보 시각 중 얼마나 존재하는가 | 실패가 아니라 품질 정보; sparse 가능 |
+| derived bucket coverage | 실제 source 1m 수와 expected 수 | 가격을 채우지 않고 count와 PARTIAL 보존 |
+| macro analysis coverage | 분석 계산에 충분한가 | 기존 90% 정책 유지 |
+
+정상적인 sparse response만으로 collection을 실패 처리하지 않는다. daily만 완전하다고 전체 완료로 처리하지도 않는다. 반대로 181개 가격 봉을 모두 요구하지 않는다.
+
+- 수집 범위 `[T-60, T+121)`: `T-60`부터 `T+120`까지 181개 후보 timestamp
+- 서빙 차트 `[T-60, T+120)`: 끝 시각을 제외한 180분 표시 범위
+
+봉이 없는 분은 무거래·odd-lot-only·공급자 bar 조건 중 무엇인지 공급자 봉만으로 확정하지 않는다.
+
+## 3. 입력 → 처리 → 저장 → 읽기: 한 번의 실행 기록
 
 ```bash
-.venv/bin/python scripts/run_serving_demo.py \
+.venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
   --symbol NVDA \
   --output /tmp/serving-demo-rehearsal.json
 ```
 
-| 단계 | 입력·출력 | 실제 확인 결과 |
+| 단계 | 입력·출력 | 최종 확인 |
 |---|---|---:|
-| 입력 | DB에 사전 수집한 CPI 발표 1회 × NVDA 1종목 | 1개 조합 |
-| 처리 | 발표 전 60분, 발표 후 5·30·60분 | 영향 4행 계산 |
-| 저장 | 영향 / 선택 전략 결과 Upsert | 4행 / 1행 |
-| 읽기 | 방금 저장한 영향과 시장 봉 재조회 | 영향 4행, 1m·3m·5m |
-| 최종 판단 | 실행 준비 정책 | `RESEARCH_ONLY / NO_TRADE` |
+| 입력 | DB에 사전 수집한 CPI 발표 1회 × NVDA 1종목 | 1조합 |
+| 처리 | PRE60·POST5·POST30·POST60 | 영향 4행 |
+| 저장 | 영향 / 전략 결과 Upsert | 4행 / 1행 |
+| 읽기 | 같은 서빙 계층으로 상세·봉 재조회 | 영향 4행, 1m·3m·5m |
+| 무결성 | 선택 키와 전체 DB 검사 | 중복 0 |
+| 안전 상태 | execution readiness | `RESEARCH_ONLY / NO_TRADE` |
 
-실제 실행 시간은 `/usr/bin/time -p` 기준 `0.30초`였다. 같은 입력을 연속 두 번 실행한 뒤에도 선택 입력의 영향 고유키는 4개, 전략 고유키는 1개였고 전체 중복 고유키는 0이었다.
+최종 실행은 0.43초였다. 9월 7일 이전 리허설 0.37초와 9월 4일 기록 0.30초는 별도 실행이며 최신 값으로 덮어 말하지 않는다. 이 명령은 사전 저장 데이터를 사용하고 외부 Alpaca·FRED·ALFRED API, Kafka 대용량 재생, 증권사 주문을 호출하지 않는다.
 
-이 명령은 이미 저장된 실제 시장 데이터를 다시 계산한다. 발표 중 외부 Alpaca·FRED·ALFRED API를 호출하지 않고 Kafka 대용량 원본을 재생하지 않으며 증권사 주문도 보내지 않는다.
+## 4. 부하·장애·복구에서 확인한 것
 
-기계 판독 결과는 [`demo-result.json`](evidence/serving-layer/demo-result.json), 상세 응답은 [`api-detail.json`](evidence/serving-layer/api-detail.json)에 있다.
+### 별도의 원시 체결 부하 범위
 
-9월 7일 같은 명령을 재실행한 [리허설 결과](evidence/serving-layer/rehearsal-20260907.json)도 영향 4행·전략 1행·중복 0이었다. 명령 전체 시간은 0.37초다. 위의 0.30초는 9월 4일 기존 실행 기록이며 두 측정은 구분한다. CLI는 HTTP 요청을 보내는 대신 API와 동일한 서빙 계층으로 재조회한다. 브라우저·HTTP 실행 증거는 별도로 확인한다.
-
-## 4. 부하·장애·복구에서 확인한 것과 아직 보장하지 못하는 것
-
-### 실제 확인한 것
+원시 체결 경로의 검증 범위는 CPI 55회 × SPY·QQQ·SMH·NVDA 네 종목이다. 보관한 실제 SIP 개별 체결 7,360,804건을 Kafka로 재생했고 발행·수신·Spark 입력이 모두 일치했다. 이것은 전체 202×10 기간의 체결 총량이 아니다.
 
 | 실험 | 확인 결과 |
 |---|---|
-| 원시 체결 부하 | Alpaca에서 미리 보관한 실제 SIP 체결 7,360,804건을 Kafka와 Spark로 처리 |
-| Kafka 전달 | 발행·수신·Spark 입력이 모두 7,360,804건으로 일치 |
-| Spark 메모리 장애 | 메모리에 반복 보관하던 중간 결과를 `DISK_ONLY`로 바꿔 완료 후 해제 |
-| PostgreSQL 장애 | GCP VM 전체가 아니라 PostgreSQL 컨테이너만 중지하고, 재시작 후 실패 입력만 Upsert |
-| API 503 | 첫 요청만 503인 로컬 mock에서 재시도 성공과 alert `OPEN → RESOLVED` 확인 |
-| 중복 판정 수정 | 거래 식별자에 거래소를 포함한 뒤 전체 재실행, 실제 중복 0 |
-| Kafka 쏠림 개선 | 최대 파티션 비중 97.5%에서 33.9%로 감소 |
+| 중복 식별 | 거래소를 식별키에 포함한 전체 재실행에서 실제 중복 0, 최종 1분봉 22,260 |
+| Spark heap | 반복 중간 데이터를 `DISK_ONLY`로 전환하고 처리 뒤 `unpersist()`하여 완료 |
+| PostgreSQL 장애 | 컨테이너 중지로 DB sink 오류를 재현, 재시작 뒤 실패 입력만 Upsert해 중복 0 |
+| 로컬 API 503 | 첫 호출 실패·두 번째 성공, alert `OPEN → RESOLVED` |
+| Kafka routing | 별도 118,118건에서 최대 파티션 비중 97.5% → 33.9% |
 
-### 아직 보장하지 못하는 것
+시장 Airflow 전체 실행은 202 mapped tasks, 2,020 work items를 522.660초에 완료했고 거시 DAG는 202 tasks를 14.835초에 완료했다. 다만 당시 `COMPLETE 1,980 / DATA_NOT_AVAILABLE 40`은 PR #28 이전 coverage 계약으로 기록됐다. 실행 성공·요청·저장 건수는 증거로 유지하지만 새 collection/observed 상태로 재검증한 값이라고 주장하지 않는다.
 
-- 전략에서 발생한 모의주문의 실제 체결과 실전 주문 접수 (별도 연결시험의 모의 접수·취소는 확인)
-- 부분 체결·미체결·취소·재시작 뒤 계좌와 DB 대사
-- 최대 주문 금액, 최대 보유 종목, 일일 손실 한도와 긴급 중지
-- 신뢰할 수 있는 발표 당시 시장 전망치와 실제 발표값의 차이
-- 비발표일 비교군과 실제 호가 기반 슬리피지
-- 다중 서버 장애조치, 장기 운영 모니터링과 SLO
-
-## 5. 저장 결과를 실제로 읽는 장면
-
-### 실행
+## 5. 저장 결과를 쓰는 장면
 
 ```bash
 .venv/bin/uvicorn src.serving_api:app --host 127.0.0.1 --port 8000
+curl -fsS http://127.0.0.1:8000/health
 ```
 
 - 대시보드: `http://127.0.0.1:8000/`
 - API 문서: `http://127.0.0.1:8000/docs`
-- 상태 확인: `GET /health`
 - 발표 목록: `GET /api/v1/events`
-- 발표·종목 상세: `GET /api/v1/events/{event_id}/symbols/{symbol}`
-- 가격 봉: `GET /api/v1/events/{event_id}/symbols/{symbol}/bars?timeframe=1m`
-- 전략 전체 요약: `GET /api/v1/strategy/summary`
+- 상세: `GET /api/v1/events/{event_id}/symbols/{symbol}`
+- 봉: `GET /api/v1/events/{event_id}/symbols/{symbol}/bars?timeframe=1m`
 
-실제 CPI·NVDA 조회에서는 Alpaca SIP 기준 1분봉 180개, 3분봉 60개, 5분봉 36개를 읽었다. 개발 중 1분봉이 319개로 보이는 문제를 발견했는데, `alpaca/sip`, `alpaca/iex`, `alpaca_replay/sip`가 섞인 것이 원인이었다. 저장 데이터를 지우지 않고 조회 조건을 기준 출처인 `alpaca/sip`로 고정해 180개로 수정했다.
+최종 HTTP 확인에서 `/health`는 `{"status":"ok","database":"ok"}`, 상세 응답은 영향 4행·경제 환경 10행·연구 신호 LONG·순수익률 0.47785058%·`RESEARCH_ONLY / NO_TRADE`를 반환했다. CPI·NVDA 서빙 차트는 Alpaca SIP 1분봉 180개를 읽었다.
 
-## 6. 연구 신호, 시뮬레이션, 주문 행동의 차이
+선택 사례가 양수여도 전체 1,988개 평균은 -0.15649%다. `LONG`은 과거 연구 신호이고 `0.4779%`는 실제 체결이 아닌 한 사례의 시뮬레이션이다.
 
-선택한 CPI·NVDA 사례는 발표 전 가격 방향이 양수여서 연구 신호가 `LONG`이다. 발표 60분 후 가격으로 계산한 과거 시뮬레이션 순수익률도 `0.47785058%`다. 그러나 이 한 사례가 수익 전략을 의미하지 않는다.
+## 6. 발표 중 실행과 실패 시 복구
 
-| 화면 필드 | 뜻 | 주문 여부 |
-|---|---|---|
-| `research_signal=LONG` | 과거 데이터 규칙이 낸 방향 | 주문 아님 |
-| `simulation.net_return_pct=0.47785058` | 선택한 과거 한 구간의 비용 차감 계산 | 실제 체결 아님 |
-| `execution_readiness.order_action=NO_TRADE` | 현재 시스템이 허용하는 실제 행동 | 주문하지 않음 |
+1. Archify 구성도에서 `분석·서빙 경로`를 선택한다.
+2. `/health`에서 DB 연결을 확인한다.
+3. CPI 2026-07·NVDA로 시연 명령을 한 번 실행한다.
+4. 영향 4·전략 1·중복 0·`NO_TRADE`를 보여준다.
+5. 대시보드에서 같은 저장 결과를 다시 읽는다.
 
-전체 전략 평균은 약 `-0.15649%`다. 기존 서빙 증거의 준비 검사에서는 시장 데이터와 전략 결과만 통과했다. 별도 모의주문 연결시험이 성공했어도 전략 연결·실제 체결·보유량 대사·긴급 중지를 모두 검증한 것은 아니므로 화면의 모의실행 승인은 여전히 비활성화다. 이 버전에는 모든 검사가 통과하는 합성 입력을 넣어도 실제 주문으로 승격하지 않는 release-level lock도 있다.
+시연 실패 시 전체 수집·장애 재현·주문 시험을 하지 않는다. PostgreSQL 연결만 확인하고 같은 Upsert 명령을 한 번 재실행한다. 그래도 실패하면 [사전 녹화](evidence/session7-demo/session7-submission-demo.webm), [캡처](evidence/serving-layer/dashboard-cpi-nvda-20260907.png), [JSON](evidence/serving-layer/final-verification-20260907.json)을 보여주며 사전 증거임을 밝힌다.
 
-## 7. 실전 자동매매까지 남은 단계
+## 7. 남은 문제와 다음 단계
 
-```text
-현재: RESEARCH_ONLY / NO_TRADE
-  ↓ 전략 성과·데이터 승인
-PAPER_TRADING
-  ↓ 주문·부분 체결·재시작 복구 검증
-HUMAN_APPROVAL
-  ↓ Slack에서 사람이 종목·수량·근거 확인
-LIMITED_LIVE
-  ↓ 소액·소수 종목 운영 안정성 검증
-AUTOMATED_LIVE
-```
+- 202×10 기존 work item을 새 collection/observed coverage 계약으로 재검증하고 상태 분포를 다시 기록
+- accepted input이 달라질 경우에만 8,080 impacts와 2,020 strategy results 재계산
+- 발표 당시 시장 전망치와 최초 발표값의 point-in-time 수집
+- 비발표일 비교군, 통계 검정, 실제 호가 기반 비용
+- 같은 원시 체결의 odd-lot 포함 연구용 봉과 공급자 호환 봉 비교
+- 전략과 연결된 paper fill, 부분 체결·취소·재시작, 계좌-DB 포지션 대사
+- 최대 주문 금액·보유 종목·일일 손실 한도·중복 주문 방지·긴급 중지
+- 사람 승인 뒤 제한적 실전, 충분한 운영 검증 뒤 자동 실전 검토
 
-유튜브 예제에서 참고한 사람 승인, 손절·익절, 긴급 중지는 후속 계획이다. Alpaca 모의주문 CLI와 주문 기록 복구는 구현됐지만 연구 파이프라인과 분리돼 있다. 키움·토스 주문, Slack 승인, 뉴스 AI, VCP·RSI 전략은 현재 구현으로 표시하지 않는다.
+이번 coverage corrective는 전체 202×10 연구 데이터와 전략·백테스트를 직접 재계산하지 않았다. Python CI 3.14와 프로젝트 `<3.14` 불일치는 별도 follow-up이며 이번 제출 범위에서 수정하지 않았다.
 
-데이터 측면의 다음 작업은 기존 봉을 보존하면서 같은 원시 체결로 odd lot 포함 연구용 봉과 소량 체결 활동 통계를 비교하는 것이다. 이 작업은 아직 미구현이다. 기존 736만 건의 일부 구간으로 가격·거래량·coverage 차이를 검증하고, 확장 범위의 원시 체결 수집 여부는 별도 목록으로 관리한다. 봉 데이터만으로 원시 체결을 복원하지 않는다.
+## 8. 제출 증거
 
-## 8. 발표 중 1~2분 시연과 복구 방법
-
-1. `curl http://127.0.0.1:8000/health`로 DB 연결이 `ok`인지 확인한다.
-2. 대시보드에서 CPI 2026-07과 NVDA를 선택한다.
-3. 위의 `run_serving_demo.py` 명령을 한 번 실행한다.
-4. JSON의 영향 4행·전략 1행·중복 0·`NO_TRADE`를 보여준다.
-5. 대시보드의 `저장 결과 조회`를 눌러 같은 결과를 다시 읽는다.
-
-실패하면 외부 API나 주문이 실행되지 않으므로 금전 상태를 되돌릴 필요가 없다. PostgreSQL 연결을 확인한 뒤 같은 명령을 재실행하면 Upsert가 같은 고유키를 갱신한다. 대용량 부하·DB 중단·외부 API 실패 재현은 발표에서 다시 실행하지 않고 5·6차시 캡처로 설명한다.
+- [제출 체크리스트와 디스코드 문구](session7-submission.md)
+- [최종 서빙 증거 설명](evidence/serving-layer/README.md)
+- [Archify HTML](diagrams/session7-architecture.html)
+- [Archify 자동 브라우저 receipt](diagrams/session7-architecture.visual-check.json)
+- [Archify 수동 시각 검토 기록](diagrams/session7-architecture.manual-review.json)
+- [70.32초 WebM](evidence/session7-demo/session7-submission-demo.webm)
+- [4분 발표 대본](09.07_대본.md)

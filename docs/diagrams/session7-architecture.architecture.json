@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "미국 시장 이벤트 인텔리전스 파이프라인",
+    "output": "session7-architecture.html",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "viewBox": [1040, 540],
+    "repository": {
+      "url": "https://github.com/hjh6709/us-market-intelligence-pipeline",
+      "revision": "7f55721ddcfea021487664429a188776465ee0d4"
+    },
+    "views": [
+      {
+        "id": "context-path",
+        "label": "이벤트 컨텍스트 수집",
+        "focus": ["providers", "airflow", "derived", "postgres"],
+        "note": "시장·거시경제 컨텍스트를 수집하고 Python으로 3분봉·5분봉을 생성해 저장합니다."
+      },
+      {
+        "id": "load-path",
+        "label": "체결 부하·복구 경로",
+        "focus": ["trade-files", "kafka", "spark", "postgres"],
+        "note": "보관한 실제 SIP 체결을 재생해 Kafka와 Spark 처리 및 복구를 검증합니다."
+      },
+      {
+        "id": "serving-path",
+        "label": "분석·서빙 경로",
+        "focus": ["postgres", "analysis", "serving", "dashboard"],
+        "note": "저장 데이터를 다시 읽어 이벤트 반응과 탐색용 전략 결과를 제공합니다."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "공식 데이터 제공처",
+      "sublabel": "Alpaca SIP · BLS · BEA · Federal Reserve · FRED/ALFRED",
+      "pos": [40, 90],
+      "size": [230, 76]
+    },
+    {
+      "id": "airflow",
+      "type": "backend",
+      "label": "Airflow",
+      "sublabel": "이벤트 단위 수집·검증",
+      "tag": "202 releases × 10 symbols",
+      "pos": [320, 90],
+      "size": [180, 76],
+      "sources": [
+        {"path": "dags/market_context_backfill_pipeline.py", "label": "market context DAG"},
+        {"path": "dags/macro_context_backfill_pipeline.py", "label": "macro context DAG"}
+      ]
+    },
+    {
+      "id": "derived",
+      "type": "backend",
+      "label": "Python 파생봉 생성",
+      "sublabel": "provider 1m → 3m/5m",
+      "tag": "source counts preserved",
+      "pos": [540, 90],
+      "size": [190, 76],
+      "sources": [
+        {"path": "src/market_context_backfill.py", "label": "backfill caller"},
+        {"path": "src/derived_bars.py", "label": "derived aggregation"}
+      ]
+    },
+    {
+      "id": "trade-files",
+      "type": "cloud",
+      "label": "SIP 체결 Parquet",
+      "sublabel": "재현 가능한 부하 입력",
+      "pos": [40, 410],
+      "size": [180, 72]
+    },
+    {
+      "id": "kafka",
+      "type": "messagebus",
+      "label": "Kafka",
+      "sublabel": "체결 이벤트 · 6 partitions",
+      "pos": [280, 410],
+      "size": [175, 72]
+    },
+    {
+      "id": "spark",
+      "type": "backend",
+      "label": "Spark 원시 체결 집계",
+      "sublabel": "SIP trades → 1m OHLCV",
+      "pos": [520, 410],
+      "size": [185, 72],
+      "sources": [
+        {"path": "src/spark_market_processor.py", "label": "Spark processor"},
+        {"path": "src/preprocess.py", "line": 265, "label": "minute aggregation"}
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "1m/3m/5m · daily · macro · impacts",
+      "tag": "upsert + lineage",
+      "pos": [520, 245],
+      "size": [220, 92]
+    },
+    {
+      "id": "analysis",
+      "type": "backend",
+      "label": "이벤트 반응 분석",
+      "sublabel": "PRE60 · POST5/30/60 · 탐색용 전략",
+      "tag": "RESEARCH_ONLY",
+      "pos": [780, 90],
+      "size": [225, 92],
+      "sources": [
+        {"path": "src/macro_event_impact.py", "label": "analysis coverage"},
+        {"path": "src/event_strategy_backtest.py", "label": "exploratory strategy"}
+      ]
+    },
+    {
+      "id": "serving",
+      "type": "backend",
+      "label": "FastAPI Serving",
+      "sublabel": "/health · /api/v1/events/{event_id}",
+      "pos": [780, 249],
+      "size": [225, 84],
+      "sources": [
+        {"path": "src/serving_api.py", "label": "HTTP API"},
+        {"path": "src/serving_repository.py", "label": "stored reads"}
+      ]
+    },
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "Web Dashboard · CLI",
+      "sublabel": "저장 결과 조회·발표 데모",
+      "pos": [780, 430],
+      "size": [200, 84],
+      "sources": [
+        {"path": "src/templates/dashboard.html", "label": "dashboard"},
+        {"path": "scripts/run_serving_demo.py", "label": "safe demo"}
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "수집·처리 레이어",
+      "wraps": ["airflow", "derived", "kafka", "spark"]
+    },
+    {
+      "kind": "region",
+      "label": "저장·분석·서빙 레이어",
+      "wraps": ["postgres", "analysis", "serving", "dashboard"]
+    }
+  ],
+  "connections": [
+    {"id": "provider-collection", "from": "providers", "to": "airflow", "label": "일정·SIP bars·vintage macro", "variant": "emphasis", "labelAt": [295, 185]},
+    {"id": "context-storage", "from": "airflow", "to": "postgres", "label": "1m·1d·macro + coverage", "variant": "emphasis"},
+    {"id": "derive-bars", "from": "airflow", "to": "derived", "variant": "emphasis"},
+    {"id": "derived-storage", "from": "derived", "to": "postgres", "label": "3m·5m + source counts", "variant": "emphasis", "fromSide": "bottom", "toSide": "top"},
+    {"id": "trade-replay", "from": "trade-files", "to": "kafka", "label": "실제 체결 재생", "labelAt": [250, 496]},
+    {"id": "stream-processing", "from": "kafka", "to": "spark", "label": "partitioned events", "labelAt": [498, 500]},
+    {"id": "bar-storage", "from": "spark", "to": "postgres", "label": "bars upsert", "fromSide": "top", "toSide": "bottom", "labelAt": [630, 385]},
+    {"id": "analysis-roundtrip", "from": "postgres", "to": "analysis", "label": "context read · result upsert", "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [875, 205]},
+    {"id": "serving-read", "from": "postgres", "to": "serving", "label": "SQL 조회", "variant": "emphasis", "fromSide": "right", "toSide": "left", "route": "straight", "labelAt": [760, 235]},
+    {"id": "serve-result", "from": "serving", "to": "dashboard", "label": "HTTP JSON / service result", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [895, 390]}
+  ]
+}
