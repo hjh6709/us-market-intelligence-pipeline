@@ -109,6 +109,9 @@ class MarketContextBackfillTest(unittest.TestCase):
             (7, 1, 2),
         )
         self.assertEqual(result.coverage_status, "FUTURE_SESSION_UNAVAILABLE")
+        self.assertEqual(result.session_collection_status, "COMPLETE")
+        self.assertEqual(result.daily_collection_status, "PARTIAL")
+        self.assertEqual(result.overall_collection_status, "PARTIAL")
         self.assertEqual(result.session_1m_rows, 3)
         self.assertEqual((result.derived_3m_rows, result.derived_5m_rows), (1, 1))
         self.assertEqual(result.daily_rows, 10)
@@ -145,6 +148,8 @@ class MarketContextBackfillTest(unittest.TestCase):
         )
 
         self.assertEqual(result.daily_coverage_status, "COMPLETE")
+        self.assertEqual(result.session_collection_status, "COMPLETE")
+        self.assertEqual(result.overall_collection_status, "COMPLETE")
         self.assertNotEqual(result.session_coverage_status, "COMPLETE")
         self.assertNotEqual(result.overall_coverage_status, "COMPLETE")
         self.assertEqual(result.coverage_status, result.overall_coverage_status)
@@ -187,6 +192,57 @@ class MarketContextBackfillTest(unittest.TestCase):
         self.assertEqual(result.derived_3m_coverage_status, "PARTIAL")
         self.assertEqual(result.derived_5m_coverage_status, "PARTIAL")
         self.assertNotEqual(result.overall_coverage_status, "COMPLETE")
+
+    def test_successful_sparse_session_is_not_a_collection_failure(self) -> None:
+        item = select_market_context_work(
+            {
+                "event_types": ["FOMC"],
+                "release_from": "2026-07-29",
+                "release_to": "2026-07-29",
+                "symbols": ["TLT"],
+                "feed": "sip",
+            }
+        )[0]
+        session_start = self.release.released_at - timedelta(minutes=60)
+        sparse_session = [
+            bar("TLT", session_start + timedelta(minutes=offset))
+            for offset in range(181)
+            if offset not in {30, 31, 90}
+        ]
+        event_start = datetime(2026, 7, 29, 4, tzinfo=UTC)
+        daily_bars = [
+            bar("TLT", event_start + timedelta(days=offset))
+            for offset in [-11, -10, -9, -8, -7, -6, -5, 0, 1, 2, 5, 6, 7, 8, 9]
+        ]
+        responses = iter([(sparse_session, 2), (daily_bars, 1)])
+        derived = []
+
+        result = collect_market_context_work_item(
+            item,
+            client=object(),
+            database_url="postgresql://test",
+            provider_available_until=datetime(2026, 9, 3, tzinfo=UTC),
+            fetcher=lambda *_args, **_kwargs: next(responses),
+            historical_writer=lambda rows, **_kwargs: len(rows),
+            derived_writer=lambda rows, **_kwargs: derived.extend(rows) or len(rows),
+        )
+
+        self.assertEqual(result.session_collection_status, "COMPLETE")
+        self.assertEqual(result.daily_collection_status, "COMPLETE")
+        self.assertEqual(result.overall_collection_status, "COMPLETE")
+        self.assertEqual(result.session_coverage_status, "PARTIAL")
+        self.assertEqual(result.overall_coverage_status, "PARTIAL")
+        self.assertTrue(
+            any(bar.source_bar_count < bar.expected_bar_count for bar in derived)
+        )
+        self.assertEqual(
+            sum(bar.source_bar_count for bar in derived if bar.timeframe == "3m"),
+            178,
+        )
+        self.assertEqual(
+            sum(bar.source_bar_count for bar in derived if bar.timeframe == "5m"),
+            178,
+        )
 
     def test_all_required_market_context_layers_are_complete(self) -> None:
         item = select_market_context_work(

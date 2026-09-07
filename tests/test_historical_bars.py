@@ -132,6 +132,48 @@ class HistoricalBarsTest(unittest.TestCase):
                 feed="sip",
             )
 
+    def test_rejects_pagination_truncation_at_page_limit(self) -> None:
+        opener = RecordingOpener(
+            [
+                {
+                    "bars": {"SPY": [raw_bar("2026-08-12T12:30:00Z")]},
+                    "next_page_token": "still-more",
+                }
+            ]
+        )
+        client = AlpacaHistoricalBarsClient("key", "secret", opener=opener)
+
+        with self.assertRaisesRegex(HistoricalBarError, "page limit"):
+            fetch_all_bars(
+                client,
+                symbols=["SPY"],
+                start=datetime(2026, 8, 12, 12, 29, tzinfo=UTC),
+                end=datetime(2026, 8, 12, 12, 31, tzinfo=UTC),
+                feed="sip",
+                max_pages=1,
+            )
+
+    def test_rejects_off_grid_minute_bar_timestamp(self) -> None:
+        opener = RecordingOpener(
+            [
+                {
+                    "bars": {"SPY": [raw_bar("2026-08-12T12:30:30Z")]},
+                    "next_page_token": None,
+                }
+            ]
+        )
+        client = AlpacaHistoricalBarsClient("key", "secret", opener=opener)
+
+        with self.assertRaisesRegex(HistoricalBarError, "minute boundary"):
+            fetch_all_bars(
+                client,
+                symbols=["SPY"],
+                start=datetime(2026, 8, 12, 12, 29, tzinfo=UTC),
+                end=datetime(2026, 8, 12, 12, 31, tzinfo=UTC),
+                feed="sip",
+                timeframe="1Min",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

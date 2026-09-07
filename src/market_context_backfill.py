@@ -52,6 +52,9 @@ class MarketContextResult:
     daily_before: int
     daily_event: int
     daily_after: int
+    session_collection_status: str
+    daily_collection_status: str
+    overall_collection_status: str
     session_coverage_status: str
     daily_coverage_status: str
     derived_3m_coverage_status: str
@@ -70,6 +73,13 @@ class MarketContextBatchResult:
     event_id: str
     results: tuple[MarketContextResult, ...]
     pages: int
+
+
+@dataclass(frozen=True)
+class RequestCollectionResult:
+    bars: tuple[HistoricalBar, ...]
+    pages: int
+    status: str
 
 
 BarFetcher = Callable[..., tuple[list[HistoricalBar], int]]
@@ -178,14 +188,14 @@ def collect_market_context_work_item(
     )
     session_request, daily_request = build_context_requests([release], [item.symbol])
 
-    session_bars, session_pages = _fetch_request(
+    session_collection = _fetch_request(
         session_request,
         client=client,
         feed=item.feed,
         provider_available_until=provider_available_until,
         fetcher=fetcher,
     )
-    session_rows = select_session_context(session_bars, session_request)
+    session_rows = select_session_context(session_collection.bars, session_request)
     historical_writer(
         session_rows,
         database_url=database_url,
@@ -209,14 +219,14 @@ def collect_market_context_work_item(
             bar.coverage_status == "PARTIAL" for bar in derived
         )
 
-    daily_bars, daily_pages = _fetch_request(
+    daily_collection = _fetch_request(
         daily_request,
         client=client,
         feed=item.feed,
         provider_available_until=provider_available_until,
         fetcher=fetcher,
     )
-    daily = select_daily_context(daily_bars, release, item.symbol)
+    daily = select_daily_context(daily_collection.bars, release, item.symbol)
     historical_writer(
         daily.bars,
         database_url=database_url,
@@ -248,12 +258,18 @@ def collect_market_context_work_item(
         daily_before=daily.sessions_before,
         daily_event=daily.event_session,
         daily_after=daily.sessions_after,
+        session_collection_status=session_collection.status,
+        daily_collection_status=daily_collection.status,
+        overall_collection_status=_overall_collection_status(
+            session_collection.status,
+            daily_collection.status,
+        ),
         session_coverage_status=coverage["session"],
         daily_coverage_status=coverage["daily"],
         derived_3m_coverage_status=coverage["derived_3m"],
         derived_5m_coverage_status=coverage["derived_5m"],
         overall_coverage_status=coverage["overall"],
-        pages=session_pages + daily_pages,
+        pages=session_collection.pages + daily_collection.pages,
         fallback_used=False,
     )
 
@@ -290,14 +306,14 @@ def collect_market_context_event(
         source_url=first.source_url,
     )
     session_request, daily_request = build_context_requests([release], symbols)
-    session_bars, session_pages = _fetch_request(
+    session_collection = _fetch_request(
         session_request,
         client=client,
         feed=first.feed,
         provider_available_until=provider_available_until,
         fetcher=fetcher,
     )
-    session_rows = select_session_context(session_bars, session_request)
+    session_rows = select_session_context(session_collection.bars, session_request)
     historical_writer(
         session_rows,
         database_url=database_url,
@@ -312,7 +328,7 @@ def collect_market_context_event(
     for derived in derived_by_minutes.values():
         derived_writer(derived, database_url=database_url, feed=first.feed)
 
-    daily_bars, daily_pages = _fetch_request(
+    daily_collection = _fetch_request(
         daily_request,
         client=client,
         feed=first.feed,
@@ -320,7 +336,7 @@ def collect_market_context_event(
         fetcher=fetcher,
     )
     daily_by_symbol = {
-        item.symbol: select_daily_context(daily_bars, release, item.symbol)
+        item.symbol: select_daily_context(daily_collection.bars, release, item.symbol)
         for item in items
     }
     selected_daily = [
@@ -375,6 +391,12 @@ def collect_market_context_event(
                 daily_before=daily.sessions_before,
                 daily_event=daily.event_session,
                 daily_after=daily.sessions_after,
+                session_collection_status=session_collection.status,
+                daily_collection_status=daily_collection.status,
+                overall_collection_status=_overall_collection_status(
+                    session_collection.status,
+                    daily_collection.status,
+                ),
                 session_coverage_status=coverage["session"],
                 daily_coverage_status=coverage["daily"],
                 derived_3m_coverage_status=coverage["derived_3m"],
@@ -387,7 +409,7 @@ def collect_market_context_event(
     return MarketContextBatchResult(
         event_id=first.event_id,
         results=tuple(results),
-        pages=session_pages + daily_pages,
+        pages=session_collection.pages + daily_collection.pages,
     )
 
 
@@ -452,6 +474,15 @@ def _coverage_statuses(
     }
 
 
+def _overall_collection_status(session_status: str, daily_status: str) -> str:
+    statuses = {session_status, daily_status}
+    if statuses == {"COMPLETE"}:
+        return "COMPLETE"
+    if "NOT_AVAILABLE" in statuses:
+        return "NOT_AVAILABLE"
+    return "PARTIAL"
+
+
 def _expected_session_minutes(request: EventContextRequest) -> tuple[datetime, ...]:
     minutes = []
     current = request.start
@@ -491,17 +522,17 @@ def _derived_coverage_status(
 
 
 def _fetch_request(
-    request: object,
+    request: EventContextRequest,
     *,
     client: object,
     feed: str,
     provider_available_until: datetime,
     fetcher: BarFetcher,
-) -> tuple[list[HistoricalBar], int]:
+) -> RequestCollectionResult:
     request_end = available_request_end(request, provider_available_until)
     if request_end <= request.start:
-        return [], 0
-    return fetcher(
+        return RequestCollectionResult((), 0, "NOT_AVAILABLE")
+    bars, pages = fetcher(
         client,
         symbols=request.symbols,
         start=request.start,
@@ -509,4 +540,9 @@ def _fetch_request(
         feed=feed,
         timeframe=request.timeframe,
         max_pages=20,
+    )
+    return RequestCollectionResult(
+        tuple(bars),
+        pages,
+        "COMPLETE" if request_end == request.end else "PARTIAL",
     )

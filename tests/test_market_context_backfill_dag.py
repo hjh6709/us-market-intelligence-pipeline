@@ -12,15 +12,27 @@ class MarketContextBackfillDagTest(unittest.TestCase):
         module = importlib.import_module("dags.market_context_backfill_pipeline")
 
         self.assertEqual(
-            module.collection_outcome("PARTIAL"),
+            module.collection_outcome("FAILED", "PARTIAL"),
             ("FAILED", "FAIL", "OPEN"),
         )
+
+    def test_successful_sparse_collection_is_a_quality_warning(self) -> None:
+        module = importlib.import_module("dags.market_context_backfill_pipeline")
+
+        self.assertEqual(
+            module.collection_outcome("COMPLETE", "PARTIAL"),
+            ("SUCCEEDED", "PASS", "NONE"),
+        )
+        self.assertEqual(module.observed_coverage_check_status("PARTIAL"), "WARN")
 
     def test_unavailable_market_context_remains_non_failing_but_does_not_pass(self) -> None:
         module = importlib.import_module("dags.market_context_backfill_pipeline")
 
         self.assertEqual(
-            module.collection_outcome("FUTURE_SESSION_UNAVAILABLE"),
+            module.collection_outcome(
+                "NOT_AVAILABLE",
+                "FUTURE_SESSION_UNAVAILABLE",
+            ),
             ("DATA_NOT_AVAILABLE", "WARN", "NONE"),
         )
 
@@ -28,7 +40,7 @@ class MarketContextBackfillDagTest(unittest.TestCase):
         module = importlib.import_module("dags.market_context_backfill_pipeline")
 
         self.assertEqual(
-            module.collection_outcome("COMPLETE"),
+            module.collection_outcome("COMPLETE", "COMPLETE"),
             ("SUCCEEDED", "PASS", "NONE"),
         )
 

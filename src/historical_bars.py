@@ -148,7 +148,15 @@ def fetch_all_bars(
                 raise HistoricalBarError(
                     f"Alpaca returned an unrequested symbol: {symbol}"
                 )
-            bars.extend(normalize_bar(symbol, row) for row in rows)
+            for row in rows:
+                bar = normalize_bar(symbol, row)
+                if timeframe == "1Min" and (
+                    bar.bar_start.second != 0 or bar.bar_start.microsecond != 0
+                ):
+                    raise HistoricalBarError(
+                        "Alpaca minute bar timestamp was not on a minute boundary"
+                    )
+                bars.append(bar)
         if not page_token:
             return bars, page_number
     raise HistoricalBarError(

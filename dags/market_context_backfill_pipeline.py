@@ -36,13 +36,25 @@ UNAVAILABLE_COVERAGE_STATUSES = {
 }
 
 
-def collection_outcome(coverage_status: str) -> tuple[str, str, str]:
-    """Map overall collection coverage to persisted work/check outcomes."""
-    if coverage_status == "COMPLETE":
-        return "SUCCEEDED", "PASS", "NONE"
+def collection_outcome(
+    collection_status: str,
+    coverage_status: str,
+) -> tuple[str, str, str]:
+    """Map request completion and observed quality to persisted outcomes."""
+    if collection_status == "COMPLETE":
+        work_status = (
+            "DATA_NOT_AVAILABLE"
+            if coverage_status in UNAVAILABLE_COVERAGE_STATUSES
+            else "SUCCEEDED"
+        )
+        return work_status, "PASS", "NONE"
     if coverage_status in UNAVAILABLE_COVERAGE_STATUSES:
         return "DATA_NOT_AVAILABLE", "WARN", "NONE"
     return "FAILED", "FAIL", "OPEN"
+
+
+def observed_coverage_check_status(coverage_status: str) -> str:
+    return "PASS" if coverage_status == "COMPLETE" else "WARN"
 
 
 def _database_url() -> str:
@@ -210,6 +222,7 @@ def build_market_context_backfill_pipeline():
             )
             for item, result in zip(items, batch.results, strict=True):
                 work_status, check_status, alert_status = collection_outcome(
+                    result.overall_collection_status,
                     result.overall_coverage_status
                 )
                 mark_work_item(
@@ -239,13 +252,30 @@ def build_market_context_backfill_pipeline():
                         stage=stage,
                         check_name="collection",
                         expected_value="COMPLETE",
-                        actual_value=result.overall_coverage_status,
+                        actual_value=result.overall_collection_status,
                         status=check_status,
                         alert_status=(
                             "RESOLVED"
                             if attempt > 1 and check_status == "PASS"
                             else alert_status
                         ),
+                        checked_at=datetime.now(UTC),
+                    ),
+                )
+                record_pipeline_check(
+                    database_url,
+                    PipelineCheck(
+                        pipeline_run_id=pipeline_run_id,
+                        economic_event_id=item.event_id,
+                        symbol=item.symbol,
+                        stage=stage,
+                        check_name="observed_bar_coverage",
+                        expected_value="COMPLETE",
+                        actual_value=result.overall_coverage_status,
+                        status=observed_coverage_check_status(
+                            result.overall_coverage_status
+                        ),
+                        alert_status="NONE",
                         checked_at=datetime.now(UTC),
                     ),
                 )
