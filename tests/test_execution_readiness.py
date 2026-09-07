@@ -62,6 +62,8 @@ class ExecutionReadinessTest(unittest.TestCase):
         self.assertEqual(checks["strategy_performance"], "FAIL")
         self.assertEqual(checks["event_surprise"], "FAIL")
         self.assertIn("strategy performance gate", " ".join(result.reasons))
+        self.assertIn("standalone connectivity probes are insufficient", " ".join(result.reasons))
+        self.assertIn("baseline-aware account position reconciliation", " ".join(result.reasons))
 
     def test_fully_ready_checks_do_not_bypass_release_level_lock(self):
         result = evaluate_execution_readiness(fully_ready_input())
