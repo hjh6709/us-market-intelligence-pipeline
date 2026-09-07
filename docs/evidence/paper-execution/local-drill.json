@@ -1,0 +1,50 @@
+{
+  "environment": "local_mock_http_real_postgresql",
+  "external_api_calls": 0,
+  "actual_alpaca_orders": 0,
+  "journal_rows": 3,
+  "mock_order_posts": 3,
+  "lost_response": {
+    "request_id": "lost-response",
+    "client_order_id": "paper-5fba804a888ef2d0a1b4d1a280c5417c1f474167",
+    "state": "UNKNOWN",
+    "filled_qty": "0",
+    "last_error": "broker_unavailable_reconcile_required"
+  },
+  "restart_recovery": {
+    "request_id": "lost-response",
+    "client_order_id": "paper-5fba804a888ef2d0a1b4d1a280c5417c1f474167",
+    "state": "partially_filled",
+    "filled_qty": "1",
+    "last_error": null
+  },
+  "filled": {
+    "request_id": "lost-response",
+    "client_order_id": "paper-5fba804a888ef2d0a1b4d1a280c5417c1f474167",
+    "state": "filled",
+    "filled_qty": "2",
+    "last_error": null
+  },
+  "cancel_confirmed": {
+    "request_id": "cancel",
+    "client_order_id": "paper-d5b2a6c79f023210705be427afac3ddd6f1e86c7",
+    "state": "canceled",
+    "filled_qty": "1",
+    "last_error": null
+  },
+  "concurrent_attempts": 2,
+  "duplicate_posts": 0,
+  "checks": {
+    "restart_reconciles_without_resubmit": true,
+    "partial_fill_recorded": true,
+    "stale_snapshot_rejected": true,
+    "mismatched_snapshot_rejected": true,
+    "not_found_does_not_resubmit": true,
+    "changed_intent_rejected": true,
+    "concurrent_submission_serialized": true,
+    "cancel_ack_not_final": true,
+    "disabled_submission_blocked": true
+  },
+  "elapsed_seconds": 0.141,
+  "temporary_schema_removed": true
+}
