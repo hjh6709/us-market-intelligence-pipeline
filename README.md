@@ -40,8 +40,10 @@
 9월 7일 후속 작업으로 [모의주문 접수·복구 모듈](docs/paper-execution.md)을 추가했습니다.
 Alpaca paper 어댑터와 PostgreSQL 주문 기록을 구현하고, 로컬 mock으로 응답 유실·
 동시 실행·부분체결·취소를 검증했습니다. 실제 Alpaca 모의계좌에서도 주문 1개를
-접수·취소했고 체결 0주·DB 1행을 확인했습니다. 실제 체결과 포지션 복구는 아직
-미검증이며, 기존 연구 대시보드는 `RESEARCH_ONLY / NO_TRADE`를 유지합니다.
+접수·취소했고 체결 0주·DB 1행을 확인했습니다. 새 프로세스의 `recover` 명령으로
+기존 주문을 재조회하고 NVDA 계좌 보유량 0주도 확인했습니다.
+실제 체결과 기준 보유량을 포함한 포지션 대사는 아직 미검증이며,
+기존 연구 대시보드는 `RESEARCH_ONLY / NO_TRADE`를 유지합니다.
 
 1. [7차시 서빙 레이어 제출 문서](docs/serving-layer-assignment.md): 저장 결과 조회, 단일 실행, 자동매매 경계
 2. [7차시 실제 실행 증거](docs/evidence/serving-layer/README.md): JSON 응답, 멱등 실행, 대시보드 캡처

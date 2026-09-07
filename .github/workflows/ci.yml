@@ -66,3 +66,11 @@ jobs:
         run: >-
           .venv/bin/python -m unittest
           tests/integration/test_postgres_market_bars.py -v
+
+      - name: Run isolated paper recovery tests (no external API)
+        env:
+          DATABASE_URL: postgresql://market:market@localhost:55432/market
+          RUN_PAPER_POSTGRES_INTEGRATION: "1"
+        run: >-
+          .venv/bin/python -m unittest
+          tests.integration.test_paper_execution tests.integration.test_paper_recovery -v

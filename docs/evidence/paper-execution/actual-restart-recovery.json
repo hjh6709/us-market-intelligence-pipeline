@@ -1,0 +1,35 @@
+{
+  "broker": "alpaca-paper",
+  "market_clock": {
+    "timestamp": "2026-09-06T23:29:30.325263213-04:00",
+    "is_open": false,
+    "next_open": "2026-09-08T09:30:00-04:00",
+    "next_close": "2026-09-08T16:00:00-04:00"
+  },
+  "started_at": "2026-09-07T03:29:30.432093+00:00",
+  "finished_at": "2026-09-07T03:29:31.673730+00:00",
+  "journal_orders": 1,
+  "order_lookup_errors": 0,
+  "nonterminal_orders": 0,
+  "orders": [
+    {
+      "request_id": "connectivity-20260907-01",
+      "client_order_id": "paper-2ba4f04c415a73a34aee0ef0dcc1d0c20575ec98",
+      "state": "canceled",
+      "filled_qty": "0",
+      "last_error": null
+    }
+  ],
+  "positions": [
+    {
+      "symbol": "NVDA",
+      "journal_buy_filled_qty": "0",
+      "observed_account_qty": "0",
+      "comparison_status": "BASELINE_REQUIRED"
+    }
+  ],
+  "journal_status": "TERMINAL_SNAPSHOT_CONFIRMED",
+  "position_reconciliation_verified": false,
+  "new_orders_submitted": 0,
+  "live_trading_enabled": false
+}

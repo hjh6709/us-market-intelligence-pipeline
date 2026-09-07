@@ -5,6 +5,10 @@
 지정가 주문을 접수한 뒤 취소했다. `accepted → canceled`, 체결 0주, DB 기록 1행을
 확인했다. **실제 체결·포지션 복구는 아직 검증하지 않았다.**
 
+이어 새 프로세스에서 DB의 요청 내용을 읽어 주문을 재조회하는 `recover` 명령을
+추가했다. 실제 실행에서 취소 주문 1개·체결 0주·NVDA 보유량 0주를 확인했다.
+이는 **주문 기록 복구와 현재 보유량 조회**이며, 실제 체결 뒤 포지션 대사 완료는 아니다.
+
 이 모듈은 지정한 주문의 연결 시험이다. 과거 CPI·NVDA 연구 신호를 현재 시장의
 매수 신호로 바꾸지 않는다. 기존 대시보드는 RESEARCH_ONLY / NO_TRADE를 유지한다.
 
@@ -111,6 +115,53 @@ Git에서 제외된 `.env`의 기존 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`를
 
 ## 다음 검증
 
+### 이번에 추가한 재시작 복구
+
+```bash
+.venv/bin/python scripts/run_paper_order.py clock --env-file .env
+.venv/bin/python scripts/run_paper_order.py recover --env-file .env \
+  --output recovery-report.json
+```
+
+종목·수량·가격을 다시 입력할 필요가 없다. 인증한 모의계좌 범위의 DB 기록을 읽고,
+기존 요청 식별자로 각 주문을 조회해 DB를 갱신한다. 브로커에는 GET만 보내며 신규
+주문과 취소는 보내지 않는다. 기존 파일을 덮어쓰지 않으므로 출력 파일명은 새 이름을 쓴다.
+한 번에 최대 100개를 처리하며 초과 시 일부만 처리한 것을 전체 복구로 표현하지 않고 실패한다.
+
+| 실제 새 프로세스 실행에서 확인한 것 | 결과 |
+|---|---|
+| DB에서 읽은 기존 주문 | 1개 |
+| 브로커 조회 실패 / 종료되지 않은 주문 | 0 / 0 |
+| 기존 주문 상태 / 누적 체결 | canceled / 0주 |
+| NVDA 계좌 보유량 | 0주 |
+| 이 실행에서 새로 보낸 주문 | 0개 |
+| 주문 기록 상태 | TERMINAL_SNAPSHOT_CONFIRMED |
+| 보유량 대사 | BASELINE_REQUIRED, 검증 완료 아님 |
+
+[실제 실행 JSON](evidence/paper-execution/actual-restart-recovery.json)에 시각과 결과를 남겼다.
+조회 당시 시장은 닫혀 있었으며 브로커의 다음 정규장 개장 안내는
+2026-09-08 09:30 미국 동부시간, 한국시간 9월 8일 22:30이었다.
+개장 후 주문을 자동 예약한 것은 아니다.
+
+계좌에 원래 7주가 있었고 프로그램이 2주를 샀다면 실제 보유량은 9주다.
+따라서 `journal_buy_filled_qty`는 프로그램이 기록한 매수 체결 합계이고,
+`observed_account_qty`는 브로커가 알려준 계좌 보유량이다. 둘을 무조건 같다고
+비교하면 안 된다. 기존 보유량과 외부 주문·매도·기업행동을 포함한 기준이 없으므로
+현재는 `position_reconciliation_verified=false`를 유지한다.
+
+로컬 mock + 격리된 실제 PostgreSQL 시험에서는 응답 유실 후 재시작,
+부분체결 1주에서 완전체결 2주로 갱신, 다른 계좌 기록 격리, 기존 보유량이 있는 경우,
+조회 실패 시 0주로 바꾸지 않기, 추가 주문 전송 0회를 확인했다.
+CI에서도 외부 API 없이 이 통합 테스트를 실행한다.
+
+`recover`의 종료 코드 0은 이 실행의 주문 조회가 모두 종료 상태이고 관련 보유량
+조회가 성공했다는 뜻이다. 포지션 대사나 실전매매 준비 완료를 뜻하지 않는다.
+빈 주문 기록·미종료 주문·조회 오류는 종료 코드 1로 주의를 요구한다.
+이 명령은 계좌 전체의 미기록 주문을 찾지 않으며, 조회 중 다른 프로세스가 만드는
+신규 주문은 다음 실행 대상이다. 여러 HTTP 조회도 원자적인 한 시점의 스냅샷은 아니다.
+
+### 아직 남은 검증
+
 - 실제 Alpaca paper 부분체결·완전체결 실행과 응답 증거
 - 부분체결 뒤 실제 계좌 보유량과 주문 기록 비교, 재시작 후 포지션 복구
 - 전체 계좌 주문금액·일일 손실 한도·긴급 중지
@@ -122,3 +173,5 @@ Git에서 제외된 `.env`의 기존 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`를
 
 공식 참고: [Alpaca 주문과 client_order_id](https://docs.alpaca.markets/us/docs/working-with-orders),
 [주문 식별자로 조회](https://docs.alpaca.markets/us/reference/getorderbyclientorderid).
+시장 상태와 보유량 조회는 [US Market Clock](https://docs.alpaca.markets/us/reference/legacyclock),
+[Open Position](https://docs.alpaca.markets/us/reference/getopenposition-1)을 사용한다.
