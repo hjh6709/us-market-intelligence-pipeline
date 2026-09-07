@@ -1,0 +1,31 @@
+{
+  "executed_on": "2026-09-07",
+  "environment": "alpaca_paper_api_real_postgresql",
+  "endpoint": "https://paper-api.alpaca.markets",
+  "purpose": "connectivity_probe",
+  "account_check": {
+    "authentication": "ok",
+    "status": "ACTIVE",
+    "trading_blocked": false,
+    "account_blocked": false
+  },
+  "input": {
+    "request_id": "connectivity-20260907-01",
+    "symbol": "NVDA",
+    "qty": 1,
+    "side": "buy",
+    "type": "limit",
+    "limit_price": "1",
+    "time_in_force": "day"
+  },
+  "observed_results": [
+    {"command": "submit", "state": "accepted", "filled_qty": "0", "last_error": null},
+    {"command": "cancel", "state": "canceled", "filled_qty": "0", "last_error": null},
+    {"command": "submit_same_request_again", "state": "canceled", "filled_qty": "0", "last_error": null}
+  ],
+  "postgres_final": {"journal_rows": 1, "state": "canceled", "filled_qty": "0"},
+  "actual_paper_orders_submitted": 1,
+  "live_orders_submitted": 0,
+  "evidence_source": "Observed run_paper_order.py stdout and PostgreSQL SELECT; account ID, keys and broker order identifiers omitted",
+  "not_verified": ["actual_partial_or_full_fill", "position_reconciliation", "live_execution", "strategy_profitability"]
+}

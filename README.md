@@ -37,6 +37,12 @@
 
 ## 이번 제출부터 확인하기
 
+9월 7일 후속 작업으로 [모의주문 접수·복구 모듈](docs/paper-execution.md)을 추가했습니다.
+Alpaca paper 어댑터와 PostgreSQL 주문 기록을 구현하고, 로컬 mock으로 응답 유실·
+동시 실행·부분체결·취소를 검증했습니다. 실제 Alpaca 모의계좌에서도 주문 1개를
+접수·취소했고 체결 0주·DB 1행을 확인했습니다. 실제 체결과 포지션 복구는 아직
+미검증이며, 기존 연구 대시보드는 `RESEARCH_ONLY / NO_TRADE`를 유지합니다.
+
 1. [7차시 서빙 레이어 제출 문서](docs/serving-layer-assignment.md): 저장 결과 조회, 단일 실행, 자동매매 경계
 2. [7차시 실제 실행 증거](docs/evidence/serving-layer/README.md): JSON 응답, 멱등 실행, 대시보드 캡처
 3. [7차시 4분 발표 대본](docs/09.07_대본.md)
