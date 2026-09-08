@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -290,6 +291,13 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn("/static/vendor/echarts-6.1.0.min.js", response.text)
         self.assertNotIn("createElementNS", response.text)
         self.assertNotIn("cdn.", response.text.lower())
+
+    def test_packaged_application_includes_templates_and_vendor_assets(self):
+        pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn('"templates/*.html"', pyproject)
+        self.assertIn('"static/vendor/*.js"', pyproject)
+        self.assertIn('"static/vendor/*.txt"', pyproject)
 
     def test_pipeline_console_has_run_quality_and_lineage_surfaces(self):
         response = self.client.get("/pipelines")
