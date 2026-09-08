@@ -10,6 +10,7 @@ from src.serving_repository import (
     MacroContextRecord,
     StrategyRecord,
     StrategySummaryRecord,
+    OverviewMetricsRecord,
 )
 from src.serving_service import ServingNotFoundError, ServingService
 
@@ -86,6 +87,18 @@ class FakeRepository:
     def get_cross_asset_impacts(self, event_id, window_name):
         return [CrossAssetImpactRecord("NVDA", Decimal("0.5"), Decimal("0.2"), "COMPLETE")]
 
+    def get_overview_metrics(self):
+        return OverviewMetricsRecord(202, 10, 2020, 308512, 112593, 70090, 2020, 8080, 2020, 1988)
+
+    def get_event_type_counts(self):
+        return {"CPI": 55, "EMPLOYMENT": 55, "PCE": 55, "FOMC": 37}
+
+    def list_supported_symbols(self):
+        return ["AAPL", "NVDA", "SPY"]
+
+    def list_events(self, event_type=None, released_from=None, released_to=None):
+        return [self.event]
+
 
 class ServingServiceTest(unittest.TestCase):
     def test_detail_keeps_signal_simulation_and_order_action_separate(self):
@@ -124,6 +137,16 @@ class ServingServiceTest(unittest.TestCase):
         self.assertEqual(historical.points[0].return_pct, Decimal("0.5"))
         self.assertEqual(cross_asset.points[0].symbol, "NVDA")
         self.assertEqual(cross_asset.window_name, "POST_60M")
+
+    def test_overview_uses_repository_symbols_and_explicit_metric_units(self):
+        overview = ServingService(FakeRepository()).get_overview(
+            {"status": "SUCCEEDED", "warning_check_count": 1409}
+        )
+
+        self.assertEqual(overview.supported_symbols, ["AAPL", "NVDA", "SPY"])
+        self.assertEqual(overview.event_type_counts["FOMC"], 37)
+        self.assertEqual(overview.metrics[0].unit, "releases")
+        self.assertEqual(overview.baseline.mean_net_return_pct, Decimal("-0.1565"))
 
 
 if __name__ == "__main__":

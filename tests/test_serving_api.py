@@ -19,6 +19,8 @@ from src.serving_models import (
     ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
+    DatasetMetricView,
+    PlatformOverviewView,
 )
 from src.serving_service import ServingNotFoundError
 from src.pipeline_serving import (
@@ -130,6 +132,19 @@ class FakeService:
             provenance=self.provenance,
         )
 
+    def get_overview(self, latest_pipeline):
+        return PlatformOverviewView(
+            product_name="U.S. Economic Event Market Intelligence Platform",
+            description="Point-in-time event research.",
+            metrics=[DatasetMetricView(key="releases", label="Official releases", value=202, unit="releases")],
+            event_type_counts={"CPI": 55, "FOMC": 37},
+            supported_symbols=["NVDA", "SPY"],
+            recent_events=self.list_events(),
+            baseline=self.get_strategy_summary(),
+            latest_pipeline=latest_pipeline,
+            limitations=["Research results are not recommendations."],
+        )
+
 
 class FakePipelineService:
     def overview(self):
@@ -181,6 +196,12 @@ class FakePaperService:
 
     def recover(self):
         return {"broker": "alpaca-paper", "recovery_mode": "GET_ONLY", "new_orders_submitted": 0, "position_reconciliation_verified": False}
+
+    def reconcile(self, request_id):
+        return {"request_id": request_id, "state": "accepted"}
+
+    def cancel(self, request_id, confirmation):
+        return {"request_id": request_id, "state": "canceled", "confirmation": confirmation}
 
 
 class ServingApiTest(unittest.TestCase):
@@ -303,6 +324,24 @@ class ServingApiTest(unittest.TestCase):
         self.assertEqual(submit.status_code, 200)
         self.assertEqual(submit.json()["state"], "accepted")
         self.assertEqual(len(self.paper.submissions), 1)
+
+    def test_overview_page_and_api_are_recruiter_facing(self):
+        page = self.client.get("/overview")
+        data = self.client.get("/api/v1/overview")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="overview-metrics"', page.text)
+        self.assertIn("U.S. Economic Event Market Intelligence Platform", page.text)
+        self.assertEqual(data.status_code, 200)
+        self.assertEqual(data.json()["metrics"][0]["value"], 202)
+        self.assertEqual(data.json()["latest_pipeline"]["status"], "SUCCEEDED")
+
+    def test_paper_page_exposes_web_reconcile_and_cancel_controls(self):
+        page = self.client.get("/paper")
+
+        self.assertIn("Reconcile", page.text)
+        self.assertIn("Cancel order", page.text)
+        self.assertIn("CANCEL PAPER ORDER", page.text)
 
 
 if __name__ == "__main__":

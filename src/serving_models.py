@@ -144,3 +144,22 @@ class StrategySummaryView(BaseModel):
     positive_count: int = Field(ge=0)
     positive_rate_pct: Decimal | None = None
     provenance: ResearchProvenanceView
+
+
+class DatasetMetricView(BaseModel):
+    key: str
+    label: str
+    value: int = Field(ge=0)
+    unit: str
+
+
+class PlatformOverviewView(BaseModel):
+    product_name: str
+    description: str
+    metrics: list[DatasetMetricView]
+    event_type_counts: dict[str, int]
+    supported_symbols: list[str]
+    recent_events: list[EventSummary]
+    baseline: StrategySummaryView
+    latest_pipeline: dict | None
+    limitations: list[str]

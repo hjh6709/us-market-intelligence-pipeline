@@ -14,6 +14,7 @@ from src.serving_models import (
     EventSummary,
     EventSymbolDetail,
     HistoricalComparisonView,
+    PlatformOverviewView,
     StrategySummaryView,
 )
 from src.serving_repository import PostgresServingRepository
@@ -46,6 +47,7 @@ SymbolPath = Annotated[str, ApiPath(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")]
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
 PIPELINES_TEMPLATE_PATH = Path(__file__).with_name("templates") / "pipelines.html"
 PAPER_TEMPLATE_PATH = Path(__file__).with_name("templates") / "paper.html"
+OVERVIEW_TEMPLATE_PATH = Path(__file__).with_name("templates") / "overview.html"
 
 
 def create_app(
@@ -64,7 +66,7 @@ def create_app(
     app = FastAPI(
         title="U.S. Market Intelligence Serving API",
         version="1.0.0",
-        description="Read-only economic-event research results. No broker order routes.",
+        description="Economic-event research, pipeline observability, and isolated manual Paper execution.",
     )
     app.mount(
         "/static",
@@ -128,6 +130,13 @@ def create_app(
         released_to: date | None = None,
     ) -> list[EventSummary]:
         return serving_service.list_events(event_type, released_from, released_to)
+
+    @app.get("/api/v1/overview", response_model=PlatformOverviewView)
+    def platform_overview() -> PlatformOverviewView:
+        latest = pipeline_serving.overview().latest_run
+        return serving_service.get_overview(
+            latest.model_dump(mode="json") if latest is not None else None
+        )
 
     @app.get("/api/v1/events/{event_id}/symbols", response_model=list[str])
     def list_symbols(event_id: str) -> list[str]:
@@ -237,6 +246,10 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
         return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+    @app.get("/overview", response_class=HTMLResponse)
+    def overview_dashboard() -> HTMLResponse:
+        return HTMLResponse(OVERVIEW_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
     @app.get("/pipelines", response_class=HTMLResponse)
     def pipelines_dashboard() -> HTMLResponse:

@@ -101,6 +101,20 @@ class CrossAssetImpactRecord:
     coverage_status: str
 
 
+@dataclass(frozen=True)
+class OverviewMetricsRecord:
+    releases: int
+    symbols: int
+    event_symbol_intervals: int
+    stored_1m_bars: int
+    derived_3m_bars: int
+    derived_5m_bars: int
+    pit_macro_contexts: int
+    impact_rows: int
+    strategy_results: int
+    eligible_strategy_results: int
+
+
 class PostgresServingRepository:
     def __init__(
         self,
@@ -308,3 +322,55 @@ class PostgresServingRepository:
         with self._connection() as connection, connection.cursor() as cursor:
             cursor.execute(sql, params)
             return [CrossAssetImpactRecord(*row) for row in cursor.fetchall()]
+
+    def get_overview_metrics(self) -> OverviewMetricsRecord:
+        sql = """
+            SELECT
+              (SELECT count(*) FROM economic_events WHERE quality_status='READY'),
+              (SELECT count(DISTINCT symbol) FROM macro_event_impacts
+                WHERE source=%s AND feed=%s AND analysis_version=%s),
+              (SELECT count(DISTINCT (economic_event_id, symbol)) FROM macro_event_impacts
+                WHERE source=%s AND feed=%s AND analysis_version=%s),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='1m'),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='3m'),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='5m'),
+              (SELECT count(*) FROM macro_event_contexts),
+              (SELECT count(*) FROM macro_event_impacts WHERE analysis_version=%s),
+              (SELECT count(*) FROM event_strategy_results
+                WHERE strategy_name=%s AND strategy_version=%s),
+              (SELECT count(net_return_pct) FROM event_strategy_results
+                WHERE strategy_name=%s AND strategy_version=%s)
+        """
+        params = (
+            MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION,
+            MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION,
+            MARKET_SOURCE, MARKET_FEED,
+            MARKET_SOURCE, MARKET_FEED,
+            MARKET_SOURCE, MARKET_FEED,
+            ANALYSIS_VERSION,
+            STRATEGY_NAME, STRATEGY_VERSION,
+            STRATEGY_NAME, STRATEGY_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            return OverviewMetricsRecord(*row)
+
+    def get_event_type_counts(self) -> dict[str, int]:
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT event_type, count(*) FROM economic_events
+                   WHERE quality_status='READY'
+                   GROUP BY event_type ORDER BY event_type"""
+            )
+            return dict(cursor.fetchall())
+
+    def list_supported_symbols(self) -> list[str]:
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT DISTINCT symbol FROM macro_event_impacts
+                   WHERE source=%s AND feed=%s AND analysis_version=%s
+                   ORDER BY symbol""",
+                (MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION),
+            )
+            return [row[0] for row in cursor.fetchall()]

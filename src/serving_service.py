@@ -6,12 +6,14 @@ from src.serving_models import (
     BarView,
     CrossAssetComparisonView,
     CrossAssetImpactPoint,
+    DatasetMetricView,
     EventSummary,
     EventSymbolDetail,
     HistoricalComparisonView,
     HistoricalImpactPoint,
     ImpactView,
     MacroContextView,
+    PlatformOverviewView,
     ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
@@ -188,6 +190,34 @@ class ServingService:
             window_name=window_name,
             points=[CrossAssetImpactPoint(**record.__dict__) for record in records],
             provenance=_provenance(),
+        )
+
+    def get_overview(self, latest_pipeline: dict | None) -> PlatformOverviewView:
+        record = self.repository.get_overview_metrics()
+        metric_specs = (
+            ("releases", "Official releases", record.releases, "releases"),
+            ("symbols", "Supported assets", record.symbols, "symbols"),
+            ("event_symbol_intervals", "Event-asset intervals", record.event_symbol_intervals, "intervals"),
+            ("stored_1m_bars", "Stored SIP 1m bars", record.stored_1m_bars, "bar rows"),
+            ("derived_3m_bars", "Derived 3m bars", record.derived_3m_bars, "bar rows"),
+            ("derived_5m_bars", "Derived 5m bars", record.derived_5m_bars, "bar rows"),
+            ("pit_macro_contexts", "Point-in-time macro contexts", record.pit_macro_contexts, "context rows"),
+            ("impact_rows", "Event impact results", record.impact_rows, "analysis rows"),
+        )
+        return PlatformOverviewView(
+            product_name="U.S. Economic Event Market Intelligence Platform",
+            description="A reproducible point-in-time data platform for U.S. economic-event market analysis.",
+            metrics=[DatasetMetricView(key=k, label=l, value=v, unit=u) for k,l,v,u in metric_specs],
+            event_type_counts=self.repository.get_event_type_counts(),
+            supported_symbols=self.repository.list_supported_symbols(),
+            recent_events=[self._event_view(item) for item in self.repository.list_events()[:6]],
+            baseline=self.get_strategy_summary(),
+            latest_pipeline=latest_pipeline,
+            limitations=[
+                "The exploratory baseline is negative overall and is not a recommendation.",
+                "Observed provider bars may be sparse even when collection succeeds.",
+                "Paper execution is isolated and never consumes research signals automatically.",
+            ],
         )
 
     @staticmethod

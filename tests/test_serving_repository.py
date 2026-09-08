@@ -173,6 +173,35 @@ class PostgresServingRepositoryTest(unittest.TestCase):
         self.assertEqual(historical[0].event_id, "event-1")
         self.assertEqual(cross_asset[0].symbol, "NVDA")
 
+    def test_overview_metrics_use_explicit_units_and_pinned_versions(self):
+        connect = ConnectFactory(
+            [
+                [(202, 10, 2020, 308512, 112593, 70090, 2020, 8080, 2020, 1988)],
+                [("CPI", 55), ("EMPLOYMENT", 55), ("PCE", 55), ("FOMC", 37)],
+                [("AAPL",), ("NVDA",), ("SPY",)],
+            ]
+        )
+        repo = PostgresServingRepository("postgresql://unused", connect=connect)
+
+        metrics = repo.get_overview_metrics()
+        counts = repo.get_event_type_counts()
+        symbols = repo.list_supported_symbols()
+
+        sql, params = connect.connection.executions[0]
+        self.assertIn("analysis_version=%s", sql)
+        self.assertIn("multi_event_sip_v1", params)
+        self.assertIn("pre60_momentum_post60", params)
+        self.assertIn("v1", params)
+        self.assertEqual(metrics.event_symbol_intervals, 2020)
+        self.assertEqual(metrics.stored_1m_bars, 308512)
+        self.assertEqual(counts["FOMC"], 37)
+        self.assertEqual(symbols, ["AAPL", "NVDA", "SPY"])
+        symbol_sql, symbol_params = connect.connection.executions[2]
+        self.assertIn("analysis_version=%s", symbol_sql)
+        self.assertEqual(
+            symbol_params, ("alpaca", "sip", "multi_event_sip_v1")
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
