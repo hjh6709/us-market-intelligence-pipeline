@@ -2,7 +2,7 @@ import unittest
 from decimal import Decimal
 
 from src.paper_execution import OrderIntent
-from src.paper_web import PaperConfirmationError, PaperWebService
+from src.paper_web import ConfiguredPaperWebGateway, PaperConfirmationError, PaperWebService
 
 
 class FakeBroker:
@@ -74,6 +74,14 @@ class PaperWebServiceTest(unittest.TestCase):
             self.service.cancel(self.intent, "cancel")
         self.service.cancel(self.intent, "CANCEL PAPER ORDER")
         self.assertEqual(self.orders.calls[-1], (self.intent, "cancel", True))
+
+    def test_web_gateway_accepts_existing_paper_keys_without_exposing_them(self):
+        gateway = ConfiguredPaperWebGateway(
+            "postgresql://unused",
+            environ={"APCA_API_KEY_ID": "paper-key", "APCA_API_SECRET_KEY": "paper-secret"},
+        )
+
+        self.assertEqual(gateway._credentials(), ("paper-key", "paper-secret"))
 
 
 if __name__ == "__main__":

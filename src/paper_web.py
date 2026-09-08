@@ -118,9 +118,17 @@ class ConfiguredPaperWebGateway:
         self.environ = environ if environ is not None else os.environ
         self.connect = connect
 
+    def _credentials(self) -> tuple[str, str]:
+        key = self.environ.get("ALPACA_PAPER_KEY_ID") or self.environ.get(
+            "APCA_API_KEY_ID", ""
+        )
+        secret = self.environ.get("ALPACA_PAPER_SECRET_KEY") or self.environ.get(
+            "APCA_API_SECRET_KEY", ""
+        )
+        return key, secret
+
     def _service(self) -> tuple[PaperWebService, str]:
-        key = self.environ.get("ALPACA_PAPER_KEY_ID", "")
-        secret = self.environ.get("ALPACA_PAPER_SECRET_KEY", "")
+        key, secret = self._credentials()
         if not key or not secret:
             raise PaperConfigurationError("dedicated paper credentials are not configured")
         broker = AlpacaPaperBroker(key, secret)

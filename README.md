@@ -6,6 +6,10 @@
 
 [Overview](http://127.0.0.1:8000/overview) · [Research](http://127.0.0.1:8000/) · [Pipelines](http://127.0.0.1:8000/pipelines) · [Paper Execution](http://127.0.0.1:8000/paper) · [API docs](http://127.0.0.1:8000/docs)
 
+![실제 PostgreSQL 집계를 읽는 플랫폼 Overview](docs/images/portfolio/overview.jpg)
+
+### Architecture
+
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 핵심 결과
