@@ -14,6 +14,7 @@ from src.platform_contracts import (
 )
 
 ALLOWED_TIMEFRAMES = frozenset({"1m", "3m", "5m"})
+ALLOWED_WINDOWS = frozenset({"PRE_60M", "POST_5M", "POST_30M", "POST_60M"})
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,23 @@ class BarRecord:
     source_bar_count: int | None
     expected_bar_count: int | None
     coverage_status: str | None
+
+
+@dataclass(frozen=True)
+class HistoricalImpactRecord:
+    event_id: str
+    released_at: datetime
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+@dataclass(frozen=True)
+class CrossAssetImpactRecord:
+    symbol: str
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
 
 
 class PostgresServingRepository:
@@ -241,3 +259,52 @@ class PostgresServingRepository:
                 (symbol, timeframe, MARKET_SOURCE, MARKET_FEED, start, end),
             )
             return [BarRecord(*row) for row in cursor.fetchall()]
+
+    def get_historical_impacts(
+        self, event_type: str, symbol: str, window_name: str
+    ) -> list[HistoricalImpactRecord]:
+        if window_name not in ALLOWED_WINDOWS:
+            raise ValueError(f"unsupported impact window: {window_name}")
+        sql = """
+            SELECT i.economic_event_id, e.released_at, i.return_pct,
+                   i.market_relative_return_pct, i.coverage_status
+            FROM macro_event_impacts AS i
+            JOIN economic_events AS e USING (economic_event_id)
+            WHERE e.event_type = %s AND i.symbol = %s AND i.window_name = %s
+              AND i.source = %s AND i.feed = %s AND i.analysis_version = %s
+            ORDER BY e.released_at
+        """
+        params = (
+            event_type,
+            symbol,
+            window_name,
+            MARKET_SOURCE,
+            MARKET_FEED,
+            ANALYSIS_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            return [HistoricalImpactRecord(*row) for row in cursor.fetchall()]
+
+    def get_cross_asset_impacts(
+        self, event_id: str, window_name: str
+    ) -> list[CrossAssetImpactRecord]:
+        if window_name not in ALLOWED_WINDOWS:
+            raise ValueError(f"unsupported impact window: {window_name}")
+        sql = """
+            SELECT symbol, return_pct, market_relative_return_pct, coverage_status
+            FROM macro_event_impacts
+            WHERE economic_event_id = %s AND window_name = %s
+              AND source = %s AND feed = %s AND analysis_version = %s
+            ORDER BY symbol
+        """
+        params = (
+            event_id,
+            window_name,
+            MARKET_SOURCE,
+            MARKET_FEED,
+            ANALYSIS_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            return [CrossAssetImpactRecord(*row) for row in cursor.fetchall()]

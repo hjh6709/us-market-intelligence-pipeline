@@ -5,12 +5,15 @@ from typing import Annotated, Literal
 
 from fastapi import FastAPI, Path as ApiPath, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.serving_models import (
     BarView,
+    CrossAssetComparisonView,
     EventSummary,
     EventSymbolDetail,
+    HistoricalComparisonView,
     StrategySummaryView,
 )
 from src.serving_repository import PostgresServingRepository
@@ -29,6 +32,7 @@ from src.pipeline_serving import (
 
 EventType = Literal["CPI", "EMPLOYMENT", "PCE", "FOMC"]
 Timeframe = Literal["1m", "3m", "5m"]
+ImpactWindow = Literal["PRE_60M", "POST_5M", "POST_30M", "POST_60M"]
 SymbolPath = Annotated[str, ApiPath(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")]
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
 PIPELINES_TEMPLATE_PATH = Path(__file__).with_name("templates") / "pipelines.html"
@@ -49,6 +53,11 @@ def create_app(
         title="U.S. Market Intelligence Serving API",
         version="1.0.0",
         description="Read-only economic-event research results. No broker order routes.",
+    )
+    app.mount(
+        "/static",
+        StaticFiles(directory=Path(__file__).with_name("static")),
+        name="static",
     )
 
     @app.exception_handler(ServingNotFoundError)
@@ -107,6 +116,25 @@ def create_app(
     @app.get("/api/v1/strategy/summary", response_model=StrategySummaryView)
     def strategy_summary() -> StrategySummaryView:
         return serving_service.get_strategy_summary()
+
+    @app.get(
+        "/api/v1/research/historical", response_model=HistoricalComparisonView
+    )
+    def historical_comparison(
+        event_type: EventType,
+        symbol: Annotated[str, Query(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")],
+        window: ImpactWindow,
+    ) -> HistoricalComparisonView:
+        return serving_service.get_historical_comparison(event_type, symbol, window)
+
+    @app.get(
+        "/api/v1/research/cross-asset", response_model=CrossAssetComparisonView
+    )
+    def cross_asset_comparison(
+        event_id: str,
+        window: ImpactWindow,
+    ) -> CrossAssetComparisonView:
+        return serving_service.get_cross_asset_comparison(event_id, window)
 
     @app.get("/api/v1/pipelines/overview", response_model=PipelineOverviewView)
     def pipeline_overview() -> PipelineOverviewView:

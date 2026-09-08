@@ -145,6 +145,34 @@ class PostgresServingRepositoryTest(unittest.TestCase):
         self.assertEqual(summary.eligible_count, 1988)
         self.assertEqual(summary.positive_count, 782)
 
+    def test_historical_and_cross_asset_queries_pin_analysis_identity(self):
+        released_at = datetime(2026, 8, 12, 12, 30, tzinfo=timezone.utc)
+        connect = ConnectFactory(
+            [
+                [("event-1", released_at, Decimal("0.5"), Decimal("0.2"), "COMPLETE")],
+                [("NVDA", Decimal("0.5"), Decimal("0.2"), "COMPLETE")],
+            ]
+        )
+        repo = PostgresServingRepository("postgresql://unused", connect=connect)
+
+        historical = repo.get_historical_impacts("CPI", "NVDA", "POST_60M")
+        cross_asset = repo.get_cross_asset_impacts("event-1", "POST_60M")
+
+        first_sql, first_params = connect.connection.executions[0]
+        second_sql, second_params = connect.connection.executions[1]
+        self.assertIn("analysis_version = %s", first_sql)
+        self.assertEqual(
+            first_params,
+            ("CPI", "NVDA", "POST_60M", "alpaca", "sip", "multi_event_sip_v1"),
+        )
+        self.assertIn("analysis_version = %s", second_sql)
+        self.assertEqual(
+            second_params,
+            ("event-1", "POST_60M", "alpaca", "sip", "multi_event_sip_v1"),
+        )
+        self.assertEqual(historical[0].event_id, "event-1")
+        self.assertEqual(cross_asset[0].symbol, "NVDA")
+
 
 if __name__ == "__main__":
     unittest.main()

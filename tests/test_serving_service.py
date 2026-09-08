@@ -3,8 +3,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from src.serving_repository import (
+    CrossAssetImpactRecord,
     EventRecord,
     ImpactRecord,
+    HistoricalImpactRecord,
     MacroContextRecord,
     StrategyRecord,
     StrategySummaryRecord,
@@ -74,6 +76,16 @@ class FakeRepository:
     def get_strategy_summary(self):
         return StrategySummaryRecord(2020, 1988, Decimal("-0.1565"), 782)
 
+    def get_historical_impacts(self, event_type, symbol, window_name):
+        return [
+            HistoricalImpactRecord(
+                "event-1", self.event.released_at, Decimal("0.5"), Decimal("0.2"), "COMPLETE"
+            )
+        ]
+
+    def get_cross_asset_impacts(self, event_id, window_name):
+        return [CrossAssetImpactRecord("NVDA", Decimal("0.5"), Decimal("0.2"), "COMPLETE")]
+
 
 class ServingServiceTest(unittest.TestCase):
     def test_detail_keeps_signal_simulation_and_order_action_separate(self):
@@ -101,6 +113,17 @@ class ServingServiceTest(unittest.TestCase):
             service.get_event_symbol_detail("missing", "NVDA")
         with self.assertRaisesRegex(ServingNotFoundError, "symbol"):
             service.get_event_symbol_detail("event-1", "AAPL")
+
+    def test_comparison_views_are_historical_and_versioned(self):
+        service = ServingService(FakeRepository())
+
+        historical = service.get_historical_comparison("CPI", "NVDA", "POST_60M")
+        cross_asset = service.get_cross_asset_comparison("event-1", "POST_60M")
+
+        self.assertEqual(historical.provenance.analysis_version, "multi_event_sip_v1")
+        self.assertEqual(historical.points[0].return_pct, Decimal("0.5"))
+        self.assertEqual(cross_asset.points[0].symbol, "NVDA")
+        self.assertEqual(cross_asset.window_name, "POST_60M")
 
 
 if __name__ == "__main__":

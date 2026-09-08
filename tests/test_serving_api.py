@@ -7,10 +7,14 @@ from fastapi.testclient import TestClient
 from src.serving_api import create_app
 from src.serving_models import (
     BarView,
+    CrossAssetComparisonView,
+    CrossAssetImpactPoint,
     EventSummary,
     EventSymbolDetail,
     ExecutionReadinessView,
     ImpactView,
+    HistoricalComparisonView,
+    HistoricalImpactPoint,
     ReadinessCheckView,
     ResearchProvenanceView,
     SimulationView,
@@ -109,6 +113,23 @@ class FakeService:
             provenance=self.provenance,
         )
 
+    def get_historical_comparison(self, event_type, symbol, window_name):
+        return HistoricalComparisonView(
+            event_type=event_type,
+            symbol=symbol,
+            window_name=window_name,
+            points=[HistoricalImpactPoint(event_id="event-1", released_at=self.list_events()[0].released_at, return_pct=Decimal("0.5"), relative_return_pct=Decimal("0.2"), coverage_status="COMPLETE")],
+            provenance=self.provenance,
+        )
+
+    def get_cross_asset_comparison(self, event_id, window_name):
+        return CrossAssetComparisonView(
+            event_id=event_id,
+            window_name=window_name,
+            points=[CrossAssetImpactPoint(symbol="NVDA", return_pct=Decimal("0.5"), relative_return_pct=Decimal("0.2"), coverage_status="COMPLETE")],
+            provenance=self.provenance,
+        )
+
 
 class FakePipelineService:
     def overview(self):
@@ -198,6 +219,22 @@ class ServingApiTest(unittest.TestCase):
         self.assertEqual(runs.status_code, 200)
         self.assertEqual(lineage.json()["scope"], "project-level")
 
+    def test_research_comparison_routes_are_read_only_and_versioned(self):
+        historical = self.client.get(
+            "/api/v1/research/historical",
+            params={"event_type": "CPI", "symbol": "NVDA", "window": "POST_60M"},
+        )
+        cross_asset = self.client.get(
+            "/api/v1/research/cross-asset",
+            params={"event_id": "event-1", "window": "POST_60M"},
+        )
+
+        self.assertEqual(historical.status_code, 200)
+        self.assertTrue(historical.json()["research_only"])
+        self.assertEqual(historical.json()["provenance"]["analysis_version"], "multi_event_sip_v1")
+        self.assertEqual(cross_asset.status_code, 200)
+        self.assertEqual(cross_asset.json()["points"][0]["symbol"], "NVDA")
+
     def test_dashboard_contains_filters_chart_and_readiness_sections(self):
         response = self.client.get("/")
 
@@ -206,6 +243,9 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn('id="price-chart"', response.text)
         self.assertIn('id="readiness-checks"', response.text)
         self.assertIn("과거 분석 결과이며 주문이 아닙니다", response.text)
+        self.assertIn("/static/vendor/lightweight-charts-5.0.6.min.js", response.text)
+        self.assertIn("/static/vendor/echarts-6.1.0.min.js", response.text)
+        self.assertNotIn("createElementNS", response.text)
         self.assertNotIn("cdn.", response.text.lower())
 
     def test_pipeline_console_has_run_quality_and_lineage_surfaces(self):

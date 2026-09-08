@@ -78,6 +78,38 @@ class ResearchProvenanceView(BaseModel):
     strategy_version: str
 
 
+class HistoricalImpactPoint(BaseModel):
+    event_id: str
+    released_at: datetime
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+class HistoricalComparisonView(BaseModel):
+    event_type: str
+    symbol: str
+    window_name: str
+    research_only: bool = True
+    points: list[HistoricalImpactPoint]
+    provenance: ResearchProvenanceView
+
+
+class CrossAssetImpactPoint(BaseModel):
+    symbol: str
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+class CrossAssetComparisonView(BaseModel):
+    event_id: str
+    window_name: str
+    research_only: bool = True
+    points: list[CrossAssetImpactPoint]
+    provenance: ResearchProvenanceView
+
+
 class EventSymbolDetail(BaseModel):
     event: EventSummary
     symbol: str

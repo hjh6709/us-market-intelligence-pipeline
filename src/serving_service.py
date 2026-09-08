@@ -4,8 +4,12 @@ from decimal import Decimal
 from src.execution_readiness import ReadinessInput, evaluate_execution_readiness
 from src.serving_models import (
     BarView,
+    CrossAssetComparisonView,
+    CrossAssetImpactPoint,
     EventSummary,
     EventSymbolDetail,
+    HistoricalComparisonView,
+    HistoricalImpactPoint,
     ImpactView,
     MacroContextView,
     ResearchProvenanceView,
@@ -156,6 +160,33 @@ class ServingService:
             research_signal=signal,
             simulation=simulation,
             execution_readiness=readiness,
+            provenance=_provenance(),
+        )
+
+    def get_historical_comparison(
+        self, event_type: str, symbol: str, window_name: str
+    ) -> HistoricalComparisonView:
+        records = self.repository.get_historical_impacts(
+            event_type, symbol, window_name
+        )
+        return HistoricalComparisonView(
+            event_type=event_type,
+            symbol=symbol,
+            window_name=window_name,
+            points=[HistoricalImpactPoint(**record.__dict__) for record in records],
+            provenance=_provenance(),
+        )
+
+    def get_cross_asset_comparison(
+        self, event_id: str, window_name: str
+    ) -> CrossAssetComparisonView:
+        if self.repository.get_event(event_id) is None:
+            raise ServingNotFoundError("event")
+        records = self.repository.get_cross_asset_impacts(event_id, window_name)
+        return CrossAssetComparisonView(
+            event_id=event_id,
+            window_name=window_name,
+            points=[CrossAssetImpactPoint(**record.__dict__) for record in records],
             provenance=_provenance(),
         )
 
