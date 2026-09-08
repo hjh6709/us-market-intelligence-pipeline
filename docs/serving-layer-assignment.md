@@ -4,8 +4,7 @@
 
 PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영향과 탐색 전략 결과를 FastAPI와 `시장 이벤트 분석 대시보드`에서 실제로 읽도록 연결했다. 최종 시연은 입력 1조합을 다시 계산·Upsert·재조회하는 데 0.43초였고, `/health`와 상세 API 모두 HTTP 200이었다.
 
-현재 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률은 주문이 아니며, 서빙 API에는 브로커 주문 경로가 없다.
-별도 모의주문 연결시험은 대시보드와 분리돼 있고, 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
+현재 분석·서빙 단계는 `RESEARCH_ONLY`, 자동 주문 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률을 주문으로 바꾸지 않으며, 서빙 API에는 브로커 주문 경로가 없다. 대신 사용자가 종목·수량·지정가를 직접 정하고 명시적으로 승인하는 **수동 모의주문** CLI는 별도 구현돼 있다. 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
 
 [대화형 Archify 구성도](diagrams/session7-architecture.html) · [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt) · [재생 원본](evidence/session7-demo/session7-actual-e2e.typescript) · [65초 실제 대시보드 화면 녹화](evidence/session7-demo/session7-live-dashboard.mp4) · [70.32초 흐름 설명 영상](evidence/session7-demo/session7-submission-demo.mp4)
 
@@ -132,13 +131,32 @@ curl -fsS http://127.0.0.1:8000/health
 
 선택 사례가 양수여도 전체 1,988개 평균은 -0.15649%다. `LONG`은 과거 연구 신호이고 `0.4779%`는 실제 체결이 아닌 한 사례의 시뮬레이션이다.
 
+### 수동 모의주문 경로
+
+연구 신호와 분리된 `scripts/run_paper_order.py`로 Alpaca Paper 계정의 접수·조회·취소·재시작 복구가 가능하다. 브로커 주소는 Paper 전용으로 고정되고, 매수 지정가 DAY·1~10주·주문당 1,000달러 이하만 허용한다. 신규 접수와 취소에는 `--enable-paper-orders`를 직접 넣어야 한다.
+
+실제 Paper 계정에서는 NVDA 1주·1달러 지정가 주문 한 건이 `accepted → canceled`, 체결 0주, PostgreSQL 주문 기록 1행으로 확인됐다. 같은 요청 ID 재실행은 새 주문을 보내지 않고 기존 상태를 조회했다. 발표 중에는 외부 주문을 새로 보내지 않고 [실행 증거](evidence/paper-execution/actual-paper-probe.json)를 보여준다.
+
+```bash
+# 읽기 전용 계정 확인
+.venv/bin/python scripts/run_paper_order.py account --env-file .env
+
+# 실제 Paper 주문은 사용자가 입력값을 검토한 뒤 명시적으로 실행
+.venv/bin/python scripts/run_paper_order.py submit \
+  --request-id paper-probe-001 --symbol NVDA --qty 1 --limit-price 100 \
+  --enable-paper-orders
+```
+
+따라서 `NO_TRADE`는 “모의주문 기능이 없다”는 뜻이 아니라, **현재 연구 신호가 자동으로 주문되지 않는다**는 뜻이다. 실제 체결 이후의 기준 보유량 대사, 계좌 전체 위험 한도와 긴급 중지는 아직 검증 대상이다.
+
 ## 6. 발표 중 실행과 실패 시 복구
 
 1. Archify 구성도에서 `분석·서빙 경로`를 선택한다.
 2. `/health`에서 DB 연결을 확인한다.
 3. CPI 2026-07·NVDA로 시연 명령을 한 번 실행한다.
-4. 영향 4·전략 1·중복 0·`NO_TRADE`를 보여준다.
+4. 영향 4·전략 1·중복 0과 연구 신호의 자동 주문이 `NO_TRADE`로 잠긴 것을 보여준다.
 5. 대시보드에서 같은 저장 결과를 다시 읽는다.
+6. 모의주문은 새로 실행하지 않고 기존 Paper 접수·취소 JSON 증거를 보여준다.
 
 시연 실패 시 전체 수집·장애 재현·주문 시험을 하지 않는다. PostgreSQL 연결만 확인하고 같은 Upsert 명령을 한 번 재실행한다. 그래도 실패하면 [실제 터미널 출력](evidence/session7-demo/session7-actual-e2e.txt), [실제 조회 캡처](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png), [JSON](evidence/serving-layer/final-verification-20260907.json)을 보여주며 사전 증거임을 밝힌다.
 
