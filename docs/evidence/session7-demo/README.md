@@ -15,6 +15,17 @@ script -p docs/evidence/session7-demo/session7-actual-e2e.typescript
 
 `.typescript`는 정적 재현 화면이 아니라 macOS `script -r`로 저장한 실제 명령 실행 원본이다. `.txt`는 같은 원본을 `script -dp`로 재생해 만든 읽기용 사본이다.
 
+## 실제 저장 결과 조회 화면 녹화 — 2026-09-08
+
+- 파일: `session7-live-dashboard.mp4`
+- 길이: 65초
+- 화면: 1920×1246, H.264 MP4, 무음
+- 내용: 실행 중인 FastAPI 대시보드에서 CPI 2026-07·NVDA를 선택하고 PostgreSQL에 저장된 1분·3분·5분봉, 이벤트 영향 4행, 경제 환경, 연구 신호와 `RESEARCH_ONLY / NO_TRADE`를 조회
+
+이 영상은 실제 브라우저 화면 녹화다. 입력→처리→저장→읽기 명령의 원본은 위
+`.typescript`와 `.txt`가 담당한다. 두 증거를 합쳐 하나의 실제 영상인 것처럼
+표현하지 않는다.
+
 ## 보조 발표 영상 — 2026-09-07
 
 - 일반 재생용: `session7-submission-demo.mp4`

@@ -7,7 +7,7 @@ PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영�
 현재 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률은 주문이 아니며, 서빙 API에는 브로커 주문 경로가 없다.
 별도 모의주문 연결시험은 대시보드와 분리돼 있고, 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
 
-[대화형 Archify 구성도](diagrams/session7-architecture.html) · [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt) · [재생 원본](evidence/session7-demo/session7-actual-e2e.typescript) · [70.32초 MP4](evidence/session7-demo/session7-submission-demo.mp4)
+[대화형 Archify 구성도](diagrams/session7-architecture.html) · [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt) · [재생 원본](evidence/session7-demo/session7-actual-e2e.typescript) · [65초 실제 대시보드 화면 녹화](evidence/session7-demo/session7-live-dashboard.mp4) · [70.32초 흐름 설명 영상](evidence/session7-demo/session7-submission-demo.mp4)
 
 ![CPI 2026-07 · NVDA 저장 결과를 실제로 읽은 시장 이벤트 분석 대시보드](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png)
 
@@ -101,7 +101,7 @@ PR #28 병합 후 collection과 observed coverage를 분리했다.
 
 ### 별도의 원시 체결 부하 범위
 
-원시 체결 경로의 검증 범위는 CPI 55회 × SPY·QQQ·SMH·NVDA 네 종목이다. 보관한 실제 SIP 개별 체결 7,360,804건을 Kafka로 재생했고 발행·수신·Spark 입력이 모두 일치했다. 이것은 전체 202×10 기간의 체결 총량이 아니다.
+원시 체결 경로의 검증 범위는 CPI 55회 × SPY·QQQ·SMH·NVDA 네 종목이다. 이 제한 범위에서 보관한 실제 SIP 개별 체결을 Kafka로 재생했고 발행·수신·Spark 입력이 모두 일치했다. 이 실험 건수는 전체 202×10 기간이나 미국 시장 전체의 체결 총량이 아니다.
 
 | 실험 | 확인 결과 |
 |---|---|
@@ -163,5 +163,6 @@ curl -fsS http://127.0.0.1:8000/health
 - [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt)
 - [timestamp 포함 터미널 원본](evidence/session7-demo/session7-actual-e2e.typescript)
 - [실제 CPI·NVDA 저장 결과 조회 화면](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png)
+- [65초 실제 브라우저 화면 녹화](evidence/session7-demo/session7-live-dashboard.mp4)
 - [70.32초 WebM](evidence/session7-demo/session7-submission-demo.webm)
 - [3분 발표 대본](09.07_대본.md)
