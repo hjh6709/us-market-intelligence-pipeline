@@ -15,12 +15,34 @@ from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.live_market_smoke import _read_env_file
 
 
+def coverage_status_counts(records: list[dict[str, object]]) -> dict[str, object]:
+    """Summarize provider collection separately from observed bar quality."""
+
+    def counts(field: str) -> dict[str, int]:
+        return dict(sorted(Counter(str(item[field]) for item in records).items()))
+
+    return {
+        "collection": {
+            "session": counts("session_collection_status"),
+            "daily": counts("daily_collection_status"),
+            "overall": counts("overall_collection_status"),
+        },
+        "observed_bar_coverage": {
+            "session_1m": counts("session_coverage_status"),
+            "daily": counts("daily_coverage_status"),
+            "derived_3m": counts("derived_3m_coverage_status"),
+            "derived_5m": counts("derived_5m_coverage_status"),
+            "overall": counts("overall_coverage_status"),
+        },
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--context-manifest",
         type=Path,
-        default=Path("data/archive/market-event-context-manifest-v2.json"),
+        default=Path("data/archive/market-event-context-manifest.json"),
     )
     parser.add_argument(
         "--partition-result",
@@ -95,7 +117,7 @@ def main() -> int:
                 cursor.fetchone()[0]
             )
 
-    coverage = Counter(item["coverage_status"] for item in context["daily_coverage"])
+    work_item_coverage = context["work_item_coverage"]
     summary = {
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "contains_prices": False,
@@ -115,7 +137,7 @@ def main() -> int:
                 "derived_partial_counts",
             )
         },
-        "coverage_status_counts": dict(sorted(coverage.items())),
+        "coverage_status_counts": coverage_status_counts(work_item_coverage),
         "kafka_v2_spark_validation": {
             key: partition[key]
             for key in (

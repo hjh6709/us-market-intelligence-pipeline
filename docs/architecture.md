@@ -191,7 +191,7 @@ DAG의 logical date와 `series_id + observation_date + realtime_start` unique ke
 
 ### 7.2 Macro release impact
 
-이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. 공식 archive에서 2022년부터 2026년 8월까지 CPI 55회, 고용 55회, PCE 55회, FOMC 37회, 총 202회를 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이다. 2026-09-03 기준 2,020개 발표-종목 구간을 실행해 이벤트별 선택 합계 1분봉 308,512행, 파생 3분봉 112,593행, 5분봉 70,090행과 일봉 30,250행을 확인했다. 원시 체결 Kafka·Spark 검증 범위는 별도로 CPI 55회 × 4종목이다.
+이벤트 유형은 CPI, Employment Situation, PCE, FOMC다. 공식 archive에서 2022년부터 2026년 8월까지 CPI 55회, 고용 55회, PCE 55회, FOMC 37회, 총 202회를 고정했다. 시장 universe는 SPY·QQQ·IWM·TLT·XLF·SMH·GLD·NVDA·AAPL·JPM 10종목이다. 2026-09-08 기준 2,020개 발표-종목 구간을 재실행해 이벤트별 선택 합계 1분봉 308,512행, 파생 3분봉 112,593행, 5분봉 70,090행과 일봉 30,270행을 확인했다. session collection은 2,020건 모두 완료됐고 실제 봉 관측 품질은 별도 상태로 기록한다. 원시 체결 Kafka·Spark 검증 범위는 별도로 CPI 55회 × 4종목이다.
 
 ```text
 economic event with official released_at + as-known vintage

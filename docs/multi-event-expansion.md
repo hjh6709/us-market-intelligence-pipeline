@@ -17,7 +17,7 @@
 | 발표 T-60~T+120분 SIP 1분봉 | 308,512 |
 | 파생 3분봉 | 112,593 |
 | 파생 5분봉 | 70,090 |
-| 발표 전후 7거래일 SIP 일봉 | 30,250 |
+| 발표 전후 7거래일 SIP 일봉 | 30,270 |
 
 위 값은 이벤트별 선택·생성 건수를 더한 것입니다. 여러 발표가 같은 시장 시각이나 거래일을 공유하면 PostgreSQL은 동일 business key로 한 번만 저장합니다.
 
@@ -84,15 +84,17 @@ PostgreSQL market_bars
 
 `PARTIAL`은 저장 실패가 아니라 해당 묶음 안에 실제 1분봉이 기대 개수보다 적다는 뜻입니다.
 
-### 일봉
+### collection과 관측 품질
 
-| 상태 | 발표-종목 수 | 설명 |
+| 계층·상태 | 발표-종목 수 | 설명 |
 | --- | ---: | --- |
-| COMPLETE | 1,980 | 7 / 1 / 7 거래일 확보 |
-| MARKET_CLOSED | 30 | Good Friday 발표 3회 × 10종목 |
-| FUTURE_SESSION_UNAVAILABLE | 10 | 2026-08-26 PCE 이후 거래일 5일만 확보 |
+| session collection COMPLETE | 2,020 | 2026-09-08 전체 재실행에서 요청·pagination 정상 종료 |
+| daily collection COMPLETE / PARTIAL | 2,010 / 10 | 최신 PCE 요청 범위의 끝이 provider 기준시각 뒤 |
+| session 1m observed COMPLETE / PARTIAL / NO_DATA | 581 / 1,409 / 30 | 실제 가격봉 관측 밀도 |
+| daily observed COMPLETE / PARTIAL | 1,990 / 30 | 7 / 1 / 7 확보 여부 |
+| overall observed COMPLETE / PARTIAL / MARKET_CLOSED | 581 / 1,409 / 30 | collection 상태와 별도로 기록 |
 
-휴장 발표일은 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment입니다. 최신 PCE의 미래 두 거래일도 임의로 만들지 않았습니다.
+휴장 발표일은 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment입니다. 가격 봉이 성기다는 이유만으로 collection 실패로 판단하지 않으며, 없는 값을 임의로 채우지 않습니다. 2026-08-26 PCE의 이후 7거래일은 9월 8일 재실행에서 확보했습니다.
 
 ## 경제 맥락 결합
 
@@ -124,7 +126,7 @@ PostgreSQL market_bars
 
 ## 이벤트 반응 분석과 탐색용 백테스트
 
-저장한 1분봉을 공식 `released_at` 기준으로 `PRE_60M`, `POST_5M`, `POST_30M`, `POST_60M` 네 구간으로 계산했습니다. 202회 × 10종목 × 4구간으로 `macro_event_impacts`에 **8,080행**을 저장했습니다. 각 행에는 수익률, 거래량, 분 단위 수익률의 변동성, SPY 대비 수익률과 coverage가 있습니다.
+저장한 1분봉을 공식 `released_at` 기준으로 `PRE_60M`, `POST_5M`, `POST_30M`, `POST_60M` 네 구간으로 계산했습니다. 202회 × 10종목 × 4구간으로 `macro_event_impacts`에 **8,080행**을 저장했습니다. 각 행에는 수익률, 거래량, 분 단위 수익률의 변동성, SPY 대비 수익률과 coverage가 있습니다. 2026-09-08 전체 재수집 뒤 기존 분석·전략 로직으로 다시 계산했으며 영향·전략 business key 중복은 모두 0건입니다.
 
 전망치와 surprise가 아직 없으므로 경제지표 방향을 예측하는 전략은 만들지 않았습니다. 대신 시점 누수를 피할 수 있는 가장 단순한 탐색 기준을 실행했습니다.
 

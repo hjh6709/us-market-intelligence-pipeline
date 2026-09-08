@@ -21,6 +21,27 @@ from src.market_context_backfill import (
 from src.market_universe import load_market_universe
 
 
+def market_context_manifest_item(result) -> dict[str, object]:
+    """Serialize one work item without collapsing collection and data quality."""
+    return {
+        "event_id": result.event_id,
+        "symbol": result.symbol,
+        "session_rows": result.session_1m_rows,
+        "daily_rows": result.daily_rows,
+        "daily_before": result.daily_before,
+        "daily_event": result.daily_event,
+        "daily_after": result.daily_after,
+        "session_collection_status": result.session_collection_status,
+        "daily_collection_status": result.daily_collection_status,
+        "overall_collection_status": result.overall_collection_status,
+        "session_coverage_status": result.session_coverage_status,
+        "daily_coverage_status": result.daily_coverage_status,
+        "derived_3m_coverage_status": result.derived_3m_coverage_status,
+        "derived_5m_coverage_status": result.derived_5m_coverage_status,
+        "overall_coverage_status": result.overall_coverage_status,
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=Path("config/market_event_catalog.json"))
@@ -72,7 +93,7 @@ def _selection(args: argparse.Namespace):
 
 def _planned_summary(args, releases, symbols, work) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "PLANNED" if args.dry_run else "COLLECTED",
         "release_from": args.release_from,
         "release_to": args.release_to,
@@ -139,17 +160,7 @@ def main() -> int:
             derived_counts["5m"] += result.derived_5m_rows
             derived_partial_counts["3m"] += result.derived_3m_partial_rows
             derived_partial_counts["5m"] += result.derived_5m_partial_rows
-            daily_coverage.append(
-                {
-                    "event_id": result.event_id,
-                    "symbol": result.symbol,
-                    "before": result.daily_before,
-                    "event": result.daily_event,
-                    "after": result.daily_after,
-                    "complete": result.coverage_status == "COMPLETE",
-                    "coverage_status": result.coverage_status,
-                }
-            )
+            daily_coverage.append(market_context_manifest_item(result))
             print(
                 json.dumps(
                     {
@@ -159,7 +170,12 @@ def main() -> int:
                         "symbol": item.symbol,
                         "session_1m_rows": result.session_1m_rows,
                         "daily_rows": result.daily_rows,
-                        "coverage_status": result.coverage_status,
+                        "collection_status": result.overall_collection_status,
+                        "session_coverage_status": result.session_coverage_status,
+                        "daily_coverage_status": result.daily_coverage_status,
+                        "derived_3m_coverage_status": result.derived_3m_coverage_status,
+                        "derived_5m_coverage_status": result.derived_5m_coverage_status,
+                        "overall_coverage_status": result.overall_coverage_status,
                         "event_pages": batch.pages,
                     },
                     ensure_ascii=False,
@@ -190,9 +206,13 @@ def main() -> int:
         "provider_available_until": provider_available_until.isoformat().replace(
             "+00:00", "Z"
         ),
-        "daily_context_complete": sum(item["complete"] for item in daily_coverage),
-        "daily_context_incomplete": sum(not item["complete"] for item in daily_coverage),
-        "daily_coverage": daily_coverage,
+        "daily_context_complete": sum(
+            item["daily_coverage_status"] == "COMPLETE" for item in daily_coverage
+        ),
+        "daily_context_incomplete": sum(
+            item["daily_coverage_status"] != "COMPLETE" for item in daily_coverage
+        ),
+        "work_item_coverage": daily_coverage,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(args.output.suffix + ".tmp")

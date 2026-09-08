@@ -17,22 +17,24 @@
 | └ PARTIAL | 19,178 |
 | 파생 5분봉 | 70,090 |
 | └ PARTIAL | 16,215 |
-| SIP 일봉 선택 합계 | 30,250 |
+| SIP 일봉 선택 합계 | 30,270 |
 | FRED·ALFRED context | 2,020 |
 
 행 수는 이벤트별 선택·생성 합계입니다. 같은 시장 시각이나 거래일이 여러 이벤트 범위에 포함될 수 있으므로 PostgreSQL은 동일 `symbol + bar_start + timeframe + source + feed`를 한 번만 저장합니다.
 
-최종 DB 조회에서 경제 이벤트는 CPI 55, 고용 55, PCE 55, FOMC 37행이며 context는 각각 550, 550, 550, 370행입니다. `market_bars` 테이블 전체에는 이전 과제 데이터도 함께 있어 Alpaca SIP 고유 행이 1m 323,126, 3m 112,593, 5m 70,090, 1d 11,680행입니다. 따라서 이벤트별 선택 합계와 테이블 전체 행 수를 같은 값으로 해석하지 않습니다. 전체 business key 중복은 0건입니다.
+2026-09-08 재수집 후 최종 DB 조회에서 경제 이벤트는 CPI 55, 고용 55, PCE 55, FOMC 37행이며 context는 각각 550, 550, 550, 370행입니다. Alpaca SIP 고유 행은 1m 308,512, 3m 112,593, 5m 70,090, 1d 11,700행입니다. 이벤트별 선택 합계와 테이블 고유 행 수는 같은 지표가 아니며, 전체 business key 중복은 0건입니다.
 
-## 일봉 coverage
+## 2026-09-08 coverage 재검증
 
-| 상태 | 건수 | 확인 내용 |
+| 계층·상태 | 건수 | 확인 내용 |
 | --- | ---: | --- |
-| COMPLETE | 1,980 | 이전 7 + 발표일 1 + 이후 7거래일 |
-| MARKET_CLOSED | 30 | Good Friday 발표 3회 × 10종목 |
-| FUTURE_SESSION_UNAVAILABLE | 10 | 2026-08-26 PCE 이후 거래일 5일만 존재 |
+| session collection COMPLETE | 2,020 | HTTP·pagination·요청 범위 정상 종료 |
+| daily collection COMPLETE / PARTIAL | 2,010 / 10 | 최신 PCE의 요청 끝만 기준시각 뒤 |
+| session 1m observed COMPLETE / PARTIAL / NO_DATA | 581 / 1,409 / 30 | 181개 가격봉 존재 여부는 품질 정보 |
+| daily observed COMPLETE / PARTIAL | 1,990 / 30 | 7/1/7 확보; 휴장 발표일 30건은 PARTIAL |
+| overall observed COMPLETE / PARTIAL / MARKET_CLOSED | 581 / 1,409 / 30 | collection 성공과 별도 상태 |
 
-`MARKET_CLOSED` 날짜는 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment입니다. 누락이나 미래 값을 합성하지 않았습니다.
+`MARKET_CLOSED` 날짜는 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment입니다. 2026-08-26 PCE의 이후 7거래일은 이번 재실행에서 모두 확보했습니다. 누락 가격이나 미래 값을 합성하지 않았습니다.
 
 ## Airflow 실제 실행
 
@@ -46,7 +48,9 @@
 | 1m / 3m / 5m / 1d | 362 / 122 / 74 / 30 |
 | 성공 work item / 미해결 alert | 2 / 0 |
 
-이후 같은 DAG를 공식 발표 202회와 10종목 전체로 실행했습니다. 발표별 mapped task 202개가 종목별 work item 2,020개를 522.660초에 처리했습니다. 1,980개는 성공, 30개는 휴장, 10개는 실행 시점에 미래 거래일 미도래로 기록됐고 실패와 미해결 alert는 0개였습니다. 거시 DAG도 mapped task 202개가 기존 point-in-time context 2,020개를 재사용해 14.835초에 검증했습니다. 기계 판독 결과와 run ID는 [airflow-full-run.json](airflow-full-run.json)에 있습니다.
+이후 같은 DAG를 공식 발표 202회와 10종목 전체로 실행했습니다. 발표별 mapped task 202개가 종목별 work item 2,020개를 522.660초에 처리했습니다. 이 실행의 상태값은 coverage corrective 이전 기록이므로 실행·요청·저장 증거로 보존합니다. 거시 DAG도 mapped task 202개가 기존 point-in-time context 2,020개를 재사용해 14.835초에 검증했습니다. 기계 판독 결과와 run ID는 [airflow-full-run.json](airflow-full-run.json)에 있습니다.
+
+2026-09-08에는 현재 계약의 CLI 수집 경로로 전체 202×10을 다시 실행해 위 collection/observed 분포를 기록했습니다. 이어 `multi_event_sip_v1` 영향 8,080행과 `v1` 전략 2,020행을 재계산했으며 결과 중복은 0건입니다. 가격 없는 기계 판독 정본은 [full-expansion-summary.json](full-expansion-summary.json)과 [event-analysis.json](event-analysis.json)입니다.
 
 ## 이벤트 분석·탐색용 전략 결과
 
