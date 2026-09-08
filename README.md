@@ -21,7 +21,7 @@
 2. **시장 반응 데이터:** 공식 발표 202회와 10종목을 기준으로 Alpaca SIP 1분봉·일봉을 수집하고 3분봉·5분봉을 만듭니다.
 3. **경제 상황 데이터:** 각 발표 시점에 이용 가능했던 FRED·ALFRED 10개 지표를 PostgreSQL에 연결합니다.
 4. **분석·기준 전략:** 발표 전후 5·30·60분 반응을 계산하고, 발표 전 가격 방향만 사용하는 탐색 전략을 비용 포함으로 검증합니다.
-5. **서빙:** PostgreSQL의 최종 결과를 읽기 전용 JSON API와 `Macro Pulse` 대시보드에서 조회합니다.
+5. **서빙:** PostgreSQL의 최종 결과를 읽기 전용 JSON API와 `시장 이벤트 분석 대시보드`에서 조회합니다.
 
 이번 확장 실행 결과는 다음과 같습니다.
 
@@ -111,7 +111,7 @@ D. 이벤트 분석
 market_bars + economic_events → 구간 수익률·거래량·변동성 → 탐색용 비용 포함 backtest
 
 E. 읽기 전용 서빙
-PostgreSQL → ServingService → FastAPI JSON API + Macro Pulse Dashboard
+PostgreSQL → ServingService → FastAPI JSON API + 시장 이벤트 분석 대시보드
 ```
 
 원시 체결 경로와 분석용 bar 경로는 행의 의미가 다릅니다. `7,360,804건`은 CPI 55회 × 4종목의 **개별 체결** 부하 입력이고, `308,512행`은 202회 × 10종목의 이벤트별 **1분봉 선택 합계**입니다. 두 숫자를 더하거나 직접 비교하지 않습니다.

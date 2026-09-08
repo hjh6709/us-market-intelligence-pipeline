@@ -6,7 +6,8 @@
 - 발표 자료: [7차시 서빙 레이어와 최종 발표](https://github.com/hjh6709/us-market-intelligence-pipeline/blob/main/docs/serving-layer-assignment.md)
 - 최신 구성도: [Archify 대화형 HTML](diagrams/session7-architecture.html)
 - 발표 대본: [09.07 7차시 발표 대본](09.07_대본.md)
-- 70초 시연 영상: [session7-submission-demo.webm](evidence/session7-demo/session7-submission-demo.webm)
+- 실제 단일 실행 기록: [바로 읽기](evidence/session7-demo/session7-actual-e2e.txt) · [재생 원본](evidence/session7-demo/session7-actual-e2e.typescript)
+- 70초 보조 영상: [MP4](evidence/session7-demo/session7-submission-demo.mp4) · [한국어 자막 트랙 MP4](evidence/session7-demo/session7-submission-demo-captioned.mp4) · [WebM 원본](evidence/session7-demo/session7-submission-demo.webm)
 
 별도 슬라이드 대신 위 발표 문서를 사용한다. 디스코드 전송은 제출자 계정에서 직접 한다.
 
@@ -14,9 +15,9 @@
 
 | 요구사항 | 상태 | 실제 결과 | 증거 |
 |---|---|---|---|
-| 저장 결과를 읽는 장면 | PASS | FastAPI `/health`와 CPI·NVDA 상세가 HTTP 200, 대시보드 조회 성공 | [최종 HTTP 증거](evidence/serving-layer/final-verification-20260907.json), [전체 캡처](evidence/serving-layer/dashboard-cpi-nvda-20260907.png) |
-| 입력 → 처리 → 저장 → 읽기 | PASS | 1조합 → 영향 4행 → 전략 1행 Upsert → 영향 4행·1m/3m/5m 재조회, 중복 0 | [최종 실행 증거](evidence/serving-layer/final-verification-20260907.json) |
-| 1~2분 안전한 시연 | PASS | 실제 CLI 0.43초, 단일 실행 출력과 저장 결과 조회를 담은 녹화 70.32초 | [WebM](evidence/session7-demo/session7-submission-demo.webm) |
+| 저장 결과를 읽는 장면 | PASS | 실행 중인 FastAPI에서 CPI·NVDA 상세·1m 봉 HTTP 200, 대시보드 조회 성공 | [2026-09-08 실제 화면](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png), [최종 HTTP 증거](evidence/serving-layer/final-verification-20260907.json) |
+| 입력 → 처리 → 저장 → 읽기 | PASS | 실제 명령 1회: 1조합 → 영향 4행 → 전략 1행 Upsert → 영향 4행·1m/3m/5m 재조회, 중복 0 | [읽기용 출력](evidence/session7-demo/session7-actual-e2e.txt), [재생 가능한 원본](evidence/session7-demo/session7-actual-e2e.typescript) |
+| 1~2분 안전한 시연 | PASS | 실제 CLI는 1초 이내이며, 동일 명령을 재생 가능한 원본으로 보존 | [터미널 출력](evidence/session7-demo/session7-actual-e2e.txt), [70초 보조 영상](evidence/session7-demo/session7-submission-demo.webm) |
 | 최신 구성도 | PASS | merged main `7f55721`의 소스 참조 12개를 Archify가 검증, showcase 9/9 | [HTML](diagrams/session7-architecture.html), [자동 검증 receipt](diagrams/session7-architecture.visual-check.json), [수동 시각 검토](diagrams/session7-architecture.manual-review.json) |
 | 단계별·최종 건수 표 | PASS | 202 releases, 10 symbols, 2,020 work items, 8,080 impacts 등 계층별 표기 | [발표 문서](serving-layer-assignment.md) |
 | 부하·장애·복구와 한계 | PASS | 실제 체결 부하 범위와 202×10 bar 범위를 분리하고 미보장 항목 표기 | [발표 문서 4절](serving-layer-assignment.md#4-부하장애복구에서-확인한-것) |
@@ -82,7 +83,7 @@ PR #28은 `main`의 `7f55721ddcfea021487664429a188776465ee0d4`로 병합됐다. 
 ## 제출 전 검증 결과
 
 - 문서·서빙 targeted tests: 21개 통과
-- 전체 unit suite: 192개 통과, 8개 skip
+- 전체 suite: 184개 통과, 8개 skip, 17개 subtest 통과
 - PostgreSQL market-bar integration: 3개 통과
 - paper execution·recovery integration: 2개 통과
 - Python compileall 및 Git whitespace 검사: 통과
@@ -98,7 +99,7 @@ Paper integration은 기존 코드의 회귀 검증일 뿐 이번 제출에서 �
 저장소: https://github.com/hjh6709/us-market-intelligence-pipeline
 발표 자료: https://github.com/hjh6709/us-market-intelligence-pipeline/blob/main/docs/serving-layer-assignment.md
 
-PostgreSQL 저장 결과를 FastAPI와 Macro Pulse 대시보드에서 실제 조회하도록 연결했습니다.
+PostgreSQL 저장 결과를 FastAPI와 시장 이벤트 분석 대시보드에서 실제 조회하도록 연결했습니다.
 입력 1조합 → 영향 4행 → 전략 1행 Upsert → 1m/3m/5m·영향 재조회까지 한 명령 0.43초로 검증했고 중복은 0입니다.
 현재 운영 상태는 RESEARCH_ONLY / NO_TRADE이며, 대용량 실행·외부 API·장애 재현은 저장된 증거로 대체합니다.
 ```

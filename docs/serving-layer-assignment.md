@@ -2,14 +2,14 @@
 
 ## 먼저 보는 결론
 
-PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영향과 탐색 전략 결과를 FastAPI와 `Macro Pulse` 웹 대시보드에서 실제로 읽도록 연결했다. 최종 시연은 입력 1조합을 다시 계산·Upsert·재조회하는 데 0.43초였고, `/health`와 상세 API 모두 HTTP 200이었다.
+PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영향과 탐색 전략 결과를 FastAPI와 `시장 이벤트 분석 대시보드`에서 실제로 읽도록 연결했다. 최종 시연은 입력 1조합을 다시 계산·Upsert·재조회하는 데 0.43초였고, `/health`와 상세 API 모두 HTTP 200이었다.
 
 현재 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`다. 선택 사례의 연구 신호나 과거 수익률은 주문이 아니며, 서빙 API에는 브로커 주문 경로가 없다.
 별도 모의주문 연결시험은 대시보드와 분리돼 있고, 실전 자동매매는 위험관리와 체결·복구 검증 뒤의 장기 목표다.
 
-[대화형 Archify 구성도](diagrams/session7-architecture.html) · [70.32초 시연 영상](evidence/session7-demo/session7-submission-demo.webm) · [최종 실행 JSON](evidence/serving-layer/final-verification-20260907.json)
+[대화형 Archify 구성도](diagrams/session7-architecture.html) · [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt) · [재생 원본](evidence/session7-demo/session7-actual-e2e.typescript) · [70.32초 MP4](evidence/session7-demo/session7-submission-demo.mp4)
 
-![CPI 2026-07 · NVDA 저장 결과를 읽은 Macro Pulse](evidence/serving-layer/dashboard-cpi-nvda-20260907.png)
+![CPI 2026-07 · NVDA 저장 결과를 실제로 읽은 시장 이벤트 분석 대시보드](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png)
 
 ## 1. 문제와 실제 데이터
 
@@ -77,6 +77,8 @@ PR #28 병합 후 collection과 observed coverage를 분리했다.
 
 ## 3. 입력 → 처리 → 저장 → 읽기: 한 번의 실행 기록
 
+[2026-09-08 실제 터미널 출력](evidence/session7-demo/session7-actual-e2e.txt)은 아래 명령과 출력이 한 세션에서 실행된 기록이다. [timestamp 포함 원본](evidence/session7-demo/session7-actual-e2e.typescript)은 `script -p docs/evidence/session7-demo/session7-actual-e2e.typescript`로 재생할 수 있다.
+
 ```bash
 .venv/bin/python -m scripts.run_serving_demo \
   --event-id 'CPI|2026-07|2026-08-12T12:30:00Z' \
@@ -93,7 +95,7 @@ PR #28 병합 후 collection과 observed coverage를 분리했다.
 | 무결성 | 선택 키와 전체 DB 검사 | 중복 0 |
 | 안전 상태 | execution readiness | `RESEARCH_ONLY / NO_TRADE` |
 
-최종 실행은 0.43초였다. 9월 7일 이전 리허설 0.37초와 9월 4일 기록 0.30초는 별도 실행이며 최신 값으로 덮어 말하지 않는다. 이 명령은 사전 저장 데이터를 사용하고 외부 Alpaca·FRED·ALFRED API, Kafka 대용량 재생, 증권사 주문을 호출하지 않는다.
+9월 8일 원본 기록에서도 명령은 1초 이내에 완료됐다. 9월 7일 계측 실행은 0.43초였고, 9월 7일 이전 리허설 0.37초와 9월 4일 기록 0.30초는 별도 실행이다. 이 명령은 사전 저장 데이터를 사용하고 외부 Alpaca·FRED·ALFRED API, Kafka 대용량 재생, 증권사 주문을 호출하지 않는다.
 
 ## 4. 부하·장애·복구에서 확인한 것
 
@@ -136,7 +138,7 @@ curl -fsS http://127.0.0.1:8000/health
 4. 영향 4·전략 1·중복 0·`NO_TRADE`를 보여준다.
 5. 대시보드에서 같은 저장 결과를 다시 읽는다.
 
-시연 실패 시 전체 수집·장애 재현·주문 시험을 하지 않는다. PostgreSQL 연결만 확인하고 같은 Upsert 명령을 한 번 재실행한다. 그래도 실패하면 [사전 녹화](evidence/session7-demo/session7-submission-demo.webm), [캡처](evidence/serving-layer/dashboard-cpi-nvda-20260907.png), [JSON](evidence/serving-layer/final-verification-20260907.json)을 보여주며 사전 증거임을 밝힌다.
+시연 실패 시 전체 수집·장애 재현·주문 시험을 하지 않는다. PostgreSQL 연결만 확인하고 같은 Upsert 명령을 한 번 재실행한다. 그래도 실패하면 [실제 터미널 출력](evidence/session7-demo/session7-actual-e2e.txt), [실제 조회 캡처](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png), [JSON](evidence/serving-layer/final-verification-20260907.json)을 보여주며 사전 증거임을 밝힌다.
 
 ## 7. 남은 문제와 다음 단계
 
@@ -158,5 +160,8 @@ curl -fsS http://127.0.0.1:8000/health
 - [Archify HTML](diagrams/session7-architecture.html)
 - [Archify 자동 브라우저 receipt](diagrams/session7-architecture.visual-check.json)
 - [Archify 수동 시각 검토 기록](diagrams/session7-architecture.manual-review.json)
+- [실제 단일 실행 출력](evidence/session7-demo/session7-actual-e2e.txt)
+- [timestamp 포함 터미널 원본](evidence/session7-demo/session7-actual-e2e.typescript)
+- [실제 CPI·NVDA 저장 결과 조회 화면](evidence/serving-layer/dashboard-cpi-nvda-live-20260908.png)
 - [70.32초 WebM](evidence/session7-demo/session7-submission-demo.webm)
-- [4분 발표 대본](09.07_대본.md)
+- [3분 발표 대본](09.07_대본.md)
