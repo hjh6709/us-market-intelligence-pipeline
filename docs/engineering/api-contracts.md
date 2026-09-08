@@ -109,4 +109,3 @@ An endpoint is documented as available in the root README only after route,
 repository/service behavior, failure behavior, and response schema tests pass.
 This document is the contract for Phases 2–4, not evidence that unimplemented routes
 already work.
-
