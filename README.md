@@ -233,6 +233,7 @@ RUN_POSTGRES_INTEGRATION=1 \
 - [6차시 부하·복구](docs/load-recovery-assignment.md)
 - [3차시 Kafka·Spark 과제](docs/kafka-spark-assignment.md)
 - [Paper execution 계약과 증거](docs/paper-execution.md)
+- [최종 테스트·통합·브라우저 검증](docs/evidence/final-portfolio/verification.md)
 - [Archify 대화형 구성도](docs/diagrams/session7-architecture.html)
 - [과정 발표 자료와 과거 실행 기록](docs/README.md#과정-아카이브)
 

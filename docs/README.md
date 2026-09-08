@@ -33,6 +33,7 @@
 - [서빙 레이어 과제·실행 결과](serving-layer-assignment.md)
 - [입력 → 처리 → 저장 → 읽기 증거](evidence/serving-layer/README.md)
 - [세션 7 제출 영상·캡처](evidence/session7-demo/README.md)
+- [최종 자동·통합 검증](evidence/final-portfolio/verification.md) · [브라우저 검증](evidence/final-portfolio/browser-validation.md)
 
 ## 과정 아카이브
 
