@@ -15,17 +15,35 @@ from src.serving_models import (
 )
 from src.serving_repository import PostgresServingRepository
 from src.serving_service import ServingNotFoundError, ServingService
+from src.pipeline_serving import (
+    PipelineLineageView,
+    PipelineNotFoundError,
+    PipelineOverviewView,
+    PipelineQualityView,
+    PipelineRunDetailView,
+    PipelineRunSummary,
+    PipelineServingService,
+    PostgresPipelineRepository,
+)
 
 
 EventType = Literal["CPI", "EMPLOYMENT", "PCE", "FOMC"]
 Timeframe = Literal["1m", "3m", "5m"]
 SymbolPath = Annotated[str, ApiPath(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")]
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
+PIPELINES_TEMPLATE_PATH = Path(__file__).with_name("templates") / "pipelines.html"
 
 
-def create_app(service: ServingService | None = None) -> FastAPI:
+def create_app(
+    service: ServingService | None = None,
+    pipeline_service: PipelineServingService | None = None,
+) -> FastAPI:
+    database_url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
     serving_service = service or ServingService(
-        PostgresServingRepository(os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL))
+        PostgresServingRepository(database_url)
+    )
+    pipeline_serving = pipeline_service or PipelineServingService(
+        PostgresPipelineRepository(database_url)
     )
     app = FastAPI(
         title="U.S. Market Intelligence Serving API",
@@ -41,6 +59,12 @@ def create_app(service: ServingService | None = None) -> FastAPI:
             status_code=404,
             content={"detail": f"{error.resource} not found"},
         )
+
+    @app.exception_handler(PipelineNotFoundError)
+    async def pipeline_not_found_handler(
+        _request: Request, _error: PipelineNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "pipeline run not found"})
 
     @app.get("/health")
     def health() -> JSONResponse:
@@ -84,9 +108,43 @@ def create_app(service: ServingService | None = None) -> FastAPI:
     def strategy_summary() -> StrategySummaryView:
         return serving_service.get_strategy_summary()
 
+    @app.get("/api/v1/pipelines/overview", response_model=PipelineOverviewView)
+    def pipeline_overview() -> PipelineOverviewView:
+        return pipeline_serving.overview()
+
+    @app.get("/api/v1/pipelines/runs", response_model=list[PipelineRunSummary])
+    def pipeline_runs(
+        dag_id: str | None = None,
+        status: Literal["RUNNING", "SUCCEEDED", "FAILED"] | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> list[PipelineRunSummary]:
+        return pipeline_serving.list_runs(
+            dag_id=dag_id, status=status, limit=limit, offset=offset
+        )
+
+    @app.get(
+        "/api/v1/pipelines/runs/{pipeline_run_id}",
+        response_model=PipelineRunDetailView,
+    )
+    def pipeline_run_detail(pipeline_run_id: str) -> PipelineRunDetailView:
+        return pipeline_serving.detail(pipeline_run_id)
+
+    @app.get("/api/v1/pipelines/quality", response_model=PipelineQualityView)
+    def pipeline_quality(pipeline_run_id: str) -> PipelineQualityView:
+        return pipeline_serving.quality(pipeline_run_id)
+
+    @app.get("/api/v1/pipelines/lineage", response_model=PipelineLineageView)
+    def pipeline_lineage() -> PipelineLineageView:
+        return pipeline_serving.lineage()
+
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
         return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+    @app.get("/pipelines", response_class=HTMLResponse)
+    def pipelines_dashboard() -> HTMLResponse:
+        return HTMLResponse(PIPELINES_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
     return app
 

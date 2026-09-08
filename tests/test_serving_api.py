@@ -17,6 +17,13 @@ from src.serving_models import (
     StrategySummaryView,
 )
 from src.serving_service import ServingNotFoundError
+from src.pipeline_serving import (
+    LineageEdge,
+    LineageNode,
+    PipelineLineageView,
+    PipelineOverviewView,
+    PipelineRunSummary,
+)
 
 
 class FakeService:
@@ -103,9 +110,40 @@ class FakeService:
         )
 
 
+class FakePipelineService:
+    def overview(self):
+        run = PipelineRunSummary(
+            pipeline_run_id="run-1",
+            dag_id="market_context_backfill_pipeline",
+            status="SUCCEEDED",
+            started_at=datetime(2026, 9, 8, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 9, 8, 0, 2, tzinfo=timezone.utc),
+            duration_seconds=120,
+            work_item_count=2020,
+            failed_item_count=0,
+            warning_check_count=1409,
+            failed_check_count=0,
+            open_alert_count=0,
+            observed_coverage_check_count=0,
+            quality_contract="legacy-pre-separation",
+            input_count=None,
+            output_count=None,
+        )
+        return PipelineOverviewView(latest_run=run, recent_runs=[run])
+
+    def lineage(self):
+        return PipelineLineageView(
+            nodes=[LineageNode(id="spark", label="Spark", plane="validation")],
+            edges=[LineageEdge(source="kafka", target="spark")],
+        )
+
+    def list_runs(self, **_filters):
+        return self.overview().recent_runs
+
+
 class ServingApiTest(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app(FakeService()))
+        self.client = TestClient(create_app(FakeService(), FakePipelineService()))
 
     def test_detail_endpoint_returns_research_and_execution_sections(self):
         response = self.client.get("/api/v1/events/event-1/symbols/NVDA")
@@ -147,6 +185,19 @@ class ServingApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json(), {"detail": "event not found"})
 
+    def test_pipeline_routes_expose_recorded_warnings_without_failing_run(self):
+        overview = self.client.get("/api/v1/pipelines/overview")
+        runs = self.client.get("/api/v1/pipelines/runs")
+        lineage = self.client.get("/api/v1/pipelines/lineage")
+
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(overview.json()["latest_run"]["status"], "SUCCEEDED")
+        self.assertEqual(overview.json()["latest_run"]["warning_check_count"], 1409)
+        self.assertEqual(overview.json()["latest_run"]["failed_check_count"], 0)
+        self.assertIsNone(overview.json()["latest_run"]["input_count"])
+        self.assertEqual(runs.status_code, 200)
+        self.assertEqual(lineage.json()["scope"], "project-level")
+
     def test_dashboard_contains_filters_chart_and_readiness_sections(self):
         response = self.client.get("/")
 
@@ -156,6 +207,17 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn('id="readiness-checks"', response.text)
         self.assertIn("과거 분석 결과이며 주문이 아닙니다", response.text)
         self.assertNotIn("cdn.", response.text.lower())
+
+    def test_pipeline_console_has_run_quality_and_lineage_surfaces(self):
+        response = self.client.get("/pipelines")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="pipeline-overview"', response.text)
+        self.assertIn('id="pipeline-runs"', response.text)
+        self.assertIn('id="pipeline-quality"', response.text)
+        self.assertIn('id="pipeline-lineage"', response.text)
+        self.assertIn("collection integrity", response.text)
+        self.assertIn("observed coverage", response.text)
 
 
 if __name__ == "__main__":
