@@ -23,6 +23,7 @@
 | 단계별·최종 건수 표 | PASS | 202 releases, 10 symbols, 2,020 work items, 8,080 impacts 등 계층별 표기 | [발표 문서](serving-layer-assignment.md) |
 | 부하·장애·복구와 한계 | PASS | 실제 체결 부하 범위와 202×10 bar 범위를 분리하고 미보장 항목 표기 | [발표 문서 4절](serving-layer-assignment.md#4-부하장애복구에서-확인한-것) |
 | README 실행법·구성·확인법 | PASS | 로컬 실행, API URL, 시연 명령, 증거 링크 반영 | [README](../README.md) |
+| 수동 모의주문 | PASS | Alpaca Paper 전용 지정가 주문 1건 접수·조회·취소, DB 1행·재전송 0 | [Paper 실행 문서](paper-execution.md), [실제 증거](evidence/paper-execution/actual-paper-probe.json) |
 | 코드에 없는 기능 구분 | PASS | 자동주문·위험관리·사람 승인·odd-lot 비교는 후속 계획으로 표기 | [발표 문서 7절](serving-layer-assignment.md#7-남은-문제와-다음-단계) |
 
 ## 제출 숫자 정본
@@ -102,5 +103,5 @@ Paper integration은 기존 코드의 회귀 검증일 뿐 이번 제출에서 �
 
 PostgreSQL 저장 결과를 FastAPI와 시장 이벤트 분석 대시보드에서 실제 조회하도록 연결했습니다.
 입력 1조합 → 영향 4행 → 전략 1행 Upsert → 1m/3m/5m·영향 재조회까지 한 명령 0.43초로 검증했고 중복은 0입니다.
-현재 운영 상태는 RESEARCH_ONLY / NO_TRADE이며, 대용량 실행·외부 API·장애 재현은 저장된 증거로 대체합니다.
+연구 신호의 자동 행동은 RESEARCH_ONLY / NO_TRADE로 잠겨 있습니다. 별도 수동 Alpaca Paper 주문은 실제 모의계좌에서 접수·취소와 DB 멱등 기록을 검증했고, 발표 중 외부 API·대용량 실행·장애 재현은 저장된 증거로 대체합니다.
 ```

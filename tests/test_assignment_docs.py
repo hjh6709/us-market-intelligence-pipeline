@@ -38,6 +38,9 @@ class AssignmentDocumentationTest(unittest.TestCase):
         self.assertIn("Serving API · Dashboard", diagram)
         self.assertIn("향후 주문 계층", diagram)
         self.assertIn("RESEARCH_ONLY / NO_TRADE", script)
+        self.assertIn("수동 모의주문", assignment)
+        self.assertIn("Alpaca Paper", script)
+        self.assertIn("accepted → canceled", script)
         self.assertNotIn("\nㅋ\n", script)
 
     def test_sixth_assignment_separates_executed_paths_and_remaining_work(self) -> None:
