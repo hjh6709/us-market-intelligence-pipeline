@@ -70,6 +70,14 @@ class ExecutionReadinessView(BaseModel):
     reasons: list[str]
 
 
+class ResearchProvenanceView(BaseModel):
+    source: str
+    feed: str
+    analysis_version: str
+    strategy_name: str
+    strategy_version: str
+
+
 class EventSymbolDetail(BaseModel):
     event: EventSummary
     symbol: str
@@ -78,6 +86,7 @@ class EventSymbolDetail(BaseModel):
     research_signal: ResearchSignal
     simulation: SimulationView | None
     execution_readiness: ExecutionReadinessView
+    provenance: ResearchProvenanceView
 
 
 class BarView(BaseModel):
@@ -102,3 +111,4 @@ class StrategySummaryView(BaseModel):
     mean_net_return_pct: Decimal | None = None
     positive_count: int = Field(ge=0)
     positive_rate_pct: Decimal | None = None
+    provenance: ResearchProvenanceView

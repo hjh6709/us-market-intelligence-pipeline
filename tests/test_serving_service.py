@@ -85,6 +85,14 @@ class ServingServiceTest(unittest.TestCase):
         self.assertEqual(detail.simulation.net_return_pct, Decimal("-0.626529"))
         self.assertEqual(detail.execution_readiness.order_action, "NO_TRADE")
         self.assertEqual(detail.execution_readiness.stage, "RESEARCH_ONLY")
+        self.assertEqual(detail.provenance.source, "alpaca")
+        self.assertEqual(detail.provenance.feed, "sip")
+        self.assertEqual(detail.provenance.analysis_version, "multi_event_sip_v1")
+        self.assertEqual(detail.provenance.strategy_version, "v1")
+
+        summary = ServingService(FakeRepository()).get_strategy_summary()
+        self.assertEqual(summary.provenance.analysis_version, "multi_event_sip_v1")
+        self.assertEqual(summary.provenance.strategy_name, "pre60_momentum_post60")
 
     def test_missing_event_and_symbol_are_distinct_not_found_errors(self):
         service = ServingService(FakeRepository())

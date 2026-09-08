@@ -12,6 +12,7 @@ from src.serving_models import (
     ExecutionReadinessView,
     ImpactView,
     ReadinessCheckView,
+    ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
 )
@@ -19,6 +20,14 @@ from src.serving_service import ServingNotFoundError
 
 
 class FakeService:
+    provenance = ResearchProvenanceView(
+        source="alpaca",
+        feed="sip",
+        analysis_version="multi_event_sip_v1",
+        strategy_name="pre60_momentum_post60",
+        strategy_version="v1",
+    )
+
     def health(self):
         return True
 
@@ -63,6 +72,7 @@ class FakeService:
                 checks=[ReadinessCheckView(name="kill_switch", status="FAIL")],
                 reasons=["release-level execution lock keeps this service research-only"],
             ),
+            provenance=self.provenance,
         )
 
     def get_bars(self, event_id, symbol, timeframe):
@@ -89,6 +99,7 @@ class FakeService:
             mean_net_return_pct=Decimal("-0.1565"),
             positive_count=782,
             positive_rate_pct=Decimal("39.34"),
+            provenance=self.provenance,
         )
 
 

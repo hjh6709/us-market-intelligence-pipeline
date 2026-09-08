@@ -81,7 +81,17 @@ class PostgresServingRepositoryTest(unittest.TestCase):
         sql, params = connect.connection.executions[-1]
         self.assertNotIn("2026-08-31", sql)
         self.assertNotIn("'CPI'", sql)
-        self.assertEqual(params, ("CPI", date(2026, 1, 1), date(2026, 8, 31)))
+        self.assertNotIn("released_at::date", sql)
+        self.assertIn("released_at >= %s", sql)
+        self.assertIn("released_at < %s", sql)
+        self.assertEqual(
+            params,
+            (
+                "CPI",
+                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                datetime(2026, 9, 1, tzinfo=timezone.utc),
+            ),
+        )
         self.assertEqual(events[0].event_id, "event-1")
         self.assertEqual(events[0].released_at, released_at)
 

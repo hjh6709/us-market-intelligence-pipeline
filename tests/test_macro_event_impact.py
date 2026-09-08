@@ -121,7 +121,8 @@ class MacroEventImpactTest(unittest.TestCase):
         self.assertIn("economic_event_id = ANY", event_sql)
         self.assertEqual(event_params[-1], ["event"])
         self.assertIn("symbol = ANY", bars_sql)
-        self.assertEqual(set(bars_params[0]), {"SPY", "NVDA"})
+        self.assertEqual(bars_params[:2], ("alpaca", "sip"))
+        self.assertEqual(set(bars_params[2]), {"SPY", "NVDA"})
         self.assertEqual(event_count, 1)
         self.assertEqual(requested_impact_count, 4)
 

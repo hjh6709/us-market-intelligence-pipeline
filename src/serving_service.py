@@ -8,15 +8,28 @@ from src.serving_models import (
     EventSymbolDetail,
     ImpactView,
     MacroContextView,
+    ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
 )
-from src.serving_repository import (
+from src.serving_repository import EventRecord, PostgresServingRepository
+from src.platform_contracts import (
+    ANALYSIS_VERSION,
+    MARKET_FEED,
+    MARKET_SOURCE,
     STRATEGY_NAME,
     STRATEGY_VERSION,
-    EventRecord,
-    PostgresServingRepository,
 )
+
+
+def _provenance() -> ResearchProvenanceView:
+    return ResearchProvenanceView(
+        source=MARKET_SOURCE,
+        feed=MARKET_FEED,
+        analysis_version=ANALYSIS_VERSION,
+        strategy_name=STRATEGY_NAME,
+        strategy_version=STRATEGY_VERSION,
+    )
 
 
 class ServingNotFoundError(LookupError):
@@ -74,6 +87,7 @@ class ServingService:
             mean_net_return_pct=record.mean_net_return_pct,
             positive_count=record.positive_count,
             positive_rate_pct=positive_rate,
+            provenance=_provenance(),
         )
 
     def get_event_symbol_detail(self, event_id: str, symbol: str) -> EventSymbolDetail:
@@ -142,6 +156,7 @@ class ServingService:
             research_signal=signal,
             simulation=simulation,
             execution_readiness=readiness,
+            provenance=_provenance(),
         )
 
     @staticmethod

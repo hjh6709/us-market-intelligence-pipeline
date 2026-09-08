@@ -16,11 +16,9 @@ import psycopg
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.live_market_smoke import _read_env_file
-from src.macro_event_impact import ANALYSIS_VERSION
+from src.platform_contracts import ANALYSIS_VERSION, STRATEGY_NAME, STRATEGY_VERSION
 
 
-STRATEGY_NAME = "pre60_momentum_post60"
-STRATEGY_VERSION = "v1"
 DEFAULT_TRANSACTION_COST_BPS = Decimal("10")
 
 

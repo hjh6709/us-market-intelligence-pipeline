@@ -1,14 +1,18 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 import psycopg
 
+from src.platform_contracts import (
+    ANALYSIS_VERSION,
+    MARKET_FEED,
+    MARKET_SOURCE,
+    STRATEGY_NAME,
+    STRATEGY_VERSION,
+)
 
-STRATEGY_NAME = "pre60_momentum_post60"
-STRATEGY_VERSION = "v1"
-ANALYSIS_VERSION = "multi_event_sip_v1"
 ALLOWED_TIMEFRAMES = frozenset({"1m", "3m", "5m"})
 
 
@@ -112,11 +116,13 @@ class PostgresServingRepository:
             filters.append("event_type = %s")
             params.append(event_type)
         if released_from is not None:
-            filters.append("released_at::date >= %s")
-            params.append(released_from)
+            filters.append("released_at >= %s")
+            params.append(datetime.combine(released_from, time.min, tzinfo=UTC))
         if released_to is not None:
-            filters.append("released_at::date <= %s")
-            params.append(released_to)
+            filters.append("released_at < %s")
+            params.append(
+                datetime.combine(released_to + timedelta(days=1), time.min, tzinfo=UTC)
+            )
         where = f"WHERE {' AND '.join(filters)}" if filters else ""
         sql = f"""
             SELECT economic_event_id, event_type, reference_period, released_at,
@@ -232,6 +238,6 @@ class PostgresServingRepository:
                   AND bar_start >= %s AND bar_start < %s
                 ORDER BY bar_start
                 """,
-                (symbol, timeframe, "alpaca", "sip", start, end),
+                (symbol, timeframe, MARKET_SOURCE, MARKET_FEED, start, end),
             )
             return [BarRecord(*row) for row in cursor.fetchall()]
