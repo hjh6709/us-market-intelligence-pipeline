@@ -176,6 +176,10 @@ risk-control or reconciliation guarantee around it.
 
 ## Findings and disposition
 
+### Completion update — 2026-09-09
+
+The audit findings below describe the inspected baseline. Subsequent commits on the completion branch now centralize and expose source/version identities, use explicit UTC date bounds, provide Overview/Research/Pipelines/Paper APIs and pages, and expose manual Paper review, submission, status refresh and cancellation. The remaining correctness risk is stale `RUNNING` Airflow terminal reconciliation; OpenLineage remains optional. This update does not rewrite the historical baseline findings.
+
 ### Correctness risks
 
 1. Centralize and expose analysis/source identities to prevent serving drift.
@@ -204,4 +208,3 @@ risk-control or reconciliation guarantee around it.
 OpenLineage may be added only after the core application and documentation pass.
 Marquez is optional and must never be required by the core compose stack.
 Prometheus/Grafana and additional data platforms are outside this deadline.
-
