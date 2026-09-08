@@ -162,9 +162,31 @@ class FakePipelineService:
         return self.overview().recent_runs
 
 
+class FakePaperService:
+    def __init__(self):
+        self.submissions = []
+
+    def account(self):
+        return {"broker": "alpaca-paper", "account": {"ready": True}, "clock": {"is_open": False}, "paper_order_submission_enabled": True, "live_trading_enabled": False}
+
+    def review(self, intent):
+        return {"intent": intent.canonical(), "required_confirmation": "SUBMIT PAPER ORDER", "broker_request_sent": False}
+
+    def submit(self, intent, confirmation):
+        self.submissions.append((intent, confirmation))
+        return {"request_id": intent.request_id, "state": "accepted", "filled_qty": "0", "last_error": None}
+
+    def orders(self):
+        return []
+
+    def recover(self):
+        return {"broker": "alpaca-paper", "recovery_mode": "GET_ONLY", "new_orders_submitted": 0, "position_reconciliation_verified": False}
+
+
 class ServingApiTest(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app(FakeService(), FakePipelineService()))
+        self.paper = FakePaperService()
+        self.client = TestClient(create_app(FakeService(), FakePipelineService(), self.paper))
 
     def test_detail_endpoint_returns_research_and_execution_sections(self):
         response = self.client.get("/api/v1/events/event-1/symbols/NVDA")
@@ -258,6 +280,29 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn('id="pipeline-lineage"', response.text)
         self.assertIn("collection integrity", response.text)
         self.assertIn("observed coverage", response.text)
+
+    def test_paper_page_and_review_submit_routes_are_separate(self):
+        page = self.client.get("/paper")
+        review = self.client.post("/api/v1/paper/orders/review", json={
+            "request_id": "web-1", "symbol": "NVDA", "qty": 1,
+            "limit_price": "100", "purpose": "connectivity_probe",
+        })
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="paper-order-review"', page.text)
+        self.assertIn('id="paper-confirmation"', page.text)
+        self.assertEqual(review.status_code, 200)
+        self.assertFalse(review.json()["broker_request_sent"])
+        self.assertEqual(self.paper.submissions, [])
+
+        submit = self.client.post("/api/v1/paper/orders", json={
+            "intent": {"request_id": "web-1", "symbol": "NVDA", "qty": 1,
+                       "limit_price": "100", "purpose": "connectivity_probe"},
+            "confirmation": "SUBMIT PAPER ORDER",
+        })
+        self.assertEqual(submit.status_code, 200)
+        self.assertEqual(submit.json()["state"], "accepted")
+        self.assertEqual(len(self.paper.submissions), 1)
 
 
 if __name__ == "__main__":

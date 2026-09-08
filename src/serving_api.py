@@ -28,6 +28,15 @@ from src.pipeline_serving import (
     PipelineServingService,
     PostgresPipelineRepository,
 )
+from src.paper_execution import BrokerUnavailable, OrderIntent
+from src.paper_web import (
+    ConfiguredPaperWebGateway,
+    PaperConfigurationError,
+    PaperConfirmationRequest,
+    PaperConfirmationError,
+    PaperOrderNotFoundError,
+    PaperSubmitRequest,
+)
 
 
 EventType = Literal["CPI", "EMPLOYMENT", "PCE", "FOMC"]
@@ -36,11 +45,13 @@ ImpactWindow = Literal["PRE_60M", "POST_5M", "POST_30M", "POST_60M"]
 SymbolPath = Annotated[str, ApiPath(pattern=r"^[A-Z][A-Z0-9.]{0,9}$")]
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "dashboard.html"
 PIPELINES_TEMPLATE_PATH = Path(__file__).with_name("templates") / "pipelines.html"
+PAPER_TEMPLATE_PATH = Path(__file__).with_name("templates") / "paper.html"
 
 
 def create_app(
     service: ServingService | None = None,
     pipeline_service: PipelineServingService | None = None,
+    paper_service=None,
 ) -> FastAPI:
     database_url = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
     serving_service = service or ServingService(
@@ -49,6 +60,7 @@ def create_app(
     pipeline_serving = pipeline_service or PipelineServingService(
         PostgresPipelineRepository(database_url)
     )
+    paper_serving = paper_service or ConfiguredPaperWebGateway(database_url)
     app = FastAPI(
         title="U.S. Market Intelligence Serving API",
         version="1.0.0",
@@ -74,6 +86,32 @@ def create_app(
         _request: Request, _error: PipelineNotFoundError
     ) -> JSONResponse:
         return JSONResponse(status_code=404, content={"detail": "pipeline run not found"})
+
+    @app.exception_handler(PaperConfirmationError)
+    async def paper_confirmation_handler(
+        _request: Request, error: PaperConfirmationError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(error)})
+
+    @app.exception_handler(PaperConfigurationError)
+    async def paper_configuration_handler(
+        _request: Request, _error: PaperConfigurationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503, content={"detail": "paper sandbox is not configured"}
+        )
+
+    @app.exception_handler(BrokerUnavailable)
+    async def broker_unavailable_handler(
+        _request: Request, _error: BrokerUnavailable
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": "paper broker unavailable"})
+
+    @app.exception_handler(PaperOrderNotFoundError)
+    async def paper_order_not_found_handler(
+        _request: Request, _error: PaperOrderNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": "paper order not found"})
 
     @app.get("/health")
     def health() -> JSONResponse:
@@ -166,6 +204,36 @@ def create_app(
     def pipeline_lineage() -> PipelineLineageView:
         return pipeline_serving.lineage()
 
+    @app.get("/api/v1/paper/account")
+    def paper_account() -> dict:
+        return paper_serving.account()
+
+    @app.get("/api/v1/paper/orders")
+    def paper_orders() -> list[dict]:
+        return paper_serving.orders()
+
+    @app.post("/api/v1/paper/orders/review")
+    def review_paper_order(intent: OrderIntent) -> dict:
+        return paper_serving.review(intent)
+
+    @app.post("/api/v1/paper/orders")
+    def submit_paper_order(request: PaperSubmitRequest) -> dict:
+        return paper_serving.submit(request.intent, request.confirmation)
+
+    @app.post("/api/v1/paper/recovery")
+    def recover_paper_orders() -> dict:
+        return paper_serving.recover()
+
+    @app.post("/api/v1/paper/orders/{request_id}/reconcile")
+    def reconcile_paper_order(request_id: str) -> dict:
+        return paper_serving.reconcile(request_id)
+
+    @app.post("/api/v1/paper/orders/{request_id}/cancel")
+    def cancel_paper_order(
+        request_id: str, request: PaperConfirmationRequest
+    ) -> dict:
+        return paper_serving.cancel(request_id, request.confirmation)
+
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> HTMLResponse:
         return HTMLResponse(TEMPLATE_PATH.read_text(encoding="utf-8"))
@@ -173,6 +241,10 @@ def create_app(
     @app.get("/pipelines", response_class=HTMLResponse)
     def pipelines_dashboard() -> HTMLResponse:
         return HTMLResponse(PIPELINES_TEMPLATE_PATH.read_text(encoding="utf-8"))
+
+    @app.get("/paper", response_class=HTMLResponse)
+    def paper_dashboard() -> HTMLResponse:
+        return HTMLResponse(PAPER_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
     return app
 
