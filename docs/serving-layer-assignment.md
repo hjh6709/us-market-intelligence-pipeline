@@ -21,9 +21,9 @@ PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영�
 | 종목 / work item | 10 / 2,020 | 202 releases × 10 symbols |
 | 공급자 논리 요청 / 실제 페이지 | 404 / 404 | 발표마다 다종목 1m·1d 요청, 추가 페이지 없음 |
 | SIP 1분봉 선택 합계 | 308,512 | 이벤트 구간에서 반환된 봉의 선택 합계 |
-| SIP 일봉 선택 합계 | 30,250 | 발표 전후 거래일의 이벤트별 선택 합계 |
+| SIP 일봉 선택 합계 | 30,270 | 발표 전후 거래일의 이벤트별 선택 합계 |
 | 3분봉 / 5분봉 | 112,593 / 70,090 | 1분봉에서 생성; PARTIAL 19,178 / 16,215 |
-| PostgreSQL 고유 시장 봉 | 1m 323,126 / 3m 112,593 / 5m 70,090 / 1d 11,680 | business key 기준 실제 저장 행 |
+| PostgreSQL 고유 시장 봉 | 1m 308,512 / 3m 112,593 / 5m 70,090 / 1d 11,700 | 2026-09-08 재수집 후 business key 기준 실제 저장 행 |
 | 경제 환경 | 2,020 | 발표 202회 × FRED·ALFRED 10 series |
 | 이벤트 영향 | 8,080 | 202 × 10 × PRE60·POST5·POST30·POST60 |
 | 탐색 전략 | 2,020 중 계산 가능 1,988 | 비용 10bp 차감 평균 -0.15649% |
@@ -111,7 +111,9 @@ PR #28 병합 후 collection과 observed coverage를 분리했다.
 | 로컬 API 503 | 첫 호출 실패·두 번째 성공, alert `OPEN → RESOLVED` |
 | Kafka routing | 별도 118,118건에서 최대 파티션 비중 97.5% → 33.9% |
 
-시장 Airflow 전체 실행은 202 mapped tasks, 2,020 work items를 522.660초에 완료했고 거시 DAG는 202 tasks를 14.835초에 완료했다. 다만 당시 `COMPLETE 1,980 / DATA_NOT_AVAILABLE 40`은 PR #28 이전 coverage 계약으로 기록됐다. 실행 성공·요청·저장 건수는 증거로 유지하지만 새 collection/observed 상태로 재검증한 값이라고 주장하지 않는다.
+시장 Airflow 전체 실행은 202 mapped tasks, 2,020 work items를 522.660초에 완료했고 거시 DAG는 202 tasks를 14.835초에 완료했다. 당시 `COMPLETE 1,980 / DATA_NOT_AVAILABLE 40`은 PR #28 이전 coverage 계약이므로 과거 실행 이력으로만 보존한다.
+
+2026-09-08에는 현재 코드로 같은 202×10 범위를 다시 수집했다. 실제 404페이지가 정상 종료되어 session collection은 2,020건 모두 COMPLETE였다. daily collection은 COMPLETE 2,010·PARTIAL 10이고, 관측 품질은 session 1m COMPLETE 581·PARTIAL 1,409·NO_MARKET_DATA 30, daily COMPLETE 1,990·PARTIAL 30으로 분리 기록됐다. 이어 기존 macro analysis 90% 규칙으로 영향 8,080행과 전략 2,020행을 재계산했고 business key 중복은 각각 0건이었다.
 
 ## 5. 저장 결과를 쓰는 장면
 
@@ -142,8 +144,7 @@ curl -fsS http://127.0.0.1:8000/health
 
 ## 7. 남은 문제와 다음 단계
 
-- 202×10 기존 work item을 새 collection/observed coverage 계약으로 재검증하고 상태 분포를 다시 기록
-- accepted input이 달라질 경우에만 8,080 impacts와 2,020 strategy results 재계산
+- 정기 재수집 때 provider collection과 observed coverage 변화 감시
 - 발표 당시 시장 전망치와 최초 발표값의 point-in-time 수집
 - 비발표일 비교군, 통계 검정, 실제 호가 기반 비용
 - 같은 원시 체결의 odd-lot 포함 연구용 봉과 공급자 호환 봉 비교
@@ -151,7 +152,7 @@ curl -fsS http://127.0.0.1:8000/health
 - 최대 주문 금액·보유 종목·일일 손실 한도·중복 주문 방지·긴급 중지
 - 사람 승인 뒤 제한적 실전, 충분한 운영 검증 뒤 자동 실전 검토
 
-이번 coverage corrective는 전체 202×10 연구 데이터와 전략·백테스트를 직접 재계산하지 않았다. Python CI 3.14와 프로젝트 `<3.14` 불일치는 별도 follow-up이며 이번 제출 범위에서 수정하지 않았다.
+전체 202×10 연구 데이터와 기존 전략·백테스트는 2026-09-08 재계산했다. 이는 기존 로직의 재현 검증이며 새로운 전략 검증이나 수익성 개선을 뜻하지 않는다. Python CI 3.14와 프로젝트 `<3.14` 불일치는 별도 follow-up이며 이번 제출 범위에서 수정하지 않았다.
 
 ## 8. 제출 증거
 

@@ -31,9 +31,9 @@
 |---|---:|---|
 | 공식 발표 / 종목 / work item | 202 / 10 / 2,020 | 분석 범위 |
 | 공급자 요청·페이지 | 404 / 404 | 발표별 1m·1d 다종목 요청; 추가 페이지 없음 |
-| 이벤트별 선택 합계 | 1m 308,512 / daily 30,250 | 인접 이벤트가 같은 DB 행을 공유할 수 있음 |
+| 이벤트별 선택 합계 | 1m 308,512 / daily 30,270 | 인접 이벤트가 같은 DB 행을 공유할 수 있음 |
 | 파생 봉 | 3m 112,593 / 5m 70,090 | 각각 PARTIAL 19,178 / 16,215 |
-| PostgreSQL 고유 시장 봉 | 1m 323,126 / 3m 112,593 / 5m 70,090 / 1d 11,680 | business key 기준 실제 저장 행 |
+| PostgreSQL 고유 시장 봉 | 1m 308,512 / 3m 112,593 / 5m 70,090 / 1d 11,700 | 2026-09-08 재수집 후 business key 기준 실제 저장 행 |
 | 경제 환경 | 2,020 | 202 events × 10 series |
 | 이벤트 영향 | 8,080 | COMPLETE 5,366, PARTIAL 2,557, NO_MARKET_DATA 152, baseline 부족 5 |
 | 탐색 전략 | 2,020 중 계산 가능 1,988 | 전체 평균 -0.15649%, COMPLETE 입력 911 |
@@ -49,7 +49,7 @@ PR #28은 `main`의 `7f55721ddcfea021487664429a188776465ee0d4`로 병합됐다. 
 - 정상적인 sparse bar만으로 수집 실패 처리하지 않고 가격을 forward fill하지 않는다.
 - macro analysis의 기존 90% 규칙은 별도 분석 사용성 정책이며 변경하지 않았다.
 
-202×10 전체 Airflow 증거의 `COMPLETE 1,980` 분류는 PR #28 이전 계약으로 만들어졌다. DAG 실행 성공·요청 수·저장 건수 증거는 유효하지만, 새 계약의 수집/관측 상태로는 아직 재검증하지 않았다. 전체 전략·백테스트도 이번 corrective로 다시 계산하지 않았다.
+202×10 전체 Airflow 증거의 `COMPLETE 1,980` 분류는 PR #28 이전 계약이므로 과거 실행 기록으로만 보존한다. 2026-09-08 현재 코드의 전체 재수집에서는 session collection COMPLETE 2,020, daily collection COMPLETE 2,010·PARTIAL 10으로 확인했다. 관측 품질은 session 1m COMPLETE 581·PARTIAL 1,409·NO_DATA 30, daily COMPLETE 1,990·PARTIAL 30이다. 기존 90% 분석 규칙과 전략 로직으로 영향 8,080행과 전략 2,020행도 다시 계산했고 결과 중복은 0건이다.
 
 ## 180분과 181개 후보 시각
 
@@ -84,7 +84,7 @@ PR #28은 `main`의 `7f55721ddcfea021487664429a188776465ee0d4`로 병합됐다. 
 ## 제출 전 검증 결과
 
 - 문서·서빙 targeted tests: 21개 통과
-- 전체 suite: 184개 통과, 8개 skip, 17개 subtest 통과
+- 전체 suite: 186개 통과, 8개 skip, 17개 subtest 통과
 - PostgreSQL market-bar integration: 3개 통과
 - paper execution·recovery integration: 2개 통과
 - Python compileall 및 Git whitespace 검사: 통과

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-03T10:14:11.797868Z",
+  "generated_at": "2026-09-08T05:26:59.675874Z",
   "contains_prices": false,
   "market_context": {
     "release_from": "2022-01-01",
@@ -27,7 +27,7 @@
     "work_item_count": 2020,
     "pages": 404,
     "selected_bar_counts": {
-      "DAILY_15_SESSIONS": 30250,
+      "DAILY_15_SESSIONS": 30270,
       "SESSION_1MIN": 308512
     },
     "derived_bar_counts": {
@@ -40,9 +40,45 @@
     }
   },
   "coverage_status_counts": {
-    "COMPLETE": 1980,
-    "FUTURE_SESSION_UNAVAILABLE": 10,
-    "MARKET_CLOSED": 30
+    "collection": {
+      "session": {
+        "COMPLETE": 2020
+      },
+      "daily": {
+        "COMPLETE": 2010,
+        "PARTIAL": 10
+      },
+      "overall": {
+        "COMPLETE": 2010,
+        "PARTIAL": 10
+      }
+    },
+    "observed_bar_coverage": {
+      "session_1m": {
+        "COMPLETE": 581,
+        "NO_MARKET_DATA": 30,
+        "PARTIAL": 1409
+      },
+      "daily": {
+        "COMPLETE": 1990,
+        "PARTIAL": 30
+      },
+      "derived_3m": {
+        "COMPLETE": 581,
+        "NO_MARKET_DATA": 30,
+        "PARTIAL": 1409
+      },
+      "derived_5m": {
+        "COMPLETE": 581,
+        "NO_MARKET_DATA": 30,
+        "PARTIAL": 1409
+      },
+      "overall": {
+        "COMPLETE": 581,
+        "MARKET_CLOSED": 30,
+        "PARTIAL": 1409
+      }
+    }
   },
   "kafka_v2_spark_validation": {
     "experiment_run_id": "local-v2-routing-20260903",
@@ -81,8 +117,8 @@
       "PCE": 550
     },
     "alpaca_sip_market_bars_by_timeframe": {
-      "1d": 11680,
-      "1m": 323126,
+      "1d": 11700,
+      "1m": 308512,
       "3m": 112593,
       "5m": 70090
     },
