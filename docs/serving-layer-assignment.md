@@ -1,5 +1,7 @@
 # 7차시 과제 — 서빙 레이어 완성과 최종 발표
 
+> **역사 자료:** 7차시 제출 당시 구현과 evidence를 설명합니다. 현재 제품 계약은 [문서 허브](README.md), 현재 구현은 [current-system](architecture/current-system.md), 승인된 target은 [platform-contract](architecture/platform-contract.md)을 따릅니다.
+
 ## 먼저 보는 결론
 
 PostgreSQL에 저장한 경제 발표, 시장 봉, 경제 환경, 이벤트 영향과 탐색 전략 결과를 FastAPI와 `시장 이벤트 분석 대시보드`에서 실제로 읽도록 연결했다. 최종 시연은 입력 1조합을 다시 계산·Upsert·재조회하는 데 0.43초였고, `/health`와 상세 API 모두 HTTP 200이었다.

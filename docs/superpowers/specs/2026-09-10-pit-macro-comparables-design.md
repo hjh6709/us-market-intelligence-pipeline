@@ -1,0 +1,17 @@
+# Point-in-time macro and comparable-events design
+
+## Scope
+
+Build leakage-safe macro features and reproducible comparable-event sets after event observation and session contracts are operational.
+
+## Target interfaces
+
+Feature computation accepts a cutoff and only observations with `observed_at <= cutoff`. A regime references a named feature set/version. Comparable selection declares universe, filters, normalized features, distance metric, top-k and run ID, then stores candidates and distances.
+
+## Failure rules and tests
+
+Later revisions are excluded, unavailable features remain explicit null/ineligible values, and insufficient comparable candidates return a typed insufficient-universe result. Tests use revision traps, deterministic ties and repeated runs.
+
+## Delivery status
+
+Documentation and plan only. No current UI or FRED context row is relabeled as a feature, regime or comparable set.

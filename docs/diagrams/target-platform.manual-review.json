@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-09-10",
+  "artifact": {
+    "path": "target-platform.html",
+    "sha256": "1c93714ff888ab36f8434ea05c77108ca8a2305f0162bfd54a4952e15c07e2da",
+    "bytes": 727356
+  },
+  "visual_review": "passed",
+  "correction_rounds": 1,
+  "inspected": [
+    "target-platform.visual-check.1440x900.light.png",
+    "target-platform.visual-check.2048x1320.dark.png"
+  ],
+  "observations": [
+    "current, foundation and target boundaries remain visually distinct",
+    "research/product and raw SIP validation planes are spatially separated",
+    "relationship labels do not obscure nodes or arrow direction",
+    "light and dark endpoint themes remain legible",
+    "the largest viewport uses the available height without a conspicuous empty lower band"
+  ]
+}

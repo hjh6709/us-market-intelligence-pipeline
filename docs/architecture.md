@@ -1,5 +1,7 @@
 # Macro Impact & Automated Trading Data Foundation — MVP Architecture
 
+> **Superseded historical design (2026-08/09).** IEX, news, LLM, Streamlit and future automated-trading statements below are not the current implementation or the approved target contract. Use [platform contract](architecture/platform-contract.md), [implemented baseline](architecture/current-system.md), and [current versus target](engineering/current-vs-target.md). The remainder is preserved for project-history traceability.
+
 상태: CPI 원시 replay 55회 × 4종목 검증 완료, 분석용 SIP bar 202회 × 10종목 수집·DB 저장 완료, Kafka v2 분산 검증 완료
 
 기준일: 2026-08-13

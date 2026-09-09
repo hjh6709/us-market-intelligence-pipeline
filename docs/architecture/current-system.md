@@ -1,8 +1,10 @@
 # Current system architecture
 
+Status: implemented baseline at `63633a50c85c88e507be458067ecf6706220f813`. This page does not describe the approved target; see [platform-contract.md](platform-contract.md).
+
 ## Product identity
 
-이 저장소는 **U.S. Economic Event Market Intelligence Platform**입니다. 핵심은 데이터 엔지니어링이며, 연구와 Paper execution은 저장 결과를 소비하는 downstream plane입니다.
+이 저장소의 정본 제품명은 **Economic Event Intelligence & Strategy Validation Platform**입니다. 핵심은 데이터 엔지니어링이며, 연구와 Paper execution은 저장 결과를 소비하는 downstream plane입니다.
 
 ## Three planes
 
@@ -47,3 +49,5 @@ Paper 로컬 기록은 서버에 고정한 `ALPACA_PAPER_ACCOUNT_ID`로 읽고, 
 - Research output never becomes a Paper order input.
 
 See the [interactive Archify diagram](../diagrams/session7-architecture.html) and the application `/pipelines` lineage panel.
+
+The approved target diagram is separately published as [target-platform.html](../diagrams/target-platform.html). A target node is not evidence of current implementation; use the [current-versus-target matrix](../engineering/current-vs-target.md).

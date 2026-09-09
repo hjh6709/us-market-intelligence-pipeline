@@ -1,4 +1,4 @@
-# U.S. Economic Event Market Intelligence Platform
+# Economic Event Intelligence & Strategy Validation Platform
 
 공식 미국 경제 발표 시각과 당시 알 수 있었던 정보를 시장 데이터에 연결하는, 재현 가능한 데이터 플랫폼입니다.
 
@@ -10,13 +10,19 @@
 
 ### Architecture
 
-[현재 구조와 데이터 연결](docs/architecture/current-system.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md) · [이번 교정 검증](docs/engineering/corrective-pass.md)
+[현재 구현](docs/architecture/current-system.md) · [approved target contract](docs/architecture/platform-contract.md) · [현재와 target 차이](docs/engineering/current-vs-target.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md)
 
-아래 `플랫폼 구조`와 사이트의 `파이프라인 → 데이터 흐름`이 현재 연결을 설명합니다. 다음 이미지는 Kafka·Spark와 CPI 분석 경로를 함께 보여 주는 이전 발표 기준 구성도이며, 최신 계약은 이어지는 Mermaid 구조와 [현재 구조 문서](docs/architecture/current-system.md)를 따릅니다.
+아래 이미지는 구현 완료 그림이 아니라 approved target입니다. 노드의 `CURRENT`, `EVOLVING`, `P1 FOUNDATION` tag와 [현재/target 표](docs/engineering/current-vs-target.md)를 함께 읽어야 합니다. 이어지는 Mermaid는 현재 연결만 설명합니다.
+
+[![approved target architecture](docs/diagrams/target-platform.visual-check.1440x900.light.png)](docs/diagrams/target-platform.html)
+
+아래 정적 이미지는 과정 과제에서 사용한 기존 구현 흐름을 보존한 것입니다. approved target이나 최신 완료 범위를 뜻하지 않으며, 판단에는 위 target diagram과 current/target 표를 사용합니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 핵심 결과
+
+아래 수치는 날짜가 있는 기존 실행 evidence의 결과입니다. 이번 architecture pass가 같은 대용량 실행을 다시 수행했다는 뜻이 아닙니다.
 
 | 범위 | 검증된 결과 | 단위와 의미 |
 | --- | ---: | --- |
@@ -242,6 +248,12 @@ RUN_POSTGRES_INTEGRATION=1 \
 | `macro_event_impacts` | event·symbol·window 연구 결과 | source·feed·analysis version 포함 |
 | `event_strategy_results` | 기준 전략 관측 | strategy name·version 포함 |
 | `paper_order_intents` | Paper 주문 intent와 상태 | account scope·request ID |
+| `economic_release_observations` | 공식 값의 append-only revision foundation | event·metric·revision·observed time |
+| `economic_consensus_snapshots` | point-in-time consensus foundation | event·metric·provider·observed time |
+| `economic_surprises` | actual/consensus 입력을 참조하는 파생 foundation | actual observation·consensus·algorithm version |
+| `trading_sessions` / `economic_event_markers` | verified calendar·marker foundation | exchange·session date·calendar version / event·kind·time |
+
+마지막 네 foundation 테이블은 이번에 schema만 추가했습니다. 공식-source ingestion, backfill, 새 reaction 계산 및 UI 연결은 아직 구현하지 않았습니다.
 
 ## 다음 단계
 
@@ -254,6 +266,7 @@ RUN_POSTGRES_INTEGRATION=1 \
 ## 구현·과제 증거
 
 - [문서 허브](docs/README.md)
+- [2026-09-10 baseline audit](docs/engineering/baseline-audit-2026-09-10.md) · [target architecture](docs/diagrams/target-platform.html)
 - [플랫폼 감사](docs/engineering/platform-audit.md) · [API 계약](docs/engineering/api-contracts.md)
 - [7차시 서빙 과제](docs/serving-layer-assignment.md) · [최종 시연 증거](docs/evidence/serving-layer/README.md)
 - [6차시 부하·복구](docs/load-recovery-assignment.md)

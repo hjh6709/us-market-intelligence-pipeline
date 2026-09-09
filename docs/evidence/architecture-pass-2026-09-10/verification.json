@@ -1,0 +1,66 @@
+{
+  "date": "2026-09-10",
+  "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
+  "scope": "P0 canonical contracts plus additive P1 event/session foundation",
+  "pre_change_python": {
+    "tests": 220,
+    "skipped": 12,
+    "result": "PASS",
+    "seconds": 13.083
+  },
+  "tdd": {
+    "initial_red_failures": 12,
+    "timezone_red_failures": 2,
+    "lineage_and_immutability_red_failures": 2,
+    "targeted_green_tests": 15,
+    "result": "PASS"
+  },
+  "post_change_python": {
+    "tests": 235,
+    "skipped": 12,
+    "result": "PASS",
+    "seconds": 12.539
+  },
+  "post_change_node": {
+    "tests": 6,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 0.069553958
+  },
+  "postgresql_migrations": {
+    "image": "postgres:17.6-alpine",
+    "range": "001..009",
+    "full_range_apply_count": 2,
+    "migration_009_additional_apply_count": 2,
+    "foundation_tables": 5,
+    "exchange_timezone_columns": 1,
+    "append_only_mutation_check": "PASS",
+    "cross_event_surprise_lineage_check": "PASS",
+    "result": "PASS"
+  },
+  "archify": {
+    "diagram_type": "architecture",
+    "spec_sha256": "54b625b2e67cbcd587469145ad5d74def5f732d1c53435d57569de86c1eb5f3e",
+    "artifact_sha256": "1c93714ff888ab36f8434ea05c77108ca8a2305f0162bfd54a4952e15c07e2da",
+    "showcase_checks": "9/9",
+    "errors": 0,
+    "warnings": 0,
+    "browser_viewports": [
+      "1440x900",
+      "1600x1000",
+      "1920x1080",
+      "2048x1320"
+    ],
+    "visual_review": "PASS",
+    "correction_rounds": 1
+  },
+  "not_proven": [
+    "official release observation ingestion or backfill",
+    "consensus ingestion or surprise population",
+    "operational exchange-calendar adapter",
+    "target reaction calculations",
+    "comparable-event search or strategy rerun",
+    "automated research-to-order execution",
+    "public or production deployment"
+  ]
+}

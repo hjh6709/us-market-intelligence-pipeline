@@ -1,5 +1,7 @@
 # MVP Data Collection and Lifecycle
 
+> **Superseded initial policy (2026-08).** 아래 IEX/22종목/90일 정책은 현재 운영 계약이 아닙니다. 현재 구현은 [current system](architecture/current-system.md), target 저장·보존 원칙은 [data contracts](architecture/data-contracts.md)와 [operations contract](architecture/operations-and-deployment.md)를 따릅니다.
+
 상태: initial operating policy
 
 기준일: 2026-08-13

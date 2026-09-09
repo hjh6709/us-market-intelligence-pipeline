@@ -1,5 +1,7 @@
 # MVP Design Decisions
 
+> **Superseded historical decisions.** 아래 IEX/22종목/Streamlit 중심 결정은 당시 MVP 기록이며 2026-09-10 현재 또는 target 계약이 아닙니다. 현재 구현은 [current system](architecture/current-system.md), approved target은 [platform contract](architecture/platform-contract.md), 차이는 [current versus target](engineering/current-vs-target.md)을 따릅니다.
+
 상태: proposed, measurement gates defined
 
 기준일: 2026-08-13

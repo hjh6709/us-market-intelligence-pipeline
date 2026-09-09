@@ -1,5 +1,7 @@
 # Final Project Vision
 
+> **Superseded historical vision (2026-08).** The automated-trading, RAG, agent, news and live-execution ideas below are not current capabilities and are not the 2026-09-10 approved target. Use [platform contract](architecture/platform-contract.md) and [current versus target](engineering/current-vs-target.md). This file remains only as design history.
+
 상태: 목표 아키텍처 초안
 
 기준일: 2026-08-13
