@@ -51,7 +51,7 @@ class AssignmentDocumentationTest(unittest.TestCase):
         diagram = Path("docs/diagrams/pipeline-architecture.svg").read_text(
             encoding="utf-8"
         )
-        script = Path("docs/09.03_대본.md").read_text(encoding="utf-8")
+        script = Path("docs/archive/presentations/09.03_대본.md").read_text(encoding="utf-8")
 
         for phrase in (
             "# 6차시 과제 — 부하·복구 결과 보완 및 전체 흐름 점검",

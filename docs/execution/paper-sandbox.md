@@ -26,3 +26,15 @@ The `/paper` product page demonstrates a manually approved Alpaca Paper workflow
 ## Explicit non-guarantees
 
 The current position comparison requires an opening baseline and therefore reports position reconciliation as unverified. Paper behavior does not prove live-trading readiness. Research signals remain `NO_TRADE`; only the separate manual form can request a Paper order.
+# Local account boundary
+
+Set server-side `ALPACA_PAPER_ACCOUNT_ID` to the existing Alpaca Paper account ID
+before enabling the web sandbox. It preserves the existing `alpaca-paper:<id>`
+journal identity without a broker lookup. `/api/v1/paper/orders` requires only
+this pinned scope and PostgreSQL, not broker availability or credentials.
+Broker operations verify that the configured credentials belong to that account;
+a mismatch fails closed. Recovery is GET-only and never submits an order.
+
+Write-enabled use is operator-controlled/local only. Authentication and CSRF
+protection for a public multi-user deployment are not implemented. Keep
+`ENABLE_PAPER_WEB_ORDERS=false` on public/read-only demonstrations.

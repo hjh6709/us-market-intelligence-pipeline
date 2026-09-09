@@ -142,7 +142,8 @@
       </article>
 
       <aside class="panel readiness">
-        <div class="panel-title"><h2>자동매매 준비 상태</h2></div>
+        <div class="panel-title"><h2>연구·실행 경계</h2></div>
+        <p class="muted">아래 상태는 자동 실행을 잠그는 조건 점검입니다. 음수인 탐색 결과를 통계적 모델 검증 실패로 판정한 것은 아닙니다.</p>
         <div class="readiness-head"><small>현재 운영 단계 / 실제 행동</small><br><strong id="order-action">RESEARCH_ONLY / NO_TRADE</strong></div>
         <div id="readiness-checks"></div>
         <ul id="readiness-reasons" class="reasons"></ul>
@@ -176,7 +177,7 @@
   <script src="/static/vendor/lightweight-charts-5.0.6.min.js"></script>
   <script src="/static/vendor/echarts-6.1.0.min.js"></script>
   <script>
-    const state = { events: [], timeframe: '1m', priceChart: null, resizeObserver: null };
+    const state = { events: [], timeframe: '1m', priceChart: null, resizeObserver: null, historicalChart: null, crossAssetChart: null, activeBase: null, releasedAt: null, barGeneration: 0 };
     const byId = id => document.getElementById(id);
     const fmtPct = value => value == null ? '계산 불가' : `${Number(value).toFixed(4)}%`;
     const fmtNum = value => value == null ? '—' : Number(value).toLocaleString('ko-KR');
@@ -199,7 +200,7 @@
       const kind = byId('event-type').value;
       const events = await getJson(`/api/v1/events${kind ? `?event_type=${encodeURIComponent(kind)}` : ''}`);
       state.events = events;
-      byId('event-select').replaceChildren(...events.map(event => option(event.event_id, `${event.event_type} · ${event.reference_period} · ${new Date(event.released_at).toLocaleDateString('ko-KR')}`)));
+      byId('event-select').replaceChildren(...events.map(event => option(event.event_id, `${event.event_type} · ${event.reference_period} · ${releaseDateLabel(event.released_at)}`)));
       if (!events.length) byId('event-select').append(option('', '저장된 발표 없음'));
       await loadSymbols();
     }
@@ -215,6 +216,9 @@
       const container = byId('price-chart');
       if (state.resizeObserver) state.resizeObserver.disconnect();
       if (state.priceChart) state.priceChart.remove();
+      state.priceChart = null;
+      const officialTime = new Date(releasedAt).toISOString();
+      byId('coverage-note').textContent = `공식 발표 UTC ${officialTime} · 가격 채움 없음`;
       container.replaceChildren();
       if (!bars.length) { container.textContent = '표시할 가격 봉이 없습니다.'; return; }
       const chart = LightweightCharts.createChart(container, {
@@ -227,31 +231,33 @@
       const data = bars.map(b=>({time:Math.floor(new Date(b.window_start).getTime()/1000),open:Number(b.open),high:Number(b.high),low:Number(b.low),close:Number(b.close)}));
       candles.setData(data);
       const releaseSeconds=Math.floor(new Date(releasedAt).getTime()/1000);
-      const markerTime=data.reduce((best,p)=>Math.abs(p.time-releaseSeconds)<Math.abs(best-releaseSeconds)?p.time:best,data[0].time);
-      LightweightCharts.createSeriesMarkers(candles,[{time:markerTime,position:'aboveBar',color:'#ffca70',shape:'arrowDown',text:'Release'}]);
+      const hasExactBar=data.some(p=>p.time===releaseSeconds);
+      LightweightCharts.createSeriesMarkers(candles,hasExactBar?[{time:releaseSeconds,position:'aboveBar',color:'#ffca70',shape:'arrowDown',text:'공식 발표'}]:[]);
       chart.timeScale().fitContent(); state.priceChart=chart;
       const partial = bars.filter(item => item.coverage_status === 'PARTIAL').length;
-      byId('coverage-note').textContent = `T-60 · Release · T+5 · T+30 · T+60 · T+120 / ${bars.length.toLocaleString('ko-KR')}개 ${state.timeframe} 봉 · PARTIAL ${partial.toLocaleString('ko-KR')}개 · 가격 채움 없음`;
+      byId('coverage-note').textContent = `공식 발표 UTC ${officialTime} · ${hasExactBar?'발표 시각 봉에 표시':'발표 시각 봉 없음: 인접 봉으로 이동하지 않음'} / ${bars.length.toLocaleString('ko-KR')}개 ${state.timeframe} 봉 · PARTIAL ${partial.toLocaleString('ko-KR')}개 · 가격 채움 없음`;
     }
+
+    function releaseDateLabel(releasedAt) { return new Date(releasedAt).toISOString().slice(0,10)+' UTC'; }
 
     function drawAnalytics(historical, crossAsset) {
       const common={backgroundColor:'transparent',textStyle:{color:'#9facbc'},tooltip:{trigger:'axis'},grid:{left:52,right:18,top:24,bottom:48},yAxis:{type:'value',axisLabel:{formatter:'{value}%'},splitLine:{lineStyle:{color:'rgba(255,255,255,.06)'}}}};
-      const history=echarts.init(byId('historical-chart'));
+      const history=state.historicalChart ||= echarts.init(byId('historical-chart'));
       history.setOption({...common,xAxis:{type:'category',data:historical.points.map(p=>p.released_at.slice(0,10)),axisLabel:{rotate:35}},series:[{type:'bar',name:'POST 60M',data:historical.points.map(p=>p.return_pct==null?null:Number(p.return_pct)),itemStyle:{color:'#65a9ff'}}]});
-      const cross=echarts.init(byId('cross-asset-chart'));
+      const cross=state.crossAssetChart ||= echarts.init(byId('cross-asset-chart'));
       cross.setOption({...common,xAxis:{type:'category',data:crossAsset.points.map(p=>p.symbol)},series:[{type:'bar',name:'POST 60M',data:crossAsset.points.map(p=>p.return_pct==null?null:Number(p.return_pct)),itemStyle:{color:p=>p.value>=0?'#60e0b0':'#ff7d7d'}}]});
-      window.addEventListener('resize',()=>{history.resize();cross.resize()},{once:true});
+
     }
 
     function renderDetail(detail, summary) {
       byId('event-label').textContent = `${detail.event.event_type} ${detail.event.reference_period} · ${detail.symbol}`;
-      byId('event-time').textContent = `${new Date(detail.event.released_at).toLocaleString('ko-KR')} · ${detail.event.quality_status || '상태 미기록'}`;
+      byId('event-time').textContent = `${new Date(detail.event.released_at).toISOString()} (UTC) · ${detail.event.quality_status || '상태 미기록'}`;
       byId('research-signal').textContent = detail.research_signal;
       byId('net-return').textContent = detail.simulation ? fmtPct(detail.simulation.net_return_pct) : '계산 불가';
       byId('strategy-mean').textContent = fmtPct(summary.mean_net_return_pct);
       byId('strategy-count').textContent = `계산 가능 ${fmtNum(summary.eligible_count)} / 전체 ${fmtNum(summary.total_count)}`;
       const readiness = detail.execution_readiness;
-      byId('order-action').textContent = `${readiness.stage} / ${readiness.order_action}`;
+      byId('order-action').textContent = `${readiness.stage} / ${readiness.order_action} · 자동 주문 DISABLED`;
       byId('readiness-checks').replaceChildren(...readiness.checks.map(item => {
         const row = document.createElement('div'); row.className = 'check';
         const name = document.createElement('span'); name.textContent = item.name;
@@ -269,6 +275,15 @@
       }));
     }
 
+    window.addEventListener('resize',()=>{state.historicalChart?.resize();state.crossAssetChart?.resize()});
+    async function loadBars() {
+      if (!state.activeBase) return;
+      const generation=++state.barGeneration;
+      try {
+        const bars=await getJson(state.activeBase+'/bars?timeframe='+state.timeframe);
+        if(generation===state.barGeneration)drawChart(bars,state.releasedAt);
+      } catch(error) { if(generation===state.barGeneration)showStartupError(error); }
+    }
     async function loadResult() {
       const eventId = byId('event-select').value, symbol = byId('symbol-select').value;
       if (!eventId || !symbol) return;
@@ -276,8 +291,10 @@
       try {
         const base = `/api/v1/events/${encodeURIComponent(eventId)}/symbols/${encodeURIComponent(symbol)}`;
         const event=state.events.find(item=>item.event_id===eventId);
-        const [detail, bars, summary, historical, crossAsset] = await Promise.all([getJson(base), getJson(`${base}/bars?timeframe=${state.timeframe}`), getJson('/api/v1/strategy/summary'),getJson(`/api/v1/research/historical?event_type=${encodeURIComponent(event.event_type)}&symbol=${encodeURIComponent(symbol)}&window=POST_60M`),getJson(`/api/v1/research/cross-asset?event_id=${encodeURIComponent(eventId)}&window=POST_60M`)]);
-        renderDetail(detail, summary); drawChart(bars,detail.event.released_at); drawAnalytics(historical,crossAsset);
+        state.activeBase=null; ++state.barGeneration;
+        const [detail, summary, historical, crossAsset] = await Promise.all([getJson(base), getJson('/api/v1/strategy/summary'),getJson(`/api/v1/research/historical?event_type=${encodeURIComponent(event.event_type)}&symbol=${encodeURIComponent(symbol)}&window=POST_60M`),getJson(`/api/v1/research/cross-asset?event_id=${encodeURIComponent(eventId)}&window=POST_60M`)]);
+        renderDetail(detail, summary); drawAnalytics(historical,crossAsset);
+        state.activeBase=base;state.releasedAt=detail.event.released_at;await loadBars();
       } catch (error) {
         byId('error').textContent = `조회 실패: ${error.message}`; byId('error').style.display = 'block';
       } finally { byId('load-button').disabled = false; }
@@ -289,7 +306,7 @@
     document.querySelectorAll('[data-timeframe]').forEach(button => button.addEventListener('click', () => {
       state.timeframe = button.dataset.timeframe;
       document.querySelectorAll('[data-timeframe]').forEach(node => node.classList.toggle('active', node === button));
-      loadResult();
+      loadBars();
     }));
     function showStartupError(error) { byId('error').textContent = `초기화 실패: ${error.message}`; byId('error').style.display = 'block'; }
     loadEvents().then(loadResult).catch(showStartupError);

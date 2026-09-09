@@ -83,7 +83,7 @@ class EventStrategyBacktestTest(unittest.TestCase):
         sql, params = connection.execute.call_args.args
         self.assertIn("pre.economic_event_id = ANY", sql)
         self.assertIn("pre.symbol = ANY", sql)
-        self.assertEqual(params, ("multi_event_sip_v1", ["event"], ["NVDA"]))
+        self.assertEqual(params, ("multi_event_sip_v1", "alpaca", "sip", ["event"], ["NVDA"]))
         self.assertEqual(result["rows"], 0)
 
 

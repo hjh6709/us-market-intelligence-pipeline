@@ -260,4 +260,4 @@ docker compose up -d --wait postgres kafka kafka-init
 - [202회 × 10종목 확장 결과](evidence/multi-event-expansion/README.md)
 - [Airflow·alert 실행](evidence/sixth-assignment/README.md)
 - [Kafka v2 기계 판독 결과](evidence/load-recovery/v2-partition-routing.json)
-- [4분 발표 대본](09.03_대본.md)
+- [4분 발표 대본](archive/presentations/09.03_대본.md)

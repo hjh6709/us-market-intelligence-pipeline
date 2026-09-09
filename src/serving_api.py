@@ -202,8 +202,14 @@ def create_app(
         "/api/v1/pipelines/runs/{pipeline_run_id}",
         response_model=PipelineRunDetailView,
     )
-    def pipeline_run_detail(pipeline_run_id: str) -> PipelineRunDetailView:
-        return pipeline_serving.detail(pipeline_run_id)
+    def pipeline_run_detail(
+        pipeline_run_id: str,
+        limit: int = Query(default=100, ge=1, le=500),
+        work_offset: int = Query(default=0, ge=0),
+        check_offset: int = Query(default=0, ge=0),
+    ) -> PipelineRunDetailView:
+        return pipeline_serving.detail(pipeline_run_id, limit=limit,
+                                       work_offset=work_offset, check_offset=check_offset)
 
     @app.get("/api/v1/pipelines/quality", response_model=PipelineQualityView)
     def pipeline_quality(pipeline_run_id: str) -> PipelineQualityView:

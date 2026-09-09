@@ -24,7 +24,7 @@ class FakePipelineRepository:
             )
         ]
 
-    def get_run(self, _run_id):
+    def get_run(self, _run_id, **_pagination):
         return None
 
 

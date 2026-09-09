@@ -8,7 +8,7 @@
 
 과정: **4주, 총 8회**
 
-이 문서는 [최종 프로젝트 비전](docs/final-vision.md)의 **Stage A — Macro Impact Data Foundation MVP** 실행 계획이다. 장기 목표는 안전한 자동매매 시스템이지만, 이번 4주에는 경제지표 발표와 시장 반응을 재현 가능하게 검증하는 데이터 기반을 Kafka, Spark Structured Streaming, Airflow로 구현한다.
+이 문서는 [최종 프로젝트 비전](../../final-vision.md)의 **Stage A — Macro Impact Data Foundation MVP** 실행 계획이다. 장기 목표는 안전한 자동매매 시스템이지만, 이번 4주에는 경제지표 발표와 시장 반응을 재현 가능하게 검증하는 데이터 기반을 Kafka, Spark Structured Streaming, Airflow로 구현한다.
 
 ## 1. 프로젝트 목표
 
@@ -42,7 +42,7 @@ BLS/BEA/Federal Reserve official release times
 
 ## 2. Guideline 반영 결정
 
-과정에서 학습·실습한 기술과 이 프로젝트의 구현·증거·제외 사유는 [과정 연계 문서](docs/course-alignment.md)에 별도로 연결한다. 기술을 사용했다는 사실보다 어떤 문제를 해결했고 어떤 실행 증거를 남겼는지를 완료 기준으로 삼는다.
+과정에서 학습·실습한 기술과 이 프로젝트의 구현·증거·제외 사유는 [과정 연계 문서](../../course-alignment.md)에 별도로 연결한다. 기술을 사용했다는 사실보다 어떤 문제를 해결했고 어떤 실행 증거를 남겼는지를 완료 기준으로 삼는다.
 
 ### 2026-08-24 멘토 피드백 반영
 
@@ -54,10 +54,10 @@ BLS/BEA/Federal Reserve official release times
 
 | 피드백 항목 | 현재 증거 | 상태 |
 | --- | --- | --- |
-| 실제 과거 거래 replay | [SMH IEX 거래 427건을 Kafka→Spark→PostgreSQL로 실행](docs/test-results/2026-08-21-kafka-spark-assignment.md) | 완료 |
-| 중복·순서 역전·late event | [Spark fixture와 checkpoint 재시작 테스트](docs/test-results/2026-08-19-spark-market-processor-smoke.md) | 완료 |
-| DB 장애 후 같은 batch 재처리 | [PostgreSQL rollback·upsert 복구 테스트](docs/test-results/2026-08-20-postgres-market-bars.md) | 완료 |
-| 1x·10x·50x·100x 부하 측정 | [100x·1,523건 파일럿](docs/test-results/2026-08-24-replay-load-100x.md) 완료, 동일 조건 1x·10x·50x와 3회 반복 필요 | 진행 중 |
+| 실제 과거 거래 replay | [SMH IEX 거래 427건을 Kafka→Spark→PostgreSQL로 실행](../../test-results/2026-08-21-kafka-spark-assignment.md) | 완료 |
+| 중복·순서 역전·late event | [Spark fixture와 checkpoint 재시작 테스트](../../test-results/2026-08-19-spark-market-processor-smoke.md) | 완료 |
+| DB 장애 후 같은 batch 재처리 | [PostgreSQL rollback·upsert 복구 테스트](../../test-results/2026-08-20-postgres-market-bars.md) | 완료 |
+| 1x·10x·50x·100x 부하 측정 | [100x·1,523건 파일럿](../../test-results/2026-08-24-replay-load-100x.md) 완료, 동일 조건 1x·10x·50x와 3회 반복 필요 | 진행 중 |
 | 공식 발표·FRED/ALFRED·SIP backfill | Airflow DAG와 DB schema 필요 | 미구현 |
 | 과거 경제 이벤트 event-study report | 위 batch 데이터가 준비된 뒤 구현 | 미구현 |
 

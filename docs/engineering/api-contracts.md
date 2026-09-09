@@ -73,6 +73,13 @@ Date filters on event lists are UTC calendar dates and are implemented as explic
   newest-first summaries.
 - `GET /api/v1/pipelines/runs/{pipeline_run_id}` returns run metadata, status
   groups, bounded work items, checks, attempts, errors, and duration.
+  Query parameters are `limit` (default 100, range 1–500), `work_offset`
+  (default 0), and `check_offset` (default 0). Both offsets must be nonnegative.
+  `work_items` and `checks` stay arrays for compatibility; the corresponding
+  `work_items_page` and `checks_page` objects each declare `total`, `limit`,
+  `offset`, and `has_more`. A 2,020-item run therefore returns at most 100 items
+  by default and explicitly reports the remaining pages. Offsets beyond the
+  total return empty arrays without changing that total. Unknown runs return 404.
 - `GET /api/v1/pipelines/quality?pipeline_run_id=` returns separate collection,
   observed coverage, derived coverage, daily coverage, duplicate, and PIT checks.
 - `GET /api/v1/pipelines/lineage` returns static, code-reviewed project-level nodes
@@ -88,7 +95,11 @@ Paper routes are a separate journey and never accept event IDs, research signals
 or strategy results.
 
 - `GET /api/v1/paper/account` performs safe account and clock reads.
-- `GET /api/v1/paper/orders` reads the bounded local journal.
+- `GET /api/v1/paper/orders` reads the bounded local journal using the server's
+  pinned `ALPACA_PAPER_ACCOUNT_ID`, without constructing a broker client or
+  requesting the remote account. A broker outage does not hide local orders.
+  Remote operations verify that credentials identify the pinned account before
+  acting. Missing local scope is a configuration error, not an empty journal.
 - `POST /api/v1/paper/orders/review` validates an `OrderIntent` without broker POST.
 - `POST /api/v1/paper/orders` requires the reviewed intent, an explicit confirmation,
   and server-side Paper UI enablement; it delegates to the existing journal-first

@@ -1,6 +1,6 @@
 # U.S. Economic Event Market Intelligence Platform
 
-미국 경제 발표를 공식 시각에 맞춰 시장 데이터와 연결하고, 수집 품질·재현 가능한 연구 결과·격리된 모의주문까지 한곳에서 확인하는 데이터 플랫폼입니다.
+공식 미국 경제 발표 시각과 당시 알 수 있었던 정보를 시장 데이터에 연결하는, 재현 가능한 데이터 플랫폼입니다.
 
 > **Data engineering first.** 연구 결과는 과거 분석이며 투자 추천이 아닙니다. 연구 신호는 주문 입력으로 사용할 수 없고, 주문 기능은 사용자가 직접 검토하고 승인하는 Alpaca Paper 전용 경로로 격리돼 있습니다.
 
@@ -9,6 +9,10 @@
 ![실제 PostgreSQL 집계를 읽는 플랫폼 Overview](docs/images/portfolio/overview.jpg)
 
 ### Architecture
+
+[현재 구조와 데이터 연결](docs/architecture/current-system.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md) · [이번 교정 검증](docs/engineering/corrective-pass.md)
+
+아래 `플랫폼 구조`와 사이트의 `파이프라인 → 데이터 흐름`이 현재 연결을 설명합니다. 다음 이미지는 Kafka·Spark와 CPI 분석 경로를 함께 보여 주는 이전 발표 기준 구성도이며, 최신 계약은 이어지는 Mermaid 구조와 [현재 구조 문서](docs/architecture/current-system.md)를 따릅니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
@@ -55,7 +59,7 @@ flowchart LR
 
   subgraph Validation[Validation plane]
     PQ[Archived SIP trades]
-    K[Kafka v2 · 6 partitions]
+    K[Kafka · versioned routing]
     S[Spark event-time validation]
     PQ --> K --> S
   end
@@ -95,7 +99,7 @@ API·pagination·요청 범위가 정상 종료된 성긴 bar 응답은 수집 �
 
 - 공식 발표와 point-in-time 경제 환경을 미래 정보 없이 연결
 - source/feed/version을 명시한 시장 데이터와 분석 결과 보존
-- Airflow 실행·work item·품질 검사·alert를 durable telemetry로 기록
+- 시장 데이터 Airflow 실행·work item·품질 검사·alert를 durable telemetry로 기록
 - Kafka/Spark 원시 체결 검증과 분석용 provider-bar 경로의 의미 분리
 - PostgreSQL business key와 upsert로 재실행 중복 방지
 - 저장 결과를 FastAPI와 웹 UI로 실제 조회
@@ -117,7 +121,7 @@ API·pagination·요청 범위가 정상 종료된 성긴 bar 응답은 수집 �
 
 1. **분석 수집:** 공식 일정 → Airflow → Alpaca SIP bar와 FRED/ALFRED vintage → PostgreSQL
 2. **원시 체결 검증:** archived Parquet → Kafka → Spark event-time 검증·집계 → PostgreSQL
-3. **연구:** event + bar + macro context → versioned impact → 기준 전략 결과
+3. **연구:** event + bar → versioned impact → 기준 전략 결과; PIT macro context는 같은 발표의 설명 맥락으로 함께 조회
 4. **서빙:** PostgreSQL → repository/service → FastAPI → 네 개 제품 화면
 5. **모의주문:** 사용자 입력 → server-side 검증 → explicit confirmation → Alpaca Paper → durable journal
 
@@ -147,6 +151,26 @@ Alpaca 다종목 요청을 발표별로 묶었습니다. 2026-09-08 재실행 �
 
 `market_context_backfill_pipeline`은 발표 한 건을 mapped task 하나로 만들고 내부에서 종목을 묶어 요청합니다. 입력·시도 횟수·상태·오류·quality checks·alerts가 PostgreSQL에 남습니다. 다년 실행은 `market_context_backfill_orchestrator`가 연도별 child run으로 나눕니다.
 
+## Orchestration with Airflow
+
+Airflow는 매개변수 기반 역사 데이터 재수집, 작업 의존성, 제한된 재시도와 API 동시성 제어를 담당합니다. 네 DAG 모두 `schedule=None`, `catchup=False`, `max_active_runs=1`입니다. 이는 통제된 backfill 설계이며 상시 실시간 수집이나 cron 운영을 구현했다고 주장하지 않습니다.
+
+| 실제 DAG ID | 역할 | 결과 확인 경로 |
+| --- | --- | --- |
+| `market_context_backfill_pipeline` | 발표별 다종목 시장 봉 수집·검증 | PostgreSQL `pipeline_*`, Pipelines 상세 |
+| `macro_context_backfill_pipeline` | 발표 시점 FRED/ALFRED 맥락 | `macro_event_contexts`, Airflow 작업 상태·로그 |
+| `market_sip_replay_pipeline` | 제한된 원시 SIP Kafka→Spark→DB 재생 | Airflow 상태·로그, delivery/DB 검증 결과 |
+| `market_context_backfill_orchestrator` | 연도별 market child run 생성·완료 대기 | Airflow trigger 상태, child run 기록 |
+
+시장 DAG: `validate_run_config → register_run → build_work_items → collect_market_context[mapped] → verify_run → finish_run`.
+전체 범위는 **202개 발표별 mapped task × 내부 10종목 = 2,020개 DB work item**입니다. 2,020개 Airflow mapped task라는 뜻이 아닙니다.
+
+시장·거시 DAG는 **최대 2회, 고정 30초 간격 재시도**이며 지수 backoff가 아닙니다. 시장 수집은 `alpaca_api_pool`과 mapped task 최대 4개, 거시 수집은 `fred_api_pool`과 최대 1개로 제한합니다. 시장 run 등록·검증·종료는 `postgres_write_pool`을 사용합니다. 수집 task 내부 DB 쓰기에는 별도 PostgreSQL pool이 중첩 적용되지 않습니다.
+
+수집 성공과 관측 품질은 분리합니다. `COMPLETE` 요청의 `PARTIAL` 봉 품질은 경고이지 task 실패가 아닙니다. 실제 예외는 DB가 사용 가능할 때 실패 work item·검사·알림·run을 기록하고 다시 예외를 던집니다. DB 자체 장애나 등록 전 실패까지 같은 DB에 반드시 기록된다는 보장은 없으며, 이때는 Airflow 상태·로그를 함께 확인합니다.
+
+2026-09-03의 전체 Airflow 실행·소요 시간과 2026-09-08의 직접 재수집·재계산은 **서로 다른 실행 증거**입니다. 거시·재생 DAG의 모든 상태가 `pipeline_runs`에 저장되는 것은 아닙니다. [DAG별 감사와 한계](docs/engineering/airflow-audit.md), [과정 요구사항 대응](docs/engineering/course-acceptance.md)을 참고하세요.
+
 ### D. 이벤트 분석과 기준 전략
 
 `macro_event_impacts` 8,080행과 `event_strategy_results` 2,020행을 versioned upsert로 재계산했습니다. 1,988개 계산 가능 관측의 비용 차감 평균은 -0.1565%, 양수 비율은 39.34%였습니다. 실패한 기준도 숨기지 않고 데이터·가정·한계와 함께 제공합니다.
@@ -161,15 +185,17 @@ uv sync --extra airflow
 docker compose up -d --wait postgres kafka kafka-init
 ```
 
-`.env`에 데이터 수집용 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 넣습니다. 웹 모의주문은 별도 `ALPACA_PAPER_KEY_ID`, `ALPACA_PAPER_SECRET_KEY`를 사용합니다. 비밀키·원본 응답·대용량 Parquet은 Git에 올리지 않습니다.
+`.env`에 데이터 수집용 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 넣습니다. 웹 모의주문은 별도 `ALPACA_PAPER_KEY_ID`, `ALPACA_PAPER_SECRET_KEY`와 해당 모의계정의 고정 ID `ALPACA_PAPER_ACCOUNT_ID`를 사용합니다. 브라우저에서는 키나 계정 범위를 받지 않습니다. 비밀키·원본 응답·대용량 Parquet은 Git에 올리지 않습니다.
 
 ### 2. 웹 애플리케이션
 
 ```bash
-.venv/bin/uvicorn src.serving_api:app --host 127.0.0.1 --port 8000
+uv run --with python-dotenv uvicorn src.serving_api:app --env-file .env --host 127.0.0.1 --port 8000
 ```
 
 `http://127.0.0.1:8000/overview`에서 시작합니다. 조회 화면은 외부 API를 호출하지 않고 PostgreSQL에 저장된 결과만 읽습니다. Paper 제출을 활성화하려면 서버에서 명시적으로 `ENABLE_PAPER_WEB_ORDERS=true`를 설정해야 하며, 그렇지 않으면 review까지만 가능합니다.
+
+위 명령은 `.env`를 명시적으로 로드합니다. Paper의 계정·장 시각·대사 조회는 별도로 브로커 GET을 호출하지만 로컬 주문 목록은 DB만 읽습니다. 쓰기 허용 Paper 화면은 로컬/운영자 통제 시연용이며, 인증·CSRF 방어 없는 공개 서버에 노출하지 않습니다.
 
 ### 3. 발표용 입력 → 처리 → 저장 → 읽기
 

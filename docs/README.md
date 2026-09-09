@@ -14,6 +14,9 @@
 
 ### Engineering
 
+- [최종 교정 진행 기록](engineering/corrective-pass.md)
+- [Airflow DAG별 계약·실패 경계](engineering/airflow-audit.md)
+- [과정 요구사항별 구현·검증 위치](engineering/course-acceptance.md)
 - [플랫폼 감사와 위험](engineering/platform-audit.md)
 - [API·source·version 계약](engineering/api-contracts.md)
 - [설계 결정](design-decisions.md)
@@ -39,8 +42,9 @@
 
 아래 문서는 삭제하지 않습니다. 당시 실행 범위·숫자·판단을 재현하기 위한 역사 기록이며, 현재 제품 계약으로 읽으면 안 됩니다.
 
-- [08.31 발표 대본](08.31_대본.md)
-- [09.03 발표 대본](09.03_대본.md)
+- [08.31 발표 대본](archive/presentations/08.31_대본.md)
+- [09.03 발표 대본](archive/presentations/09.03_대본.md)
+- [당시 4주 실행 계획](archive/project-history/PROJECT_PLAN.md)
 - [09.07 발표 대본](09.07_대본.md)
 - [3차시 Kafka·Spark](kafka-spark-assignment.md)
 - [Airflow 과제](airflow-assignment.md)

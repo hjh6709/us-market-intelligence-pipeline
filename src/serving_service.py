@@ -214,9 +214,9 @@ class ServingService:
             baseline=self.get_strategy_summary(),
             latest_pipeline=latest_pipeline,
             limitations=[
-                "The exploratory baseline is negative overall and is not a recommendation.",
-                "Observed provider bars may be sparse even when collection succeeds.",
-                "Paper execution is isolated and never consumes research signals automatically.",
+                "탐색용 기준 전략의 전체 평균은 음수이며 투자 권유가 아닙니다.",
+                "수집이 정상 완료돼도 실제 제공자 가격 봉은 일부 비어 있을 수 있습니다.",
+                "모의주문은 분석 신호와 분리되어 자동으로 주문되지 않습니다.",
             ],
         )
 
