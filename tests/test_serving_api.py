@@ -339,10 +339,29 @@ class ServingApiTest(unittest.TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn('id="overview-metrics"', page.text)
-        self.assertIn("U.S. Economic Event Market Intelligence Platform", page.text)
+        self.assertIn("미국 경제지표 발표 시장 인텔리전스 플랫폼", page.text)
         self.assertEqual(data.status_code, 200)
         self.assertEqual(data.json()["metrics"][0]["value"], 202)
         self.assertEqual(data.json()["latest_pipeline"]["status"], "SUCCEEDED")
+
+    def test_all_product_pages_are_available_in_korean(self):
+        expected_copy = {
+            "/overview": "미국 경제지표 발표 시장 인텔리전스 플랫폼",
+            "/": "시장 이벤트 분석 대시보드",
+            "/pipelines": "파이프라인 신뢰성 콘솔",
+            "/paper": "모의주문 실행 샌드박스",
+        }
+
+        for path, heading in expected_copy.items():
+            with self.subTest(path=path):
+                page = self.client.get(path)
+                self.assertEqual(page.status_code, 200)
+                self.assertIn('<html lang="ko">', page.text)
+                self.assertIn(heading, page.text)
+                self.assertIn('href="/overview">개요</a>', page.text)
+                self.assertIn('href="/">분석</a>', page.text)
+                self.assertIn('href="/pipelines">파이프라인</a>', page.text)
+                self.assertIn('href="/paper">모의주문</a>', page.text)
 
     def test_paper_page_exposes_web_reconcile_and_cancel_controls(self):
         page = self.client.get("/paper")
