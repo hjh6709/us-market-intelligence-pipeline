@@ -12,7 +12,9 @@
 
 [현재 구조와 데이터 연결](docs/architecture/current-system.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md) · [이번 교정 검증](docs/engineering/corrective-pass.md)
 
-아래 `플랫폼 구조`와 사이트의 `파이프라인 → 데이터 흐름`이 현재 연결을 설명합니다. [이전 발표용 구성도](docs/diagrams/pipeline-architecture.png)는 당시 단계의 역사 자료로 보존합니다.
+아래 `플랫폼 구조`와 사이트의 `파이프라인 → 데이터 흐름`이 현재 연결을 설명합니다. 다음 이미지는 Kafka·Spark와 CPI 분석 경로를 함께 보여 주는 이전 발표 기준 구성도이며, 최신 계약은 이어지는 Mermaid 구조와 [현재 구조 문서](docs/architecture/current-system.md)를 따릅니다.
+
+![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 핵심 결과
 
