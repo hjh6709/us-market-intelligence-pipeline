@@ -81,7 +81,17 @@ class PostgresServingRepositoryTest(unittest.TestCase):
         sql, params = connect.connection.executions[-1]
         self.assertNotIn("2026-08-31", sql)
         self.assertNotIn("'CPI'", sql)
-        self.assertEqual(params, ("CPI", date(2026, 1, 1), date(2026, 8, 31)))
+        self.assertNotIn("released_at::date", sql)
+        self.assertIn("released_at >= %s", sql)
+        self.assertIn("released_at < %s", sql)
+        self.assertEqual(
+            params,
+            (
+                "CPI",
+                datetime(2026, 1, 1, tzinfo=timezone.utc),
+                datetime(2026, 9, 1, tzinfo=timezone.utc),
+            ),
+        )
         self.assertEqual(events[0].event_id, "event-1")
         self.assertEqual(events[0].released_at, released_at)
 
@@ -134,6 +144,63 @@ class PostgresServingRepositoryTest(unittest.TestCase):
         self.assertEqual(summary.total_count, 2020)
         self.assertEqual(summary.eligible_count, 1988)
         self.assertEqual(summary.positive_count, 782)
+
+    def test_historical_and_cross_asset_queries_pin_analysis_identity(self):
+        released_at = datetime(2026, 8, 12, 12, 30, tzinfo=timezone.utc)
+        connect = ConnectFactory(
+            [
+                [("event-1", released_at, Decimal("0.5"), Decimal("0.2"), "COMPLETE")],
+                [("NVDA", Decimal("0.5"), Decimal("0.2"), "COMPLETE")],
+            ]
+        )
+        repo = PostgresServingRepository("postgresql://unused", connect=connect)
+
+        historical = repo.get_historical_impacts("CPI", "NVDA", "POST_60M")
+        cross_asset = repo.get_cross_asset_impacts("event-1", "POST_60M")
+
+        first_sql, first_params = connect.connection.executions[0]
+        second_sql, second_params = connect.connection.executions[1]
+        self.assertIn("analysis_version = %s", first_sql)
+        self.assertEqual(
+            first_params,
+            ("CPI", "NVDA", "POST_60M", "alpaca", "sip", "multi_event_sip_v1"),
+        )
+        self.assertIn("analysis_version = %s", second_sql)
+        self.assertEqual(
+            second_params,
+            ("event-1", "POST_60M", "alpaca", "sip", "multi_event_sip_v1"),
+        )
+        self.assertEqual(historical[0].event_id, "event-1")
+        self.assertEqual(cross_asset[0].symbol, "NVDA")
+
+    def test_overview_metrics_use_explicit_units_and_pinned_versions(self):
+        connect = ConnectFactory(
+            [
+                [(202, 10, 2020, 308512, 112593, 70090, 2020, 8080, 2020, 1988)],
+                [("CPI", 55), ("EMPLOYMENT", 55), ("PCE", 55), ("FOMC", 37)],
+                [("AAPL",), ("NVDA",), ("SPY",)],
+            ]
+        )
+        repo = PostgresServingRepository("postgresql://unused", connect=connect)
+
+        metrics = repo.get_overview_metrics()
+        counts = repo.get_event_type_counts()
+        symbols = repo.list_supported_symbols()
+
+        sql, params = connect.connection.executions[0]
+        self.assertIn("analysis_version=%s", sql)
+        self.assertIn("multi_event_sip_v1", params)
+        self.assertIn("pre60_momentum_post60", params)
+        self.assertIn("v1", params)
+        self.assertEqual(metrics.event_symbol_intervals, 2020)
+        self.assertEqual(metrics.stored_1m_bars, 308512)
+        self.assertEqual(counts["FOMC"], 37)
+        self.assertEqual(symbols, ["AAPL", "NVDA", "SPY"])
+        symbol_sql, symbol_params = connect.connection.executions[2]
+        self.assertIn("analysis_version=%s", symbol_sql)
+        self.assertEqual(
+            symbol_params, ("alpaca", "sip", "multi_event_sip_v1")
+        )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -7,18 +8,40 @@ from fastapi.testclient import TestClient
 from src.serving_api import create_app
 from src.serving_models import (
     BarView,
+    CrossAssetComparisonView,
+    CrossAssetImpactPoint,
     EventSummary,
     EventSymbolDetail,
     ExecutionReadinessView,
     ImpactView,
+    HistoricalComparisonView,
+    HistoricalImpactPoint,
     ReadinessCheckView,
+    ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
+    DatasetMetricView,
+    PlatformOverviewView,
 )
 from src.serving_service import ServingNotFoundError
+from src.pipeline_serving import (
+    LineageEdge,
+    LineageNode,
+    PipelineLineageView,
+    PipelineOverviewView,
+    PipelineRunSummary,
+)
 
 
 class FakeService:
+    provenance = ResearchProvenanceView(
+        source="alpaca",
+        feed="sip",
+        analysis_version="multi_event_sip_v1",
+        strategy_name="pre60_momentum_post60",
+        strategy_version="v1",
+    )
+
     def health(self):
         return True
 
@@ -63,6 +86,7 @@ class FakeService:
                 checks=[ReadinessCheckView(name="kill_switch", status="FAIL")],
                 reasons=["release-level execution lock keeps this service research-only"],
             ),
+            provenance=self.provenance,
         )
 
     def get_bars(self, event_id, symbol, timeframe):
@@ -89,12 +113,102 @@ class FakeService:
             mean_net_return_pct=Decimal("-0.1565"),
             positive_count=782,
             positive_rate_pct=Decimal("39.34"),
+            provenance=self.provenance,
         )
+
+    def get_historical_comparison(self, event_type, symbol, window_name):
+        return HistoricalComparisonView(
+            event_type=event_type,
+            symbol=symbol,
+            window_name=window_name,
+            points=[HistoricalImpactPoint(event_id="event-1", released_at=self.list_events()[0].released_at, return_pct=Decimal("0.5"), relative_return_pct=Decimal("0.2"), coverage_status="COMPLETE")],
+            provenance=self.provenance,
+        )
+
+    def get_cross_asset_comparison(self, event_id, window_name):
+        return CrossAssetComparisonView(
+            event_id=event_id,
+            window_name=window_name,
+            points=[CrossAssetImpactPoint(symbol="NVDA", return_pct=Decimal("0.5"), relative_return_pct=Decimal("0.2"), coverage_status="COMPLETE")],
+            provenance=self.provenance,
+        )
+
+    def get_overview(self, latest_pipeline):
+        return PlatformOverviewView(
+            product_name="U.S. Economic Event Market Intelligence Platform",
+            description="Point-in-time event research.",
+            metrics=[DatasetMetricView(key="releases", label="Official releases", value=202, unit="releases")],
+            event_type_counts={"CPI": 55, "FOMC": 37},
+            supported_symbols=["NVDA", "SPY"],
+            recent_events=self.list_events(),
+            baseline=self.get_strategy_summary(),
+            latest_pipeline=latest_pipeline,
+            limitations=["Research results are not recommendations."],
+        )
+
+
+class FakePipelineService:
+    def overview(self):
+        run = PipelineRunSummary(
+            pipeline_run_id="run-1",
+            dag_id="market_context_backfill_pipeline",
+            status="SUCCEEDED",
+            started_at=datetime(2026, 9, 8, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 9, 8, 0, 2, tzinfo=timezone.utc),
+            duration_seconds=120,
+            work_item_count=2020,
+            failed_item_count=0,
+            warning_check_count=1409,
+            failed_check_count=0,
+            open_alert_count=0,
+            observed_coverage_check_count=0,
+            quality_contract="legacy-pre-separation",
+            input_count=None,
+            output_count=None,
+        )
+        return PipelineOverviewView(latest_run=run, recent_runs=[run])
+
+    def lineage(self):
+        return PipelineLineageView(
+            nodes=[LineageNode(id="spark", label="Spark", plane="validation")],
+            edges=[LineageEdge(source="kafka", target="spark")],
+        )
+
+    def list_runs(self, **_filters):
+        return self.overview().recent_runs
+
+
+class FakePaperService:
+    def __init__(self):
+        self.submissions = []
+
+    def account(self):
+        return {"broker": "alpaca-paper", "account": {"ready": True}, "clock": {"is_open": False}, "paper_order_submission_enabled": True, "live_trading_enabled": False}
+
+    def review(self, intent):
+        return {"intent": intent.canonical(), "required_confirmation": "SUBMIT PAPER ORDER", "broker_request_sent": False}
+
+    def submit(self, intent, confirmation):
+        self.submissions.append((intent, confirmation))
+        return {"request_id": intent.request_id, "state": "accepted", "filled_qty": "0", "last_error": None}
+
+    def orders(self):
+        return []
+
+    def recover(self):
+        return {"broker": "alpaca-paper", "recovery_mode": "GET_ONLY", "new_orders_submitted": 0, "position_reconciliation_verified": False}
+
+    def reconcile(self, request_id):
+        return {"request_id": request_id, "state": "accepted"}
+
+    def cancel(self, request_id, confirmation):
+        return {"request_id": request_id, "state": "canceled", "confirmation": confirmation}
 
 
 class ServingApiTest(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app(FakeService()))
+        self.paper = FakePaperService()
+        self.client = TestClient(create_app(FakeService(), FakePipelineService(), self.paper))
 
     def test_detail_endpoint_returns_research_and_execution_sections(self):
         response = self.client.get("/api/v1/events/event-1/symbols/NVDA")
@@ -136,6 +250,35 @@ class ServingApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json(), {"detail": "event not found"})
 
+    def test_pipeline_routes_expose_recorded_warnings_without_failing_run(self):
+        overview = self.client.get("/api/v1/pipelines/overview")
+        runs = self.client.get("/api/v1/pipelines/runs")
+        lineage = self.client.get("/api/v1/pipelines/lineage")
+
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(overview.json()["latest_run"]["status"], "SUCCEEDED")
+        self.assertEqual(overview.json()["latest_run"]["warning_check_count"], 1409)
+        self.assertEqual(overview.json()["latest_run"]["failed_check_count"], 0)
+        self.assertIsNone(overview.json()["latest_run"]["input_count"])
+        self.assertEqual(runs.status_code, 200)
+        self.assertEqual(lineage.json()["scope"], "project-level")
+
+    def test_research_comparison_routes_are_read_only_and_versioned(self):
+        historical = self.client.get(
+            "/api/v1/research/historical",
+            params={"event_type": "CPI", "symbol": "NVDA", "window": "POST_60M"},
+        )
+        cross_asset = self.client.get(
+            "/api/v1/research/cross-asset",
+            params={"event_id": "event-1", "window": "POST_60M"},
+        )
+
+        self.assertEqual(historical.status_code, 200)
+        self.assertTrue(historical.json()["research_only"])
+        self.assertEqual(historical.json()["provenance"]["analysis_version"], "multi_event_sip_v1")
+        self.assertEqual(cross_asset.status_code, 200)
+        self.assertEqual(cross_asset.json()["points"][0]["symbol"], "NVDA")
+
     def test_dashboard_contains_filters_chart_and_readiness_sections(self):
         response = self.client.get("/")
 
@@ -144,7 +287,71 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn('id="price-chart"', response.text)
         self.assertIn('id="readiness-checks"', response.text)
         self.assertIn("과거 분석 결과이며 주문이 아닙니다", response.text)
+        self.assertIn("/static/vendor/lightweight-charts-5.0.6.min.js", response.text)
+        self.assertIn("/static/vendor/echarts-6.1.0.min.js", response.text)
+        self.assertNotIn("createElementNS", response.text)
         self.assertNotIn("cdn.", response.text.lower())
+
+    def test_packaged_application_includes_templates_and_vendor_assets(self):
+        pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+
+        self.assertIn('"templates/*.html"', pyproject)
+        self.assertIn('"static/vendor/*.js"', pyproject)
+        self.assertIn('"static/vendor/*.txt"', pyproject)
+
+    def test_pipeline_console_has_run_quality_and_lineage_surfaces(self):
+        response = self.client.get("/pipelines")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="pipeline-overview"', response.text)
+        self.assertIn('id="pipeline-runs"', response.text)
+        self.assertIn('id="pipeline-quality"', response.text)
+        self.assertIn('id="pipeline-lineage"', response.text)
+        self.assertIn("collection integrity", response.text)
+        self.assertIn("observed coverage", response.text)
+
+    def test_paper_page_and_review_submit_routes_are_separate(self):
+        page = self.client.get("/paper")
+        review = self.client.post("/api/v1/paper/orders/review", json={
+            "request_id": "web-1", "symbol": "NVDA", "qty": 1,
+            "limit_price": "100", "purpose": "connectivity_probe",
+        })
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="paper-order-review"', page.text)
+        self.assertIn('id="paper-confirmation"', page.text)
+        self.assertEqual(review.status_code, 200)
+        self.assertFalse(review.json()["broker_request_sent"])
+        self.assertEqual(self.paper.submissions, [])
+
+        submit = self.client.post("/api/v1/paper/orders", json={
+            "intent": {"request_id": "web-1", "symbol": "NVDA", "qty": 1,
+                       "limit_price": "100", "purpose": "connectivity_probe"},
+            "confirmation": "SUBMIT PAPER ORDER",
+        })
+        self.assertEqual(submit.status_code, 200)
+        self.assertEqual(submit.json()["state"], "accepted")
+        self.assertEqual(len(self.paper.submissions), 1)
+
+    def test_overview_page_and_api_are_recruiter_facing(self):
+        page = self.client.get("/overview")
+        data = self.client.get("/api/v1/overview")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('id="overview-metrics"', page.text)
+        self.assertIn("U.S. Economic Event Market Intelligence Platform", page.text)
+        self.assertEqual(data.status_code, 200)
+        self.assertEqual(data.json()["metrics"][0]["value"], 202)
+        self.assertEqual(data.json()["latest_pipeline"]["status"], "SUCCEEDED")
+
+    def test_paper_page_exposes_web_reconcile_and_cancel_controls(self):
+        page = self.client.get("/paper")
+
+        self.assertIn("Reconcile", page.text)
+        self.assertIn("Cancel order", page.text)
+        self.assertIn("CANCEL PAPER ORDER", page.text)
+        self.assertIn("paperSubmissionEnabled", page.text)
+        self.assertIn("account.paper_order_submission_enabled", page.text)
 
 
 if __name__ == "__main__":

@@ -1,185 +1,159 @@
-# U.S. Economic Event Market Reaction Pipeline
+# U.S. Economic Event Market Intelligence Platform
 
-미국의 CPI·고용보고서·PCE·FOMC 발표 시각과 시장 반응을 같은 시간축으로 연결하는 데이터 파이프라인입니다. 수집·전처리·저장·재실행·품질 확인뿐 아니라 저장 결과를 읽는 FastAPI와 웹 대시보드까지 연결했습니다. 최종 목표는 자동매매이지만 현재 전략 성과와 주문 안전장치가 준비되지 않았으므로 운영 단계는 `RESEARCH_ONLY`, 실제 행동은 `NO_TRADE`입니다.
+미국 경제 발표를 공식 시각에 맞춰 시장 데이터와 연결하고, 수집 품질·재현 가능한 연구 결과·격리된 모의주문까지 한곳에서 확인하는 데이터 플랫폼입니다.
 
-[대화형 Archify 구성도 열기](docs/diagrams/session7-architecture.html)
+> **Data engineering first.** 연구 결과는 과거 분석이며 투자 추천이 아닙니다. 연구 신호는 주문 입력으로 사용할 수 없고, 주문 기능은 사용자가 직접 검토하고 승인하는 Alpaca Paper 전용 경로로 격리돼 있습니다.
 
-![병합된 main 소스를 기준으로 검증한 전체 파이프라인 구성도](docs/diagrams/session7-architecture.visual-check.1440x900.dark.png)
+[Overview](http://127.0.0.1:8000/overview) · [Research](http://127.0.0.1:8000/) · [Pipelines](http://127.0.0.1:8000/pipelines) · [Paper Execution](http://127.0.0.1:8000/paper) · [API docs](http://127.0.0.1:8000/docs)
 
-<details>
-<summary>기존 정적 구성도 보기</summary>
+![실제 PostgreSQL 집계를 읽는 플랫폼 Overview](docs/images/portfolio/overview.jpg)
+
+### Architecture
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
-</details>
+## 핵심 결과
 
-## 30초 요약
+| 범위 | 검증된 결과 | 단위와 의미 |
+| --- | ---: | --- |
+| 공식 발표 | **202** | CPI 55 + Employment 55 + PCE 55 + FOMC 37 |
+| 분석 자산 | **10** | ETF·주식 symbols |
+| 발표-종목 구간 | **2,020** | 202 releases × 10 symbols |
+| 실제 SIP 1분봉 | **308,512** | PostgreSQL 고유 bar rows |
+| 파생 3분봉 / 5분봉 | **112,593 / 70,090** | 실제 1분봉만 집계, 가격 채움 없음 |
+| 발표 시점 거시 맥락 | **2,020** | point-in-time context rows |
+| 이벤트 영향 결과 | **8,080** | 202 × 10 × 4 windows |
+| 기준 전략 결과 | **2,020 / 1,988** | 전체 / 수익률 계산 가능 observations |
+| 기준 전략 평균 | **-0.1565%** | 왕복 비용 10 bp 차감 후, 수익 전략 아님 |
+| 양수 관측 비율 | **39.34%** | 미래 기대수익률 아님 |
+| 중복 business key | **0** | 최종 재수집·재계산 검증 |
 
-현재는 목적이 다른 다섯 경로가 실제로 동작합니다.
+## 왜 만들었나
 
-1. **원시 체결 검증:** 과거 SIP 개별 체결을 Parquet에 보관하고 Kafka로 재생해 Spark가 1분봉을 만듭니다.
-2. **시장 반응 데이터:** 공식 발표 202회와 10종목을 기준으로 Alpaca SIP 1분봉·일봉을 수집하고 3분봉·5분봉을 만듭니다.
-3. **경제 상황 데이터:** 각 발표 시점에 이용 가능했던 FRED·ALFRED 10개 지표를 PostgreSQL에 연결합니다.
-4. **분석·기준 전략:** 발표 전후 5·30·60분 반응을 계산하고, 발표 전 가격 방향만 사용하는 탐색 전략을 비용 포함으로 검증합니다.
-5. **서빙:** PostgreSQL의 최종 결과를 읽기 전용 JSON API와 `시장 이벤트 분석 대시보드`에서 조회합니다.
+경제 발표 직후 가격을 보는 것만으로는 결과를 재현하기 어렵습니다. 발표 시각, 당시 알 수 있었던 거시 정보, 시장 데이터의 feed와 시간 범위, 결측 이유, 분석 버전이 함께 남아야 합니다.
 
-이번 확장 실행 결과는 다음과 같습니다.
+- 어떤 공식 발표를 어떤 UTC 시각으로 사용했는가?
+- 공급자 요청은 정상 종료됐는가, 가격 봉은 얼마나 관측됐는가?
+- 그 시점에 실제로 알 수 있었던 경제 정보는 무엇인가?
+- 같은 입력을 다시 실행해도 동일한 business key로 저장되는가?
+- 결과가 API와 웹에서 실제로 다시 읽히는가?
+- 연구 신호와 주문 행동이 확실히 분리되는가?
 
-| 항목 | 실제 결과 |
-| --- | ---: |
-| 공식 발표 | CPI 55 + 고용 55 + PCE 55 + FOMC 37 = **202회** |
-| 분석 종목 | **10종목** |
-| 발표-종목 구간 | **2,020개** |
-| 공급자 논리 요청 / 실제 페이지 | **404 / 404** |
-| 발표 T-60~T+120분의 실제 1분봉 선택 합계 | **308,512행** |
-| 1분봉에서 만든 3분봉 / 5분봉 | **112,593 / 70,090행** |
-| 발표 전후 7거래일 일봉 선택 합계 | **30,270행** |
-| Kafka v2 검증 | **118,118건 발행 = 수신 = Spark 입력** |
-| Kafka 최대 파티션 비중 | 기존 97.5% → v2 **33.9%** |
-| 발표 시점 경제 맥락 | 202회 × 10 series = **2,020행** |
-| PostgreSQL 고유 시장 봉 | 1m **308,512** / 3m **112,593** / 5m **70,090** / 1d **11,700행** |
-| Airflow 전체 실행 | 시장 202 tasks·522.660초 / 거시 202 tasks·14.835초 |
-| 이벤트 구간 지표 | 202회 × 10종목 × 4구간 = **8,080행** |
-| 탐색 전략 | 실행 가능 1,988행, 비용 차감 평균 **-0.1565%** |
-| 단일 서빙 시연 | CPI 1회 × NVDA 1종목, 처리·저장·재조회 **0.43초**, HTTP 200 |
-| 자동매매 준비 상태 | **RESEARCH_ONLY / NO_TRADE** |
+## 플랫폼 구조
 
-`선택 합계`는 각 발표를 기준으로 조회한 행을 더한 값입니다. 인접한 발표가 같은 시장 시각이나 거래일을 공유할 수 있으므로 PostgreSQL은 동일한 business key를 한 번만 저장합니다. 따라서 테이블의 고유 행 수와 선택 합계는 서로 다른 지표입니다.
+```mermaid
+flowchart LR
+  subgraph Research[Research plane]
+    CAL[Official BLS · BEA · Fed releases]
+    ALP[Alpaca SIP bars]
+    FRED[FRED · ALFRED vintages]
+    AF[Airflow mapped backfills]
+    CAL --> AF
+    ALP --> AF
+    FRED --> AF
+  end
 
-## 이번 제출부터 확인하기
+  subgraph Validation[Validation plane]
+    PQ[Archived SIP trades]
+    K[Kafka v2 · 6 partitions]
+    S[Spark event-time validation]
+    PQ --> K --> S
+  end
 
-[7차시 제출 링크·요구사항별 증거·발표 직전 체크](docs/session7-submission.md)
+  subgraph Product[Product plane]
+    PG[(PostgreSQL)]
+    A[Versioned impact analysis]
+    API[FastAPI serving layer]
+    UI[Overview · Research · Pipelines]
+    PAPER[Isolated Paper Execution]
+    PG --> A --> API --> UI
+    PAPER -. manual only .-> API
+  end
 
-7차시 발표는 [최신 구성도·단계별 건수·검증 한계](docs/serving-layer-assignment.md)와
-[발표 대본](docs/09.07_대본.md)을 기준으로 합니다. 최종 DB 재계산·저장·읽기 실행은
-0.43초, 영향 4행·전략 1행·중복 0이었고 `/health`와 상세 API도 HTTP 200이었습니다.
-이는 외부 수집을 제외한 소규모 시연입니다. 저장 결과를 실제 브라우저에서 조회한
-[65초 화면 녹화](docs/evidence/session7-demo/session7-live-dashboard.mp4)와
-[70.32초 흐름 설명 영상](docs/evidence/session7-demo/session7-submission-demo.mp4)도 제공합니다.
-기존 제한 범위의 원시 체결 부하 실험과 202회 × 10종목의 공급자 봉 수집은 별도 경로입니다.
-봉이 없는 분을 모두 무거래로 해석하지 않으며, odd lot 포함 연구용 봉 비교는 아직 계획입니다.
+  AF --> PG
+  S --> PG
+```
 
-9월 7일 후속 작업으로 [모의주문 접수·복구 모듈](docs/paper-execution.md)을 추가했습니다.
-Alpaca paper 어댑터와 PostgreSQL 주문 기록을 구현하고, 로컬 mock으로 응답 유실·
-동시 실행·부분체결·취소를 검증했습니다. 실제 Alpaca 모의계좌에서도 주문 1개를
-접수·취소했고 체결 0주·DB 1행을 확인했습니다. 새 프로세스의 `recover` 명령으로
-기존 주문을 재조회하고 NVDA 계좌 보유량 0주도 확인했습니다.
-실제 체결과 기준 보유량을 포함한 포지션 대사는 아직 미검증이며,
-기존 연구 대시보드는 연구 신호의 자동 주문을 막기 위해 `RESEARCH_ONLY / NO_TRADE`를 유지합니다. 이는 수동 모의주문 기능이 없다는 뜻이 아닙니다. 사용자가 입력값을 직접 정하고 `--enable-paper-orders`를 명시한 경우에만 별도 CLI가 Alpaca Paper 주문을 접수합니다.
+핵심 데이터 계약은 다음과 같습니다.
 
-1. [7차시 서빙 레이어 제출 문서](docs/serving-layer-assignment.md): 저장 결과 조회, 단일 실행, 자동매매 경계
-2. [7차시 실제 실행 증거](docs/evidence/serving-layer/README.md): JSON 응답, 멱등 실행, 대시보드 캡처
-3. [7차시 3분 발표 대본](docs/09.07_대본.md)
-4. [6차시 부하·복구 제출 문서](docs/load-recovery-assignment.md)
-5. [전체 확장 증거](docs/evidence/multi-event-expansion/README.md)
-6. [Archify 검증 receipt](docs/diagrams/session7-architecture.visual-check.json)
+```text
+provider collection integrity != observed price-bar coverage != analysis eligibility
+```
+
+API·pagination·요청 범위가 정상 종료된 성긴 bar 응답은 수집 성공입니다. 관측 봉 수와 `COMPLETE/PARTIAL/NO_MARKET_DATA`는 별도 품질 정보로 보존하고, 분석 가능 여부는 기존 90% 규칙이 따로 판단합니다. 3분봉과 5분봉도 forward fill 없이 실제 source count를 남깁니다.
+
+## 제품 화면
+
+- **Overview** — 실제 DB 집계, 이벤트·자산 범위, 음수 기준 전략, 최신 파이프라인 상태
+- **Research** — 발표 marker가 있는 candlestick, 1m/3m/5m, 영향 구간, 거시 맥락, 과거·cross-asset 비교
+- **Pipelines** — 실행 목록·상세, work item, 품질 검사, alert, 프로젝트 lineage
+- **Paper Execution** — 계정/장 시각, 주문 작성, 검토, 정확한 문구 확인, 제출, 상태 갱신, 취소, GET-only recovery
+
+웹 Paper 주문은 `BUY LIMIT DAY`, 정규장, 1–10주, 최대 USD 1,000만 허용합니다. `ENABLE_PAPER_WEB_ORDERS=true`가 없으면 쓰기 동작은 서버에서 거부합니다. live endpoint 선택 기능은 없으며 연구 객체도 주문 API에 들어갈 수 없습니다.
 
 ## 프로젝트 목표
 
-- 공식 기관 발표 시각을 기준 이벤트로 보존합니다.
-- 발표 당시 알 수 있었던 경제지표 값만 연결해 미래 정보 혼입을 줄입니다.
-- 시장 데이터의 종목·feed·시간 범위와 결측 사유를 기록합니다.
-- Kafka와 Spark로 원시 체결의 전달·검증·1분 집계를 재현합니다.
-- 같은 입력을 다시 실행해도 PostgreSQL에 중복 저장되지 않게 합니다.
-- 분석 결과와 성과가 없었던 기준 전략도 재현 가능한 결과로 보존합니다.
-- 저장 결과를 API와 대시보드로 제공하고, 연구 신호와 실제 주문 행동을 분리합니다.
+- 공식 발표와 point-in-time 경제 환경을 미래 정보 없이 연결
+- source/feed/version을 명시한 시장 데이터와 분석 결과 보존
+- Airflow 실행·work item·품질 검사·alert를 durable telemetry로 기록
+- Kafka/Spark 원시 체결 검증과 분석용 provider-bar 경로의 의미 분리
+- PostgreSQL business key와 upsert로 재실행 중복 방지
+- 저장 결과를 FastAPI와 웹 UI로 실제 조회
+- 연구 신호, 과거 시뮬레이션, 주문 행동을 서로 다른 계약으로 유지
 
 ## 현재 분석 범위
 
 | 구분 | 범위 |
 | --- | --- |
-| 공식 발표 | 2022-01-07~2026-08-26의 CPI 55회, Employment 55회, PCE 55회, FOMC 37회 |
+| 공식 발표 | 2022-01-07~2026-08-26, CPI·Employment·PCE·FOMC 202회 |
 | 종목 | `SPY`, `QQQ`, `IWM`, `TLT`, `XLF`, `SMH`, `GLD`, `NVDA`, `AAPL`, `JPM` |
-| 장중 구간 | 발표 60분 전부터 120분 후까지, 최대 181개 1분 구간 |
-| 일별 구간 | 발표일 이전 7거래일 + 발표일 + 이후 7거래일 |
-| 파생 해상도 | 실제 1분봉을 묶은 3분봉·5분봉과 source/expected count 기반 quality metadata |
-| 경제 맥락 | FRED·ALFRED 10개 series의 발표 시점 기준 값 |
-
-수집 요청은 `[T-60, T+121)`이라 `T-60`부터 `T+120`까지 181개 후보 timestamp를 포함합니다. 그러나 공급자가 모든 분의 가격 봉을 생성해야 collection이 성공인 것은 아닙니다. HTTP·pagination·요청 범위·timestamp 무결성의 수집 완료 상태와 관측 봉 밀도를 따로 기록하고, 없는 가격을 임의로 채우지 않습니다. 서빙 차트는 별도 계약인 `[T-60, T+120)`의 180분 범위를 보여줍니다. 3분봉과 5분봉은 포함된 1분봉 수를 함께 기록하는 별도 해상도입니다.
+| 장중 구간 | 발표 T-60부터 T+120, 최대 181개 후보 timestamp |
+| 서빙 차트 | `[T-60, T+120)` 180분 |
+| 경제 맥락 | FRED·ALFRED 10개 series의 발표 당시 이용 가능 값 |
+| 분석 identity | `alpaca / sip / multi_event_sip_v1` |
+| 전략 identity | `pre60_momentum_post60 / v1`, 비용 10 bp |
 
 ## 데이터 흐름
 
-```text
-A. 원시 체결 정확성 검증
-Alpaca SIP trades → Parquet → Kafka v2 → Spark → PostgreSQL market_bars
+1. **분석 수집:** 공식 일정 → Airflow → Alpaca SIP bar와 FRED/ALFRED vintage → PostgreSQL
+2. **원시 체결 검증:** archived Parquet → Kafka → Spark event-time 검증·집계 → PostgreSQL
+3. **연구:** event + bar + macro context → versioned impact → 기준 전략 결과
+4. **서빙:** PostgreSQL → repository/service → FastAPI → 네 개 제품 화면
+5. **모의주문:** 사용자 입력 → server-side 검증 → explicit confirmation → Alpaca Paper → durable journal
 
-B. 분석용 시장 데이터
-공식 발표 목록 → Airflow → Alpaca 1m·1d → 3m·5m 생성 → PostgreSQL
-
-C. 발표 시점 경제 상황
-공식 발표 목록 → Airflow → FRED·ALFRED → PostgreSQL macro_event_contexts
-
-D. 이벤트 분석
-market_bars + economic_events → 구간 수익률·거래량·변동성 → 탐색용 비용 포함 backtest
-
-E. 읽기 전용 서빙
-PostgreSQL → ServingService → FastAPI JSON API + 시장 이벤트 분석 대시보드
-```
-
-원시 체결 경로와 분석용 bar 경로는 행의 의미가 다릅니다. 전자는 CPI 55회 × 4종목으로 범위를 제한한 **개별 체결 부하 입력**이고, `308,512행`은 202회 × 10종목의 이벤트별 **1분봉 선택 합계**입니다. 어느 쪽도 미국 시장 전체 체결 총량이 아니며 서로 더하거나 직접 비교하지 않습니다.
+원시 체결 7,360,804건은 제한된 CPI 55회×4종목의 부하·복구 입력이고, 308,512행은 202회×10종목의 분석용 1분봉입니다. 행 의미가 달라 서로 더하거나 직접 비교하지 않습니다.
 
 ## 데이터 출처
 
-| 데이터 | 출처 | 역할 |
+| 데이터 | 출처 | 저장 의미 |
 | --- | --- | --- |
-| CPI 일정 | [BLS CPI](https://www.bls.gov/bls/news-release/cpi.htm) | 공식 발표일·시각 |
-| 고용보고서 일정 | [BLS Employment Situation](https://www.bls.gov/bls/news-release/empsit.htm) | 공식 발표일·시각 |
-| PCE 일정 | [BEA Personal Income and Outlays](https://www.bea.gov/news/archive?field_related_product_target_id=476) | 공식 발표일·시각 |
-| FOMC 일정 | [Federal Reserve FOMC calendars](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm) | statement 발표일·시각 |
-| 경제지표 값 | [FRED/ALFRED](https://fred.stlouisfed.org/docs/api/fred/series_observations.html) | 발표 당시 이용 가능한 경제 상황 |
-| 시장 데이터 | [Alpaca Historical Stock Data](https://docs.alpaca.markets/reference/stockbars) | SIP 개별 체결·1분봉·일봉 |
+| CPI·Employment | BLS official release schedule | 공식 발표 event |
+| PCE | BEA official release archive | 공식 발표 event |
+| FOMC | Federal Reserve calendar | statement event |
+| 시장 데이터 | Alpaca Historical Stock Data, SIP feed | 1m·3m·5m·1d bars |
+| 경제 맥락 | FRED/ALFRED | 발표 시점 vintage context |
 
 ## 실제 구현 결과
 
 ### A. Kafka·Spark 원시 체결 처리
 
-기준 실행은 2026-08-12 CPI 발표 구간의 네 종목입니다.
-
-| 단계 | 결과 |
-| --- | ---: |
-| Parquet 원시 체결 | 118,118 |
-| Kafka 발행 / 수신 | 118,118 / 118,118 |
-| Spark 입력 / 형식 오류 / 실제 중복 | 118,118 / 0 / 0 |
-| Spark 생성 1분봉 | 472 |
-| PostgreSQL business key 중복 | 0 |
-
-Kafka v1은 `symbol`만 key로 사용해 네 종목 중 거래량이 큰 종목이 있는 파티션에 97.5%가 몰렸습니다. v2는 `event type + 발표일 + symbol + 15분 segment`를 key로 사용하고 파티션을 6개로 조정했습니다. 동일한 118,118건을 실제 재실행한 결과 가장 큰 파티션의 비중이 33.9%로 낮아졌습니다. 완전히 균등하다고 주장하지는 않습니다.
-
-Spark는 JSON 형식·필수값·가격·수량을 검사하고, 거래소를 포함한 결정적 `event_id`로 중복을 판별합니다. 거래 조건을 적용해 event time 기준 1분 OHLCV·거래 건수·VWAP을 만든 뒤 PostgreSQL에 Upsert합니다.
+별도 118,118건 검증에서는 Kafka 발행 / 수신이 **118,118 / 118,118**, Spark validation error와 실제 중복이 0이었습니다. v1의 symbol-only key에서 최대 파티션 비중이 97.5%였고, v2의 event/release/symbol/15-minute segment key와 6 partitions에서 33.9%로 낮아졌습니다. 7,360,804건 부하·복구 결과와 118,118건 partition 결과는 서로 다른 실행입니다.
 
 ### B. 202개 발표·10종목 시장 데이터
 
-Alpaca 다종목 Bars API를 사용해 한 발표마다 1분봉과 일봉을 각각 한 번 요청했습니다. 종목별 요청 방식의 4,040회 대신 실제 논리 요청 404회, 실제 페이지 404회로 2,020개 발표-종목 구간을 처리했습니다.
-
-| 데이터 | 이벤트별 선택·생성 합계 | 설명 |
-| --- | ---: | --- |
-| SIP 1분봉 | 308,512 | 발표 T-60~T+120분에 실제 존재한 봉 |
-| 3분봉 | 112,593 | 그중 PARTIAL 19,178 |
-| 5분봉 | 70,090 | 그중 PARTIAL 16,215 |
-| SIP 일봉 | 30,270 | 발표 전후 7거래일을 이벤트별로 선택한 합계 |
-
-2026-09-08 전체 재실행에서 session provider collection은 2,020건 모두 정상 종료됐습니다. daily collection은 2,010건 COMPLETE, 최신 PCE 10종목은 요청 범위의 끝이 공급자 기준시각 뒤라 PARTIAL이지만, 필요한 15개 일봉 자체는 확보했습니다. 관측 품질은 별도로 1분봉 COMPLETE 581, PARTIAL 1,409, NO_MARKET_DATA 30이며 일봉은 COMPLETE 1,990, PARTIAL 30입니다. 성긴 가격 봉은 수집 실패로 바꾸지 않고, 없는 가격도 채우지 않습니다.
-
-- 2023-04-07 Employment, 2024-03-29 PCE, 2026-04-03 Employment는 Good Friday 휴장이라 각각 10종목의 발표일 일봉이 없습니다.
-- 2026-08-26 PCE는 9월 3일 실행 당시 이후 거래일이 5일뿐이었지만, 9월 8일 재실행에서는 7개 이후 거래일까지 확보했습니다.
+Alpaca 다종목 요청을 발표별로 묶었습니다. 2026-09-08 재실행 기준 session provider collection 2,020건은 모두 정상 종료됐고, 1분봉 관측 품질은 `COMPLETE 581 / PARTIAL 1,409 / NO_MARKET_DATA 30`이었습니다. 휴장이나 정상적인 sparse bar를 수집 실패로 바꾸지 않았습니다.
 
 ### C. Airflow 자동화
 
-`market_context_backfill_pipeline`은 event type, 날짜 범위, 종목 목록, feed, 데이터 기준시각을 입력받습니다. **경제발표 한 건을 Airflow task 하나로 만들고 그 안에서 10종목을 묶어 조회**합니다. DB에는 종목별 work item과 품질검사를 따로 기록하므로 실패 범위를 확인할 수 있습니다.
+`market_context_backfill_pipeline`은 발표 한 건을 mapped task 하나로 만들고 내부에서 종목을 묶어 요청합니다. 입력·시도 횟수·상태·오류·quality checks·alerts가 PostgreSQL에 남습니다. 다년 실행은 `market_context_backfill_orchestrator`가 연도별 child run으로 나눕니다.
 
-FOMC 2026-07-29의 `SPY`, `TLT` smoke 후, 공식 발표 202회 전체를 실제 실행했습니다. 시장 DAG의 mapped task 202개는 종목별 work item 2,020개를 522.660초에 처리했습니다. 당시 기록은 coverage corrective 이전 상태이므로 실행 이력으로만 보존합니다. 2026-09-08에는 같은 현재 수집 코드를 직접 전체 재실행해 404페이지, session collection COMPLETE 2,020건과 계층별 관측 품질을 다시 기록했습니다.
+### D. 이벤트 분석과 기준 전략
 
-`macro_context_backfill_pipeline`은 발표별 FRED·ALFRED 값을 수집합니다. 외부 API 호출량을 제한하기 위해 `fred_api_pool`을 사용합니다. 전체 CLI 실행에서는 CPI 550행, 고용 550행, PCE 550행, FOMC 370행으로 총 2,020개 context를 저장했습니다. Airflow 전체 실행에서는 이미 검증된 2,020개를 재호출하지 않는 멱등 모드로 202개 mapped task와 최종 검증 task를 14.835초에 완료했습니다.
-
-### D. 이벤트 분석과 탐색용 기준 전략
-
-공식 발표 시각을 기준으로 각 종목의 발표 전 60분과 발표 후 5·30·60분 수익률, 거래량, 변동성, SPY 대비 수익률을 계산해 8,080행을 저장했습니다. 2026-09-08 전체 시장 데이터 재수집 뒤 같은 `multi_event_sip_v1` 로직으로 8,080행과 전략 2,020행을 다시 계산했으며 각 business key 중복은 0건입니다.
-
-전망치·surprise가 없는 상태에서 미래 정보를 쓰지 않기 위해, 발표 전 60분 수익률이 양수면 long, 음수면 short로 진입해 발표 60분 후 청산하는 단순 기준만 실행했습니다. 왕복 비용 10bp를 차감한 1,988개 실행 가능 결과의 평균은 -0.1565%, 중앙값은 -0.1251%, 양수 비율은 39.34%였습니다. 이는 수익 전략이 아니라 현재 규칙이 작동하지 않았다는 검증 결과입니다. 여러 종목을 합친 포트폴리오 성과나 예상 수익률로 해석하지 않습니다.
+`macro_event_impacts` 8,080행과 `event_strategy_results` 2,020행을 versioned upsert로 재계산했습니다. 1,988개 계산 가능 관측의 비용 차감 평균은 -0.1565%, 양수 비율은 39.34%였습니다. 실패한 기준도 숨기지 않고 데이터·가정·한계와 함께 제공합니다.
 
 ## 실행 방법
 
-### 1. 환경 준비
+### 1. 준비
 
 ```bash
 cp .env.example .env
@@ -187,57 +161,17 @@ uv sync --extra airflow
 docker compose up -d --wait postgres kafka kafka-init
 ```
 
-`.env`에는 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 입력합니다. 비밀키·원본 API 응답·대용량 Parquet은 Git에 올리지 않습니다.
+`.env`에 데이터 수집용 `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`, `FRED_API_KEY`를 넣습니다. 웹 모의주문은 별도 `ALPACA_PAPER_KEY_ID`, `ALPACA_PAPER_SECRET_KEY`를 사용합니다. 비밀키·원본 응답·대용량 Parquet은 Git에 올리지 않습니다.
 
-### 2. 전체 분석용 시장 데이터
-
-```bash
-# API 호출 없이 작업 수 확인
-.venv/bin/python scripts/collect_market_event_context.py --dry-run
-
-# 202개 발표 × 10종목 실행
-.venv/bin/python scripts/collect_market_event_context.py \
-  --event-types CPI EMPLOYMENT PCE FOMC \
-  --release-from 2022-01-01 --release-to 2026-08-26 \
-  --symbols SPY QQQ IWM TLT XLF SMH GLD NVDA AAPL JPM \
-  --feed sip
-```
-
-### 3. 발표 시점 경제 맥락
-
-```bash
-.venv/bin/python scripts/collect_macro_event_context.py \
-  --event-types CPI EMPLOYMENT PCE FOMC \
-  --release-from 2022-01-01 --release-to 2026-08-26
-```
-
-### 4. Airflow
-
-```bash
-export AIRFLOW_HOME="$PWD/airflow-runtime"
-export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
-export AIRFLOW__CORE__LOAD_EXAMPLES=False
-
-.venv/bin/airflow db migrate
-.venv/bin/python scripts/configure_airflow_pools.py
-.venv/bin/airflow dags test market_context_backfill_pipeline \
-  -f "$PWD/dags/market_context_backfill_pipeline.py" \
-  -c '{"event_types":["FOMC"],"release_from":"2026-07-29","release_to":"2026-07-29","symbols":["SPY","TLT"],"feed":"sip","data_cutoff":"2026-09-03T00:00:00Z"}'
-```
-
-다년 실행은 `market_context_backfill_orchestrator`가 연도별 child run으로 나눕니다. 각 child DAG는 발표별 task를 만들고, 실패한 연도나 발표 범위만 다시 실행할 수 있습니다.
-
-### 5. 저장 결과를 읽는 API와 대시보드
-
-외부 API나 증권사 주문 API 없이 로컬 PostgreSQL의 저장 결과만 읽습니다.
+### 2. 웹 애플리케이션
 
 ```bash
 .venv/bin/uvicorn src.serving_api:app --host 127.0.0.1 --port 8000
 ```
 
-브라우저에서 `http://127.0.0.1:8000/`을 열면 발표·종목을 선택해 1분·3분·5분봉, 발표 전후 반응, 경제 환경, 전략 시뮬레이션과 자동매매 준비 상태를 확인할 수 있습니다. JSON API 명세는 `http://127.0.0.1:8000/docs`에서 봅니다.
+`http://127.0.0.1:8000/overview`에서 시작합니다. 조회 화면은 외부 API를 호출하지 않고 PostgreSQL에 저장된 결과만 읽습니다. Paper 제출을 활성화하려면 서버에서 명시적으로 `ENABLE_PAPER_WEB_ORDERS=true`를 설정해야 하며, 그렇지 않으면 review까지만 가능합니다.
 
-발표용 입력 → 처리 → 저장 → 읽기 시연은 다음 한 명령으로 끝납니다.
+### 3. 발표용 입력 → 처리 → 저장 → 읽기
 
 ```bash
 .venv/bin/python -m scripts.run_serving_demo \
@@ -245,56 +179,62 @@ export AIRFLOW__CORE__LOAD_EXAMPLES=False
   --symbol NVDA
 ```
 
-최종 측정 시간은 0.43초였고, 같은 입력을 반복해도 영향 고유키 4개와 전략 고유키 1개가 유지됐습니다. `/health`와 CPI·NVDA 상세 API도 HTTP 200을 확인했습니다.
+한 이벤트·한 종목을 재계산해 영향 4행과 전략 1행을 upsert하고 같은 서빙 계층으로 다시 읽습니다. 검증 실행은 약 0.43초, 중복 0, `/health`와 상세 API HTTP 200이었습니다.
 
-### 6. 검증
+### 4. Airflow smoke
+
+```bash
+export AIRFLOW_HOME="$PWD/airflow-runtime"
+export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+.venv/bin/airflow db migrate
+.venv/bin/python scripts/configure_airflow_pools.py
+.venv/bin/airflow dags test market_context_backfill_pipeline \
+  -f "$PWD/dags/market_context_backfill_pipeline.py" \
+  -c '{"event_types":["FOMC"],"release_from":"2026-07-29","release_to":"2026-07-29","symbols":["SPY","TLT"],"feed":"sip","data_cutoff":"2026-09-03T00:00:00Z"}'
+```
+
+### 5. 테스트
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python scripts/evidence/export_multi_event_summary.py
-
-# 이벤트 구간 8,080행과 탐색 전략 2,020행 생성
-.venv/bin/python -m src.macro_event_impact
-.venv/bin/python -m src.event_strategy_backtest
-.venv/bin/python -m scripts.evidence.export_event_analysis
+RUN_POSTGRES_INTEGRATION=1 \
+  DATABASE_URL=postgresql://market:market@localhost:55432/market \
+  .venv/bin/python -m unittest discover -s tests -p 'test_*integration.py' -v
 ```
 
 ## 저장 모델
 
 | 테이블 | 한 행의 의미 | business key |
 | --- | --- | --- |
-| `economic_events` | 공식 경제 발표 한 번 | event type·reference period·released at |
-| `macro_event_contexts` | 발표 시점에 이용 가능했던 지표 하나 | event ID·series ID |
-| `market_bars` | 종목의 1m·3m·5m·1d 봉 하나 | symbol·start·timeframe·source·feed |
-| `pipeline_runs` | 파이프라인 실행 한 번 | pipeline run ID |
-| `pipeline_work_items` | 실행 안의 event·symbol·stage 작업 | run·event·symbol·stage |
-| `pipeline_run_checks` | 품질검사와 alert 상태 | run·event·symbol·stage·check |
-| `macro_event_impacts` | 발표·종목·구간별 시장 반응 | event·symbol·window·analysis version |
-| `event_strategy_results` | 발표·종목별 탐색 전략 결과 | event·symbol·strategy·version |
+| `economic_events` | 공식 발표 | deterministic event ID |
+| `market_bars` | source/feed/timeframe별 가격 봉 | symbol·start·timeframe·source·feed |
+| `macro_event_contexts` | 발표 당시 지표 값 | event·series |
+| `pipeline_runs` | 파이프라인 실행 | run ID |
+| `pipeline_work_items` | event·symbol·stage 작업 | run·event·symbol·stage |
+| `pipeline_run_checks` | 검사와 alert 상태 | run·event·symbol·stage·check |
+| `macro_event_impacts` | event·symbol·window 연구 결과 | source·feed·analysis version 포함 |
+| `event_strategy_results` | 기준 전략 관측 | strategy name·version 포함 |
+| `paper_order_intents` | Paper 주문 intent와 상태 | account scope·request ID |
 
 ## 다음 단계
 
-- 발표별 실제값·시장 전망치·surprise를 신뢰할 수 있는 point-in-time 출처로 추가
-- 비발표일 비교군과 다른 사건을 통제한 통계 검정
-- 호가 기반 슬리피지·포트폴리오 제약을 반영한 전략 검증
-- 검증된 archive fallback과 운영 알림 채널 연결
-- 정기 재수집 때 provider collection과 observed coverage 분포의 변화를 비교·경보
-- 기존 별도 Alpaca paper 연결시험을 전략과 연결해 실제 fill·부분 체결·포지션 복구 검증
-- 최대 주문 금액·보유 종목 수·일일 손실 한도·중복 주문 방지·긴급 중지 구현
-- Slack 사람 승인 단계를 거친 뒤 소액 `LIMITED_LIVE`, 충분한 운영 검증 후 `AUTOMATED_LIVE` 검토
+- forecast·first-release actual·surprise의 신뢰 가능한 point-in-time 출처 추가
+- 비발표일 비교군과 사건 통제, 통계 검정
+- 실제 Paper fill 기반 position baseline·reconciliation과 위험 한도 검증
+- stale `RUNNING` Airflow run의 terminal reconciliation
+- OpenLineage/Marquez는 core 안정성을 바꾸지 않는 선택적 관측성 확장으로만 검토
 
 ## 구현·과제 증거
 
+- [문서 허브](docs/README.md)
+- [플랫폼 감사](docs/engineering/platform-audit.md) · [API 계약](docs/engineering/api-contracts.md)
+- [7차시 서빙 과제](docs/serving-layer-assignment.md) · [최종 시연 증거](docs/evidence/serving-layer/README.md)
+- [6차시 부하·복구](docs/load-recovery-assignment.md)
 - [3차시 Kafka·Spark 과제](docs/kafka-spark-assignment.md)
-- [4차시 Airflow 과제](docs/airflow-assignment.md)
-- [5차시 부하·장애·복구 과제](docs/load-recovery-assignment.md)
-- [식별키 수정 후 전체 재실행](docs/pipeline-review-assignment.md)
-- [다중 경제 이벤트 확장](docs/multi-event-expansion.md)
-- [7차시 서빙 레이어와 최종 발표](docs/serving-layer-assignment.md)
-- [7차시 실제 API·대시보드 증거](docs/evidence/serving-layer/README.md)
+- [Paper execution 계약과 증거](docs/paper-execution.md)
+- [최종 테스트·통합·브라우저 검증](docs/evidence/final-portfolio/verification.md)
+- [Archify 대화형 구성도](docs/diagrams/session7-architecture.html)
+- [과정 발표 자료와 과거 실행 기록](docs/README.md#과정-아카이브)
 
-## 면책 및 출처 고지
-
-교육·연구용 프로젝트이며 투자 조언이 아닙니다. 현재 계좌·주문 API를 호출하지 않으며 대시보드의 `LONG/SHORT`는 과거 분석 신호일 뿐 주문이 아닙니다.
-
-This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+현재 구현과 한계의 정본은 코드·migration·테스트와 최신 검증 증거입니다. 날짜가 붙은 과제 자료는 당시 실행을 보존하는 역사 기록이며 현재 계약을 덮어쓰지 않습니다.

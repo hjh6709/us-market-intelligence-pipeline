@@ -4,19 +4,38 @@ from decimal import Decimal
 from src.execution_readiness import ReadinessInput, evaluate_execution_readiness
 from src.serving_models import (
     BarView,
+    CrossAssetComparisonView,
+    CrossAssetImpactPoint,
+    DatasetMetricView,
     EventSummary,
     EventSymbolDetail,
+    HistoricalComparisonView,
+    HistoricalImpactPoint,
     ImpactView,
     MacroContextView,
+    PlatformOverviewView,
+    ResearchProvenanceView,
     SimulationView,
     StrategySummaryView,
 )
-from src.serving_repository import (
+from src.serving_repository import EventRecord, PostgresServingRepository
+from src.platform_contracts import (
+    ANALYSIS_VERSION,
+    MARKET_FEED,
+    MARKET_SOURCE,
     STRATEGY_NAME,
     STRATEGY_VERSION,
-    EventRecord,
-    PostgresServingRepository,
 )
+
+
+def _provenance() -> ResearchProvenanceView:
+    return ResearchProvenanceView(
+        source=MARKET_SOURCE,
+        feed=MARKET_FEED,
+        analysis_version=ANALYSIS_VERSION,
+        strategy_name=STRATEGY_NAME,
+        strategy_version=STRATEGY_VERSION,
+    )
 
 
 class ServingNotFoundError(LookupError):
@@ -74,6 +93,7 @@ class ServingService:
             mean_net_return_pct=record.mean_net_return_pct,
             positive_count=record.positive_count,
             positive_rate_pct=positive_rate,
+            provenance=_provenance(),
         )
 
     def get_event_symbol_detail(self, event_id: str, symbol: str) -> EventSymbolDetail:
@@ -142,6 +162,62 @@ class ServingService:
             research_signal=signal,
             simulation=simulation,
             execution_readiness=readiness,
+            provenance=_provenance(),
+        )
+
+    def get_historical_comparison(
+        self, event_type: str, symbol: str, window_name: str
+    ) -> HistoricalComparisonView:
+        records = self.repository.get_historical_impacts(
+            event_type, symbol, window_name
+        )
+        return HistoricalComparisonView(
+            event_type=event_type,
+            symbol=symbol,
+            window_name=window_name,
+            points=[HistoricalImpactPoint(**record.__dict__) for record in records],
+            provenance=_provenance(),
+        )
+
+    def get_cross_asset_comparison(
+        self, event_id: str, window_name: str
+    ) -> CrossAssetComparisonView:
+        if self.repository.get_event(event_id) is None:
+            raise ServingNotFoundError("event")
+        records = self.repository.get_cross_asset_impacts(event_id, window_name)
+        return CrossAssetComparisonView(
+            event_id=event_id,
+            window_name=window_name,
+            points=[CrossAssetImpactPoint(**record.__dict__) for record in records],
+            provenance=_provenance(),
+        )
+
+    def get_overview(self, latest_pipeline: dict | None) -> PlatformOverviewView:
+        record = self.repository.get_overview_metrics()
+        metric_specs = (
+            ("releases", "Official releases", record.releases, "releases"),
+            ("symbols", "Supported assets", record.symbols, "symbols"),
+            ("event_symbol_intervals", "Event-asset intervals", record.event_symbol_intervals, "intervals"),
+            ("stored_1m_bars", "Stored SIP 1m bars", record.stored_1m_bars, "bar rows"),
+            ("derived_3m_bars", "Derived 3m bars", record.derived_3m_bars, "bar rows"),
+            ("derived_5m_bars", "Derived 5m bars", record.derived_5m_bars, "bar rows"),
+            ("pit_macro_contexts", "Point-in-time macro contexts", record.pit_macro_contexts, "context rows"),
+            ("impact_rows", "Event impact results", record.impact_rows, "analysis rows"),
+        )
+        return PlatformOverviewView(
+            product_name="U.S. Economic Event Market Intelligence Platform",
+            description="A reproducible point-in-time data platform for U.S. economic-event market analysis.",
+            metrics=[DatasetMetricView(key=k, label=l, value=v, unit=u) for k,l,v,u in metric_specs],
+            event_type_counts=self.repository.get_event_type_counts(),
+            supported_symbols=self.repository.list_supported_symbols(),
+            recent_events=[self._event_view(item) for item in self.repository.list_events()[:6]],
+            baseline=self.get_strategy_summary(),
+            latest_pipeline=latest_pipeline,
+            limitations=[
+                "The exploratory baseline is negative overall and is not a recommendation.",
+                "Observed provider bars may be sparse even when collection succeeds.",
+                "Paper execution is isolated and never consumes research signals automatically.",
+            ],
         )
 
     @staticmethod

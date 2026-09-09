@@ -70,6 +70,46 @@ class ExecutionReadinessView(BaseModel):
     reasons: list[str]
 
 
+class ResearchProvenanceView(BaseModel):
+    source: str
+    feed: str
+    analysis_version: str
+    strategy_name: str
+    strategy_version: str
+
+
+class HistoricalImpactPoint(BaseModel):
+    event_id: str
+    released_at: datetime
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+class HistoricalComparisonView(BaseModel):
+    event_type: str
+    symbol: str
+    window_name: str
+    research_only: bool = True
+    points: list[HistoricalImpactPoint]
+    provenance: ResearchProvenanceView
+
+
+class CrossAssetImpactPoint(BaseModel):
+    symbol: str
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+class CrossAssetComparisonView(BaseModel):
+    event_id: str
+    window_name: str
+    research_only: bool = True
+    points: list[CrossAssetImpactPoint]
+    provenance: ResearchProvenanceView
+
+
 class EventSymbolDetail(BaseModel):
     event: EventSummary
     symbol: str
@@ -78,6 +118,7 @@ class EventSymbolDetail(BaseModel):
     research_signal: ResearchSignal
     simulation: SimulationView | None
     execution_readiness: ExecutionReadinessView
+    provenance: ResearchProvenanceView
 
 
 class BarView(BaseModel):
@@ -102,3 +143,23 @@ class StrategySummaryView(BaseModel):
     mean_net_return_pct: Decimal | None = None
     positive_count: int = Field(ge=0)
     positive_rate_pct: Decimal | None = None
+    provenance: ResearchProvenanceView
+
+
+class DatasetMetricView(BaseModel):
+    key: str
+    label: str
+    value: int = Field(ge=0)
+    unit: str
+
+
+class PlatformOverviewView(BaseModel):
+    product_name: str
+    description: str
+    metrics: list[DatasetMetricView]
+    event_type_counts: dict[str, int]
+    supported_symbols: list[str]
+    recent_events: list[EventSummary]
+    baseline: StrategySummaryView
+    latest_pipeline: dict | None
+    limitations: list[str]

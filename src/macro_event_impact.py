@@ -16,9 +16,9 @@ import psycopg
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.live_market_smoke import _read_env_file
+from src.platform_contracts import ANALYSIS_VERSION, MARKET_FEED, MARKET_SOURCE
 
 
-ANALYSIS_VERSION = "multi_event_sip_v1"
 DEFAULT_EVENT_TYPES = ("CPI", "EMPLOYMENT", "PCE", "FOMC")
 DEFAULT_SYMBOLS = (
     "SPY", "QQQ", "IWM", "TLT", "XLF", "SMH", "GLD", "NVDA", "AAPL", "JPM"
@@ -64,8 +64,8 @@ class ImpactMetric:
             (
                 self.economic_event_id,
                 self.symbol,
-                "alpaca",
-                "sip",
+                MARKET_SOURCE,
+                MARKET_FEED,
                 self.window_name,
                 ANALYSIS_VERSION,
             )
@@ -259,15 +259,21 @@ def calculate_and_store(
                 """
                 SELECT symbol, bar_start, open, close, volume
                 FROM market_bars
-                WHERE source = 'alpaca'
-                  AND feed = 'sip'
+                WHERE source = %s
+                  AND feed = %s
                   AND timeframe = '1m'
                   AND symbol = ANY(%s)
                   AND bar_start >= %s - INTERVAL '60 minutes'
                   AND bar_start < %s + INTERVAL '60 minutes'
                 ORDER BY symbol, bar_start
                 """,
-                (list(processing_symbols), released_at, released_at),
+                (
+                    MARKET_SOURCE,
+                    MARKET_FEED,
+                    list(processing_symbols),
+                    released_at,
+                    released_at,
+                ),
             ).fetchall()
             bars_by_symbol = {symbol: [] for symbol in processing_symbols}
             for symbol, bar_start, open_price, close_price, volume in rows:
@@ -294,7 +300,7 @@ def calculate_and_store(
                     benchmark_return_pct, market_relative_return_pct,
                     coverage_status, coverage_reason, analysis_version
                 ) VALUES (
-                    %s, %s, %s, 'alpaca', 'sip', 'EXTENDED_HOURS',
+                    %s, %s, %s, %s, %s, 'EXTENDED_HOURS',
                     %s, %s, %s, %s, %s, %s, %s, %s, 'SPY', %s, %s, %s, %s, %s
                 )
                 ON CONFLICT (
@@ -320,6 +326,8 @@ def calculate_and_store(
                         metric.impact_id,
                         metric.economic_event_id,
                         metric.symbol,
+                        MARKET_SOURCE,
+                        MARKET_FEED,
                         metric.window_name,
                         metric.window_start,
                         metric.window_end,

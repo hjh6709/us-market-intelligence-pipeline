@@ -1,15 +1,20 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
 import psycopg
 
+from src.platform_contracts import (
+    ANALYSIS_VERSION,
+    MARKET_FEED,
+    MARKET_SOURCE,
+    STRATEGY_NAME,
+    STRATEGY_VERSION,
+)
 
-STRATEGY_NAME = "pre60_momentum_post60"
-STRATEGY_VERSION = "v1"
-ANALYSIS_VERSION = "multi_event_sip_v1"
 ALLOWED_TIMEFRAMES = frozenset({"1m", "3m", "5m"})
+ALLOWED_WINDOWS = frozenset({"PRE_60M", "POST_5M", "POST_30M", "POST_60M"})
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,37 @@ class BarRecord:
     coverage_status: str | None
 
 
+@dataclass(frozen=True)
+class HistoricalImpactRecord:
+    event_id: str
+    released_at: datetime
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+@dataclass(frozen=True)
+class CrossAssetImpactRecord:
+    symbol: str
+    return_pct: Decimal | None
+    relative_return_pct: Decimal | None
+    coverage_status: str
+
+
+@dataclass(frozen=True)
+class OverviewMetricsRecord:
+    releases: int
+    symbols: int
+    event_symbol_intervals: int
+    stored_1m_bars: int
+    derived_3m_bars: int
+    derived_5m_bars: int
+    pit_macro_contexts: int
+    impact_rows: int
+    strategy_results: int
+    eligible_strategy_results: int
+
+
 class PostgresServingRepository:
     def __init__(
         self,
@@ -112,11 +148,13 @@ class PostgresServingRepository:
             filters.append("event_type = %s")
             params.append(event_type)
         if released_from is not None:
-            filters.append("released_at::date >= %s")
-            params.append(released_from)
+            filters.append("released_at >= %s")
+            params.append(datetime.combine(released_from, time.min, tzinfo=UTC))
         if released_to is not None:
-            filters.append("released_at::date <= %s")
-            params.append(released_to)
+            filters.append("released_at < %s")
+            params.append(
+                datetime.combine(released_to + timedelta(days=1), time.min, tzinfo=UTC)
+            )
         where = f"WHERE {' AND '.join(filters)}" if filters else ""
         sql = f"""
             SELECT economic_event_id, event_type, reference_period, released_at,
@@ -232,6 +270,107 @@ class PostgresServingRepository:
                   AND bar_start >= %s AND bar_start < %s
                 ORDER BY bar_start
                 """,
-                (symbol, timeframe, "alpaca", "sip", start, end),
+                (symbol, timeframe, MARKET_SOURCE, MARKET_FEED, start, end),
             )
             return [BarRecord(*row) for row in cursor.fetchall()]
+
+    def get_historical_impacts(
+        self, event_type: str, symbol: str, window_name: str
+    ) -> list[HistoricalImpactRecord]:
+        if window_name not in ALLOWED_WINDOWS:
+            raise ValueError(f"unsupported impact window: {window_name}")
+        sql = """
+            SELECT i.economic_event_id, e.released_at, i.return_pct,
+                   i.market_relative_return_pct, i.coverage_status
+            FROM macro_event_impacts AS i
+            JOIN economic_events AS e USING (economic_event_id)
+            WHERE e.event_type = %s AND i.symbol = %s AND i.window_name = %s
+              AND i.source = %s AND i.feed = %s AND i.analysis_version = %s
+            ORDER BY e.released_at
+        """
+        params = (
+            event_type,
+            symbol,
+            window_name,
+            MARKET_SOURCE,
+            MARKET_FEED,
+            ANALYSIS_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            return [HistoricalImpactRecord(*row) for row in cursor.fetchall()]
+
+    def get_cross_asset_impacts(
+        self, event_id: str, window_name: str
+    ) -> list[CrossAssetImpactRecord]:
+        if window_name not in ALLOWED_WINDOWS:
+            raise ValueError(f"unsupported impact window: {window_name}")
+        sql = """
+            SELECT symbol, return_pct, market_relative_return_pct, coverage_status
+            FROM macro_event_impacts
+            WHERE economic_event_id = %s AND window_name = %s
+              AND source = %s AND feed = %s AND analysis_version = %s
+            ORDER BY symbol
+        """
+        params = (
+            event_id,
+            window_name,
+            MARKET_SOURCE,
+            MARKET_FEED,
+            ANALYSIS_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            return [CrossAssetImpactRecord(*row) for row in cursor.fetchall()]
+
+    def get_overview_metrics(self) -> OverviewMetricsRecord:
+        sql = """
+            SELECT
+              (SELECT count(*) FROM economic_events WHERE quality_status='READY'),
+              (SELECT count(DISTINCT symbol) FROM macro_event_impacts
+                WHERE source=%s AND feed=%s AND analysis_version=%s),
+              (SELECT count(DISTINCT (economic_event_id, symbol)) FROM macro_event_impacts
+                WHERE source=%s AND feed=%s AND analysis_version=%s),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='1m'),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='3m'),
+              (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='5m'),
+              (SELECT count(*) FROM macro_event_contexts),
+              (SELECT count(*) FROM macro_event_impacts WHERE analysis_version=%s),
+              (SELECT count(*) FROM event_strategy_results
+                WHERE strategy_name=%s AND strategy_version=%s),
+              (SELECT count(net_return_pct) FROM event_strategy_results
+                WHERE strategy_name=%s AND strategy_version=%s)
+        """
+        params = (
+            MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION,
+            MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION,
+            MARKET_SOURCE, MARKET_FEED,
+            MARKET_SOURCE, MARKET_FEED,
+            MARKET_SOURCE, MARKET_FEED,
+            ANALYSIS_VERSION,
+            STRATEGY_NAME, STRATEGY_VERSION,
+            STRATEGY_NAME, STRATEGY_VERSION,
+        )
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            row = cursor.fetchone()
+            return OverviewMetricsRecord(*row)
+
+    def get_event_type_counts(self) -> dict[str, int]:
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT event_type, count(*) FROM economic_events
+                   WHERE quality_status='READY'
+                   GROUP BY event_type ORDER BY event_type"""
+            )
+            return dict(cursor.fetchall())
+
+    def list_supported_symbols(self) -> list[str]:
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """SELECT DISTINCT symbol FROM macro_event_impacts
+                   WHERE source=%s AND feed=%s AND analysis_version=%s
+                   ORDER BY symbol""",
+                (MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION),
+            )
+            return [row[0] for row in cursor.fetchall()]

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "for-my-stock"
 version = "0.1.0"
-description = "U.S. macro impact and market data pipeline"
+description = "U.S. economic event market intelligence data platform"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "confluent-kafka>=2.15,<3",
@@ -27,4 +27,4 @@ airflow = [
 packages = ["src"]
 
 [tool.setuptools.package-data]
-src = ["templates/*.html"]
+src = ["templates/*.html", "static/vendor/*.js", "static/vendor/*.txt"]
