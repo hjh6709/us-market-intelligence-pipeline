@@ -184,10 +184,11 @@ class PostgresServingRepository:
             SELECT DISTINCT symbol
             FROM macro_event_impacts
             WHERE economic_event_id = %s AND analysis_version = %s
+              AND source = %s AND feed = %s
             ORDER BY symbol
         """
         with self._connection() as connection, connection.cursor() as cursor:
-            cursor.execute(sql, (event_id, ANALYSIS_VERSION))
+            cursor.execute(sql, (event_id, ANALYSIS_VERSION, MARKET_SOURCE, MARKET_FEED))
             return [row[0] for row in cursor.fetchall()]
 
     def get_impacts(self, event_id: str, symbol: str) -> list[ImpactRecord]:
@@ -198,10 +199,11 @@ class PostgresServingRepository:
             FROM macro_event_impacts
             WHERE economic_event_id = %s AND symbol = %s
               AND analysis_version = %s
+              AND source = %s AND feed = %s
             ORDER BY window_start
         """
         with self._connection() as connection, connection.cursor() as cursor:
-            cursor.execute(sql, (event_id, symbol, ANALYSIS_VERSION))
+            cursor.execute(sql, (event_id, symbol, ANALYSIS_VERSION, MARKET_SOURCE, MARKET_FEED))
             return [ImpactRecord(*row) for row in cursor.fetchall()]
 
     def get_macro_context(self, event_id: str) -> list[MacroContextRecord]:
@@ -335,7 +337,8 @@ class PostgresServingRepository:
               (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='3m'),
               (SELECT count(*) FROM market_bars WHERE source=%s AND feed=%s AND timeframe='5m'),
               (SELECT count(*) FROM macro_event_contexts),
-              (SELECT count(*) FROM macro_event_impacts WHERE analysis_version=%s),
+              (SELECT count(*) FROM macro_event_impacts
+                WHERE source=%s AND feed=%s AND analysis_version=%s),
               (SELECT count(*) FROM event_strategy_results
                 WHERE strategy_name=%s AND strategy_version=%s),
               (SELECT count(net_return_pct) FROM event_strategy_results
@@ -347,7 +350,7 @@ class PostgresServingRepository:
             MARKET_SOURCE, MARKET_FEED,
             MARKET_SOURCE, MARKET_FEED,
             MARKET_SOURCE, MARKET_FEED,
-            ANALYSIS_VERSION,
+            MARKET_SOURCE, MARKET_FEED, ANALYSIS_VERSION,
             STRATEGY_NAME, STRATEGY_VERSION,
             STRATEGY_NAME, STRATEGY_VERSION,
         )

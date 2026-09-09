@@ -11,7 +11,7 @@
     main{max-width:1440px;margin:auto;padding:28px}.eyebrow{color:var(--blue);font-size:11px;letter-spacing:.15em;font-weight:800}.head{display:flex;justify-content:space-between;gap:24px;align-items:end;margin-bottom:24px}h1{font-size:32px;margin:7px 0}.sub{color:var(--muted);max-width:760px;line-height:1.5}
     .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}.tabs button{border:0;background:none;color:var(--muted);padding:12px 15px;cursor:pointer}.tabs button.active{color:var(--text);border-bottom:2px solid var(--blue)}
     .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:17px}.span12{grid-column:span 12}.span8{grid-column:span 8}.span4{grid-column:span 4}.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.metric{border:1px solid var(--line);background:#0a1523;padding:14px;border-radius:8px}.metric small{color:var(--muted);display:block;margin-bottom:8px}.metric strong{font:700 22px ui-monospace,SFMono-Regular,Menlo,monospace}
-    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:11px;text-transform:uppercase}.num{text-align:right;font-variant-numeric:tabular-nums}.status{font-size:11px;font-weight:800}.ok{color:var(--green)}.warn{color:var(--amber)}.fail{color:var(--red)}
+    table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:11px;text-transform:uppercase}.num{text-align:right;font-variant-numeric:tabular-nums}.status{font-size:11px;font-weight:800}.ok{color:var(--green)}.warn{color:var(--amber)}.fail{color:var(--red)}.info{color:var(--blue)}.neutral{color:var(--muted)}.scroll{overflow-x:auto}button{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere}td{overflow-wrap:anywhere}
     .quality-rule{border-left:3px solid var(--amber);padding:10px 13px;background:#151a20;color:var(--muted);margin-bottom:14px}.quality-rule b{color:var(--text)}.lineage{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.node{border:1px solid var(--line);padding:12px;border-radius:8px;background:#0a1523}.node small{display:block;color:var(--muted);margin-top:5px}.hidden{display:none}.empty{color:var(--muted);padding:20px 0}.error{color:var(--red)}
     @media(max-width:900px){.metrics{grid-template-columns:1fr 1fr}.span8,.span4{grid-column:span 12}.lineage{grid-template-columns:1fr 1fr}.nav{gap:14px;padding:0 14px}main{padding:18px}}
   </style>
@@ -26,22 +26,85 @@
       <div id="overview-metrics" class="metrics"></div>
       <div class="grid" style="margin-top:14px"><article class="panel span12"><h2>최근 실행</h2><div id="recent-runs"></div></article></div>
     </section>
-    <section id="pipeline-runs" class="hidden"><article class="panel"><h2>전체 실행 이력</h2><div id="all-runs"></div></article></section>
+    <section id="pipeline-runs" class="hidden"><article class="panel"><h2>전체 실행 이력</h2><div id="all-runs"></div><h2>선택한 실행 상세</h2><div id="run-detail">실행의 상세 버튼을 선택하세요.</div></article></section>
     <section id="pipeline-quality" class="hidden">
       <div class="quality-rule"><b>수집 무결성(collection integrity)</b>과 <b>실제 관측 범위(observed coverage)</b>는 서로 다른 기준입니다. 제공자 가격 봉이 일부 비어 있으면 경고로 기록하며, 수집 실패로 바꾸지 않습니다.</div>
       <article class="panel"><h2>최근 실행 품질 검사</h2><div id="quality-groups" class="empty">기록된 실행을 불러오는 중입니다.</div></article>
     </section>
     <section id="pipeline-lineage" class="hidden"><article class="panel"><h2>프로젝트 수준 데이터 흐름</h2><p class="sub">Kafka/Spark 경로는 범위가 정해진 신뢰성 검증 경로이며, 전체 분석 데이터셋의 수집 경로가 아닙니다.</p><div id="lineage-nodes" class="lineage"></div></article></section>
   </main>
+  <script src="/static/vendor/echarts-6.1.0.min.js"></script>
   <script>
-    const $=id=>document.getElementById(id);let latestRun=null;
-    async function json(url){const r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}
+    const $=id=>document.getElementById(id);
+    const esc=v=>String(v??'기록 없음').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const value=v=>v==null?'기록 없음':Number(v).toLocaleString('ko-KR');
-    const cls=s=>s==='SUCCEEDED'||s==='PASS'?'ok':s==='WARN'?'warn':'fail';
-    function table(runs){if(!runs.length)return '<div class="empty">기록된 실행이 없습니다.</div>';return `<table><thead><tr><th>시작 시각</th><th>DAG</th><th>상태</th><th class="num">작업</th><th class="num">경고</th><th class="num">실패</th><th class="num">소요 시간</th></tr></thead><tbody>${runs.map(r=>`<tr><td>${new Date(r.started_at).toLocaleString('ko-KR')}</td><td>${r.dag_id}</td><td class="status ${cls(r.status)}">${r.status}</td><td class="num">${value(r.work_item_count)}</td><td class="num warn">${value(r.warning_check_count)}</td><td class="num ${r.failed_check_count?'fail':''}">${value(r.failed_check_count)}</td><td class="num">${r.duration_seconds==null?'실행 중':r.duration_seconds.toFixed(1)+'초'}</td></tr>`).join('')}</tbody></table>`}
-    async function load(){try{const [overview,lineage]=await Promise.all([json('/api/v1/pipelines/overview'),json('/api/v1/pipelines/lineage')]);latestRun=overview.latest_run;const r=latestRun;const cards=r?[['상태',r.status],['작업 수',value(r.work_item_count)],['경고',value(r.warning_check_count)],['실패',value(r.failed_check_count)],['미해결 알림',value(r.open_alert_count)],['품질 계약',r.quality_contract]]:[['상태','실행 없음']];$('overview-metrics').innerHTML=cards.map(([k,v])=>`<div class="metric"><small>${k}</small><strong>${v}</strong></div>`).join('');$('recent-runs').innerHTML=table(overview.recent_runs);$('all-runs').innerHTML=table(await json('/api/v1/pipelines/runs?limit=100'));$('lineage-nodes').innerHTML=lineage.nodes.map(n=>`<div class="node">${n.label}<small>${n.plane}</small></div>`).join('');if(r){const q=await json(`/api/v1/pipelines/quality?pipeline_run_id=${encodeURIComponent(r.pipeline_run_id)}`);const legacy=r.quality_contract==='legacy-pre-separation'?'<div class="quality-rule"><b>과거 품질 계약:</b> 이 실행은 관측 범위 검사를 분리하기 전 기록입니다. 당시 수집 검사를 현재 관측 범위로 재해석하지 않습니다.</div>':'';$('quality-groups').innerHTML=legacy+(q.groups.length?`<table><thead><tr><th>검사</th><th>상태</th><th class="num">건수</th></tr></thead><tbody>${q.groups.map(g=>`<tr><td>${g.check_name}</td><td class="${cls(g.status)}">${g.status}</td><td class="num">${g.count}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">기록된 검사가 없습니다.</div>')}}
-      catch(e){$('overview-metrics').innerHTML=`<div class="error">파이프라인 감사 데이터를 읽지 못했습니다: ${e.message}</div>`}}
-    document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hidden',s.id!==b.dataset.view))});load();
+    const cls=s=>['SUCCEEDED','PASS','COMPLETE'].includes(s)?'ok':s==='RUNNING'?'info':['WARN','PARTIAL'].includes(s)?'warn':['FAILED','FAIL'].includes(s)?'fail':'neutral';
+    async function json(url){const r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
+    function rows(headers,items){return '<div class="scroll"><table><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>'+items.map(cells=>'<tr>'+cells.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
+    function table(runs){
+      if(!runs.length)return '<p>기록된 실행이 없습니다.</p>';
+      return '<div class="scroll"><table><thead><tr><th>DAG / 실행</th><th>상태</th><th>작업</th><th>경고 / 실패</th><th>소요 시간</th></tr></thead><tbody>'+runs.map(r=>'<tr><td>'+esc(r.dag_id)+'<br><button data-run="'+esc(r.pipeline_run_id)+'">상세: '+esc(r.pipeline_run_id)+'</button></td><td class="'+cls(r.status)+'">'+esc(r.status)+'</td><td>'+value(r.work_item_count)+'</td><td>'+value(r.warning_check_count)+' / '+value(r.failed_check_count)+'</td><td>'+(r.duration_seconds==null?'기록 없음':value(r.duration_seconds)+'초')+'</td></tr>').join('')+'</tbody></table></div>';
+    }
+    let lineageChart=null,lineageData=null;
+    function showView(id){document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===id));document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hidden',s.id!==id));if(id==='pipeline-lineage'){if(!lineageChart&&lineageData)renderLineage(lineageData);lineageChart?.resize()}}
+    let selectedRun=null,workOffset=0,checkOffset=0,detailGeneration=0;
+    async function detail(){
+      const generation=++detailGeneration;
+      $('run-detail').textContent='실행 상세를 읽는 중…';
+      try{
+        const d=await json('/api/v1/pipelines/runs/'+encodeURIComponent(selectedRun)+'?limit=100&work_offset='+workOffset+'&check_offset='+checkOffset);
+        if(generation!==detailGeneration)return;
+        const r=d.run;
+        const meta=[['DAG',r.dag_id],['실행 ID',r.pipeline_run_id],['상태',r.status],['시작 UTC',r.started_at],['종료 UTC',r.finished_at],['소요 초',r.duration_seconds],['코드 버전',d.code_version],['데이터 cutoff',d.data_cutoff],['설정 해시',d.config_hash],['품질 계약',r.quality_contract],['전체 입력',r.input_count],['전체 출력',r.output_count],['실패 작업',r.failed_item_count],['실패 검사',r.failed_check_count],['미해결 알림',r.open_alert_count]];
+        const page=(kind,p)=>'<p>'+value(p.total)+'개 중 offset '+p.offset+' · 최대 '+p.limit+'개 <button data-page="'+kind+'" data-step="-1" '+(p.offset===0?'disabled':'')+'>이전</button> <button data-page="'+kind+'" data-step="1" '+(!p.has_more?'disabled':'')+'>다음</button></p>';
+        $('run-detail').innerHTML=rows(['필드','값'],meta)+'<details><summary>실행 설정</summary><pre>'+esc(JSON.stringify(d.config,null,2))+'</pre></details><h3>작업별 실행 · 오류</h3>'+page('work',d.work_items_page)+rows(['발표','종목','단계','상태','시도','입력','출력','오류 코드','오류 내용'],d.work_items.map(w=>[w.economic_event_id,w.symbol,w.stage,w.status,w.attempt_count,w.input_count,w.output_count,w.error_code,w.error_message]))+'<h3>품질 검사 · 알림</h3>'+page('check',d.checks_page)+rows(['발표','종목','단계','검사','기대값','관측값','상태','알림'],d.checks.map(c=>[c.economic_event_id,c.symbol,c.stage,c.check_name,c.expected_value,c.actual_value,c.status,c.alert_status]));
+        $('run-detail').querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{const step=Number(b.dataset.step)*100;if(b.dataset.page==='work')workOffset=Math.max(0,workOffset+step);else checkOffset=Math.max(0,checkOffset+step);detail()});
+      }catch(e){if(generation===detailGeneration)$('run-detail').textContent='상세 조회 실패: '+e.message}
+    }
+    function bindRuns(){document.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>{selectedRun=b.dataset.run;workOffset=0;checkOffset=0;showView('pipeline-runs');detail()})}
+    function renderLineage(lineage){
+      const positions={
+        official_releases:[80,70],alpaca_bars:[80,200],fred_alfred:[80,330],
+        airflow:[300,70],market_bars:[500,200],macro_context:[500,330],
+        impacts:[700,200],strategy:[880,200],serving:[880,330],
+        archived_sip_trades:[80,520],kafka:[300,520],spark:[700,520],
+        run_tracking:[300,700],pipelines_ui:[650,700]
+      };
+      const container=$('lineage-nodes');container.style.display='block';container.style.height='760px';
+      lineageChart=echarts.init(container,null,{renderer:'svg'});
+      lineageChart.setOption({
+        backgroundColor:'transparent',
+        title:[{text:'연구 데이터 경로 · Airflow',left:12,top:5,textStyle:{color:'#edf3fb',fontSize:16}},
+          {text:'원시 체결 신뢰성 검증 · 별도 제한된 재생',left:12,top:445,textStyle:{color:'#edf3fb',fontSize:16}},
+          {text:'운영 기록 · 실제 저장된 실행만 조회',left:12,top:625,textStyle:{color:'#edf3fb',fontSize:16}}],
+        tooltip:{trigger:'item',formatter:p=>p.dataType==='edge'?esc(p.data.name||'데이터 흐름'):esc(p.data.name)},
+        series:[{type:'graph',layout:'none',left:75,right:90,top:60,bottom:30,
+          symbol:'roundRect',symbolSize:[145,48],roam:false,
+          label:{show:true,color:'#edf3fb',fontSize:11,width:138,overflow:'break'},
+          edgeSymbol:['none','arrow'],edgeSymbolSize:8,
+          lineStyle:{color:'#6684ad',width:2,opacity:0.9,curveness:0.08},
+          emphasis:{focus:'adjacency'},
+          data:lineage.nodes.map(n=>({id:n.id,name:n.label,x:positions[n.id][0],y:positions[n.id][1],
+            itemStyle:{color:n.plane==='validation'?'#5c4626':n.plane==='operations'?'#215b4c':'#203a5b',borderColor:'#6684ad',borderWidth:1}})),
+          links:lineage.edges.map(e=>({source:e.source,target:e.target,name:e.label||'',
+            lineStyle:{curveness:e.source==='spark'?-0.35:e.source==='official_releases'&&e.target==='macro_context'?0.3:0.08}}))
+        }]
+      });
+    }
+    window.addEventListener('resize',()=>lineageChart?.resize());
+    async function load(){
+      try{
+        const [overview,lineage,runs]=await Promise.all([json('/api/v1/pipelines/overview'),json('/api/v1/pipelines/lineage'),json('/api/v1/pipelines/runs?limit=100')]);
+        const r=overview.latest_run;
+        const cards=r?[['상태',r.status],['작업 수',value(r.work_item_count)],['경고',value(r.warning_check_count)],['실패',value(r.failed_check_count)],['미해결 알림',value(r.open_alert_count)],['품질 계약',r.quality_contract]]:[['상태','실행 없음']];
+        $('overview-metrics').innerHTML=cards.map(([k,v])=>'<div class="metric"><small>'+esc(k)+'</small><strong class="'+cls(v)+'">'+esc(v)+'</strong></div>').join('');
+        $('recent-runs').innerHTML=table(overview.recent_runs);$('all-runs').innerHTML='<p>최근 최대 100개 실행입니다. 각 실행의 작업·검사는 상세에서 페이지별로 확인합니다.</p>'+table(runs);bindRuns();
+        lineageData=lineage;
+        if(!$('pipeline-lineage').classList.contains('hidden'))renderLineage(lineageData);
+        if(r){const q=await json('/api/v1/pipelines/quality?pipeline_run_id='+encodeURIComponent(r.pipeline_run_id));$('quality-groups').innerHTML='<p>품질 계약: '+esc(r.quality_contract)+'</p>'+rows(['검사','상태','건수'],q.groups.map(g=>[g.check_name,g.status,g.count]))}
+      }catch(e){$('overview-metrics').textContent='실행 기록 조회 실패: '+e.message}
+    }
+    document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showView(b.dataset.view));load();
   </script>
 </body>
 </html>

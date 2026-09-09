@@ -523,7 +523,7 @@ Optional: News/LLM and FastAPI/Streamlit
 - raw trade replay에서 duplicate/out-of-order/late event와 checkpoint 복구 결과
 - live와 offline demo
 
-상세 범위는 [4주·8회차 실행 계획](../PROJECT_PLAN.md)에 정의한다.
+상세 범위는 [당시 4주·8회차 실행 계획](archive/project-history/PROJECT_PLAN.md)에 정의한다.
 
 ### Stage B — Strategy hypothesis and point-in-time portfolio backtest
 

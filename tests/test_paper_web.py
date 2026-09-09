@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import MagicMock, patch
 from decimal import Decimal
 
 from src.paper_execution import OrderIntent
 from src.paper_web import ConfiguredPaperWebGateway, PaperConfirmationError, PaperWebService
+from src.paper_web import PaperConfigurationError
 
 
 class FakeBroker:
@@ -82,6 +84,34 @@ class PaperWebServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(gateway._credentials(), ("paper-key", "paper-secret"))
+
+    @patch("src.paper_web.AlpacaPaperBroker")
+    def test_local_journal_is_readable_without_broker_account(self, broker):
+        broker.return_value.account.side_effect = RuntimeError("broker offline")
+        connect = MagicMock()
+        connection = connect.return_value.__enter__.return_value
+        connection.execute.return_value.fetchall.return_value = []
+        gateway = ConfiguredPaperWebGateway("unused", connect=connect, environ={
+            "ALPACA_PAPER_KEY_ID": "key", "ALPACA_PAPER_SECRET_KEY": "secret",
+            "ALPACA_PAPER_ACCOUNT_ID": "account-A",
+        })
+        self.assertEqual(gateway.orders(), [])
+        self.assertEqual(connection.execute.call_args.args[1], ("alpaca-paper:account-A",))
+        broker.return_value.account.assert_not_called()
+        broker.return_value.submit.assert_not_called()
+
+    @patch("src.paper_web.AlpacaPaperBroker")
+    def test_account_mismatch_blocks_broker_operations(self, broker):
+        broker.return_value.account.return_value = {"id": "account-B"}
+        gateway = ConfiguredPaperWebGateway("unused", environ={
+            "ALPACA_PAPER_KEY_ID": "key", "ALPACA_PAPER_SECRET_KEY": "secret",
+            "ALPACA_PAPER_ACCOUNT_ID": "account-A", "ENABLE_PAPER_WEB_ORDERS": "true",
+        })
+        with self.assertRaises(PaperConfigurationError):
+            gateway.submit(self.intent, "SUBMIT PAPER ORDER")
+        with self.assertRaises(PaperConfigurationError):
+            gateway.recover()
+        broker.return_value.submit.assert_not_called()
 
 
 if __name__ == "__main__":

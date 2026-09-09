@@ -370,7 +370,7 @@ class ServingApiTest(unittest.TestCase):
         self.assertIn("Cancel order", page.text)
         self.assertIn("CANCEL PAPER ORDER", page.text)
         self.assertIn("paperSubmissionEnabled", page.text)
-        self.assertIn("account.paper_order_submission_enabled", page.text)
+        self.assertIn("paper_order_submission_enabled", page.text)
 
 
 if __name__ == "__main__":

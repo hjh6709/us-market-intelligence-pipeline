@@ -16,7 +16,9 @@ import psycopg
 
 from src.cpi_ingestion import DEFAULT_DATABASE_URL
 from src.live_market_smoke import _read_env_file
-from src.platform_contracts import ANALYSIS_VERSION, STRATEGY_NAME, STRATEGY_VERSION
+from src.platform_contracts import (
+    ANALYSIS_VERSION, MARKET_SOURCE, MARKET_FEED, STRATEGY_NAME, STRATEGY_VERSION,
+)
 
 
 DEFAULT_TRANSACTION_COST_BPS = Decimal("10")
@@ -124,7 +126,7 @@ def calculate_and_store(
     if normalized_symbols is not None and not normalized_symbols:
         raise ValueError("symbols must not be empty when provided")
     filters = []
-    params: list[object] = [ANALYSIS_VERSION]
+    params: list[object] = [ANALYSIS_VERSION, MARKET_SOURCE, MARKET_FEED]
     if normalized_event_ids is not None:
         filters.append("AND pre.economic_event_id = ANY(%s)")
         params.append(list(normalized_event_ids))
@@ -152,7 +154,10 @@ def calculate_and_store(
               ON post.economic_event_id = pre.economic_event_id
              AND post.symbol = pre.symbol
              AND post.analysis_version = pre.analysis_version
+             AND post.source = pre.source
+             AND post.feed = pre.feed
             WHERE pre.analysis_version = %s
+              AND pre.source = %s AND pre.feed = %s
               AND pre.window_name = 'PRE_60M'
               AND post.window_name = 'POST_60M'
               {selected_filters}

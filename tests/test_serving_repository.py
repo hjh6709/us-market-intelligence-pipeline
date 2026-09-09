@@ -62,7 +62,7 @@ class PostgresServingRepositoryTest(unittest.TestCase):
 
         sql, params = connect.connection.executions[-1]
         self.assertIn("analysis_version = %s", sql)
-        self.assertEqual(params, ("event-1", "multi_event_sip_v1"))
+        self.assertEqual(params, ("event-1", "multi_event_sip_v1", "alpaca", "sip"))
         self.assertEqual(symbols, ["NVDA", "SPY"])
 
     def test_list_events_uses_bound_parameters_for_filters(self):

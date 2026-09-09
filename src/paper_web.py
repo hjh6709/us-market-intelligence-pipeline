@@ -127,16 +127,22 @@ class ConfiguredPaperWebGateway:
         )
         return key, secret
 
-    def _service(self) -> tuple[PaperWebService, str]:
+    def _scope(self) -> str:
+        account_id = self.environ.get("ALPACA_PAPER_ACCOUNT_ID", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", account_id):
+            raise PaperConfigurationError("ALPACA_PAPER_ACCOUNT_ID must pin the local paper journal account")
+        return "alpaca-paper:" + account_id
+
+    def _service(self, *, verify_account: bool = False) -> tuple[PaperWebService, str]:
+        scope = self._scope()
         key, secret = self._credentials()
         if not key or not secret:
             raise PaperConfigurationError("dedicated paper credentials are not configured")
         broker = AlpacaPaperBroker(key, secret)
-        account = broker.account()
-        account_id = str(account.get("id", ""))
-        if not account_id:
-            raise PaperConfigurationError("paper account is unavailable")
-        scope = "alpaca-paper:" + account_id
+        if verify_account:
+            account = broker.account()
+            if scope != "alpaca-paper:" + str(account.get("id", "")):
+                raise PaperConfigurationError("configured paper account does not match broker credentials")
         enabled = self.environ.get("ENABLE_PAPER_WEB_ORDERS") == "true"
         service = PaperWebService(
             broker,
@@ -146,7 +152,7 @@ class ConfiguredPaperWebGateway:
         return service, scope
 
     def account(self):
-        service, _scope = self._service()
+        service, _scope = self._service(verify_account=True)
         return service.account()
 
     def review(self, intent: OrderIntent):
@@ -154,11 +160,11 @@ class ConfiguredPaperWebGateway:
         return service.review(intent)
 
     def submit(self, intent: OrderIntent, confirmation: str):
-        service, _scope = self._service()
+        service, _scope = self._service(verify_account=True)
         return service.submit(intent, confirmation)
 
     def recover(self):
-        service, _scope = self._service()
+        service, _scope = self._service(verify_account=True)
         return service.recover()
 
     def _load_intent(self, scope: str, request_id: str) -> OrderIntent:
@@ -176,15 +182,15 @@ class ConfiguredPaperWebGateway:
         return OrderIntent(**row["intent"])
 
     def reconcile(self, request_id: str):
-        service, scope = self._service()
+        service, scope = self._service(verify_account=True)
         return service.reconcile(self._load_intent(scope, request_id))
 
     def cancel(self, request_id: str, confirmation: str):
-        service, scope = self._service()
+        service, scope = self._service(verify_account=True)
         return service.cancel(self._load_intent(scope, request_id), confirmation)
 
     def orders(self) -> list[dict[str, Any]]:
-        _service, scope = self._service()
+        scope = self._scope()
         with self.connect(
             self.database_url, row_factory=dict_row, connect_timeout=5
         ) as connection:

@@ -75,6 +75,13 @@ class PipelineCheckView(BaseModel):
     checked_at: datetime
 
 
+class PageMetadata(BaseModel):
+    limit: int
+    offset: int
+    total: int
+    has_more: bool
+
+
 class PipelineRunDetailView(BaseModel):
     run: PipelineRunSummary
     config: dict[str, Any]
@@ -83,6 +90,8 @@ class PipelineRunDetailView(BaseModel):
     code_version: str
     work_items: list[PipelineWorkItemView]
     checks: list[PipelineCheckView]
+    work_items_page: PageMetadata
+    checks_page: PageMetadata
 
 
 class PipelineQualityGroup(BaseModel):
@@ -189,21 +198,23 @@ class PostgresPipelineRepository:
             )
             return cursor.fetchone()
 
-    def get_run(self, pipeline_run_id: str):
-        records = self.list_runs(limit=1)
-        record = next(
-            (item for item in records if item.pipeline_run_id == pipeline_run_id), None
-        )
-        if record is None:
-            # The newest run may not be the requested run; use a bounded direct query.
-            records = self._list_one(pipeline_run_id)
-            record = records[0] if records else None
+    def get_run(self, pipeline_run_id: str, *, limit=100, work_offset=0, check_offset=0):
+        records = self._list_one(pipeline_run_id)
+        record = records[0] if records else None
         if record is None:
             return None
         metadata = self.get_run_metadata(pipeline_run_id)
         if metadata is None:
             return None
-        return record, metadata, self.list_work_items(pipeline_run_id), self.list_checks(pipeline_run_id)
+        with self._connection() as connection, connection.cursor() as cursor:
+            cursor.execute("""SELECT
+                (SELECT count(*) FROM pipeline_work_items WHERE pipeline_run_id=%s),
+                (SELECT count(*) FROM pipeline_run_checks WHERE pipeline_run_id=%s)""",
+                (pipeline_run_id, pipeline_run_id))
+            totals = cursor.fetchone()
+        return (record, metadata,
+                self.list_work_items(pipeline_run_id, limit=limit, offset=work_offset),
+                self.list_checks(pipeline_run_id, limit=limit, offset=check_offset), totals)
 
     def _list_one(self, pipeline_run_id: str) -> list[PipelineRunRecord]:
         # Reuse the aggregate query while keeping the public filters intentionally small.
@@ -211,48 +222,39 @@ class PostgresPipelineRepository:
             cursor.execute(
                 """
                 SELECT r.pipeline_run_id, r.dag_id, r.status, r.started_at, r.finished_at,
-                       count(DISTINCT (w.economic_event_id, w.symbol, w.stage)),
-                       count(DISTINCT (w.economic_event_id, w.symbol, w.stage))
-                           FILTER (WHERE w.status = 'FAILED'),
-                       count(DISTINCT (c.economic_event_id, c.symbol, c.stage, c.check_name))
-                           FILTER (WHERE c.status = 'WARN'),
-                       count(DISTINCT (c.economic_event_id, c.symbol, c.stage, c.check_name))
-                           FILTER (WHERE c.status = 'FAIL'),
-                       count(DISTINCT (c.economic_event_id, c.symbol, c.stage, c.check_name))
-                           FILTER (WHERE c.alert_status = 'OPEN'),
-                       count(DISTINCT (c.economic_event_id, c.symbol, c.stage, c.check_name))
-                           FILTER (WHERE c.check_name = 'observed_bar_coverage'),
+                       (SELECT count(*) FROM pipeline_work_items WHERE pipeline_run_id=r.pipeline_run_id),
+                       (SELECT count(*) FROM pipeline_work_items WHERE pipeline_run_id=r.pipeline_run_id AND status='FAILED'),
+                       (SELECT count(*) FROM pipeline_run_checks WHERE pipeline_run_id=r.pipeline_run_id AND status='WARN'),
+                       (SELECT count(*) FROM pipeline_run_checks WHERE pipeline_run_id=r.pipeline_run_id AND status='FAIL'),
+                       (SELECT count(*) FROM pipeline_run_checks WHERE pipeline_run_id=r.pipeline_run_id AND alert_status='OPEN'),
+                       (SELECT count(*) FROM pipeline_run_checks WHERE pipeline_run_id=r.pipeline_run_id AND check_name='observed_bar_coverage'),
                        (SELECT sum(input_count) FROM pipeline_work_items WHERE pipeline_run_id=r.pipeline_run_id),
                        (SELECT sum(output_count) FROM pipeline_work_items WHERE pipeline_run_id=r.pipeline_run_id)
-                FROM pipeline_runs r
-                LEFT JOIN pipeline_work_items w USING (pipeline_run_id)
-                LEFT JOIN pipeline_run_checks c USING (pipeline_run_id)
-                WHERE r.pipeline_run_id = %s
-                GROUP BY r.pipeline_run_id
+                FROM pipeline_runs r WHERE r.pipeline_run_id = %s
                 """,
                 (pipeline_run_id,),
             )
             return [PipelineRunRecord(*row) for row in cursor.fetchall()]
 
-    def list_work_items(self, pipeline_run_id: str) -> list[PipelineWorkItemView]:
+    def list_work_items(self, pipeline_run_id: str, *, limit=100, offset=0) -> list[PipelineWorkItemView]:
         with self._connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """SELECT economic_event_id, symbol, stage, status, attempt_count,
                           input_count, output_count, error_code, error_message, updated_at
                    FROM pipeline_work_items WHERE pipeline_run_id = %s
-                   ORDER BY economic_event_id, symbol, stage LIMIT 500""",
-                (pipeline_run_id,),
+                   ORDER BY economic_event_id, symbol, stage LIMIT %s OFFSET %s""",
+                (pipeline_run_id, limit, offset),
             )
             return [PipelineWorkItemView(**dict(zip(PipelineWorkItemView.model_fields, row))) for row in cursor.fetchall()]
 
-    def list_checks(self, pipeline_run_id: str) -> list[PipelineCheckView]:
+    def list_checks(self, pipeline_run_id: str, *, limit=100, offset=0) -> list[PipelineCheckView]:
         with self._connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """SELECT economic_event_id, symbol, stage, check_name, expected_value,
                           actual_value, status, alert_status, checked_at
                    FROM pipeline_run_checks WHERE pipeline_run_id = %s
-                   ORDER BY economic_event_id, symbol, stage, check_name LIMIT 1000""",
-                (pipeline_run_id,),
+                   ORDER BY economic_event_id, symbol, stage, check_name LIMIT %s OFFSET %s""",
+                (pipeline_run_id, limit, offset),
             )
             return [PipelineCheckView(**dict(zip(PipelineCheckView.model_fields, row))) for row in cursor.fetchall()]
 
@@ -298,11 +300,14 @@ class PipelineServingService:
     def list_runs(self, **filters) -> list[PipelineRunSummary]:
         return [self._summary(item) for item in self.repository.list_runs(**filters)]
 
-    def detail(self, pipeline_run_id: str) -> PipelineRunDetailView:
-        result = self.repository.get_run(pipeline_run_id)
+    def detail(self, pipeline_run_id: str, *, limit=100, work_offset=0, check_offset=0) -> PipelineRunDetailView:
+        if not 1 <= limit <= 500 or work_offset < 0 or check_offset < 0:
+            raise ValueError("invalid detail pagination")
+        result = self.repository.get_run(pipeline_run_id, limit=limit,
+                                         work_offset=work_offset, check_offset=check_offset)
         if result is None:
             raise PipelineNotFoundError(pipeline_run_id)
-        record, metadata, work_items, checks = result
+        record, metadata, work_items, checks, totals = result
         config, config_hash, data_cutoff, code_version = metadata
         return PipelineRunDetailView(
             run=self._summary(record),
@@ -312,6 +317,8 @@ class PipelineServingService:
             code_version=code_version,
             work_items=work_items,
             checks=checks,
+            work_items_page=PageMetadata(limit=limit, offset=work_offset, total=totals[0], has_more=work_offset+len(work_items)<totals[0]),
+            checks_page=PageMetadata(limit=limit, offset=check_offset, total=totals[1], has_more=check_offset+len(checks)<totals[1]),
         )
 
     def quality(self, pipeline_run_id: str) -> PipelineQualityView:
@@ -324,6 +331,9 @@ class PipelineServingService:
 
     def lineage(self) -> PipelineLineageView:
         nodes = [
+            LineageNode(id="airflow", label="Airflow · 수집 작업 조정", plane="orchestration"),
+            LineageNode(id="run_tracking", label="pipeline_runs / work_items / checks", plane="operations"),
+            LineageNode(id="pipelines_ui", label="Pipelines UI · 실행 감사", plane="operations"),
             LineageNode(id="official_releases", label="Official economic releases", plane="data"),
             LineageNode(id="alpaca_bars", label="Alpaca SIP bars", plane="data"),
             LineageNode(id="fred_alfred", label="FRED / ALFRED", plane="data"),
@@ -337,7 +347,11 @@ class PipelineServingService:
             LineageNode(id="spark", label="Spark", plane="validation"),
         ]
         edges = [
-            LineageEdge(source="official_releases", target="market_bars", label="Airflow bounds"),
+            LineageEdge(source="official_releases", target="airflow", label="공식 발표별 범위"),
+            LineageEdge(source="airflow", target="market_bars", label="제공자 봉 수집 · 저장"),
+            LineageEdge(source="airflow", target="macro_context", label="시점 보존 거시 환경"),
+            LineageEdge(source="airflow", target="run_tracking", label="실행 · 작업 · 품질 기록"),
+            LineageEdge(source="run_tracking", target="pipelines_ui", label="읽기 전용 조회"),
             LineageEdge(source="alpaca_bars", target="market_bars"),
             LineageEdge(source="official_releases", target="macro_context"),
             LineageEdge(source="fred_alfred", target="macro_context"),
