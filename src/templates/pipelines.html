@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Pipeline Reliability Console</title>
+  <title>파이프라인 신뢰성 콘솔</title>
   <style>
     :root{color-scheme:dark;--bg:#07101b;--panel:#0d1928;--line:#223249;--text:#edf3fb;--muted:#8fa1b8;--blue:#5794ff;--green:#45c890;--amber:#e7ae52;--red:#ef6c75}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:inherit;text-decoration:none}
@@ -17,30 +17,30 @@
   </style>
 </head>
 <body>
-  <nav class="nav"><div class="brand">US EVENT INTELLIGENCE</div><a href="/overview">Overview</a><a href="/">Research</a><a class="active" href="/pipelines">Pipelines</a><a href="/paper">Paper Execution</a></nav>
+  <nav class="nav"><div class="brand">미국 경제 이벤트 인텔리전스</div><a href="/overview">개요</a><a href="/">분석</a><a class="active" href="/pipelines">파이프라인</a><a href="/paper">모의주문</a></nav>
   <main>
-    <div class="head"><div><div class="eyebrow">DATA ENGINEERING</div><h1>Pipeline Reliability Console</h1><div class="sub">Inspect durable run history, work status, checks, and project-level lineage from PostgreSQL.</div></div></div>
-    <div class="tabs"><button class="active" data-view="pipeline-overview">Overview</button><button data-view="pipeline-runs">Runs</button><button data-view="pipeline-quality">Data Quality</button><button data-view="pipeline-lineage">Lineage</button></div>
+    <div class="head"><div><div class="eyebrow">데이터 엔지니어링</div><h1>파이프라인 신뢰성 콘솔</h1><div class="sub">PostgreSQL에 기록된 실행 이력, 작업 상태, 품질 검사와 프로젝트 수준 데이터 흐름을 확인합니다.</div></div></div>
+    <div class="tabs"><button class="active" data-view="pipeline-overview">개요</button><button data-view="pipeline-runs">실행 이력</button><button data-view="pipeline-quality">데이터 품질</button><button data-view="pipeline-lineage">데이터 흐름</button></div>
 
     <section id="pipeline-overview">
       <div id="overview-metrics" class="metrics"></div>
-      <div class="grid" style="margin-top:14px"><article class="panel span12"><h2>Recent runs</h2><div id="recent-runs"></div></article></div>
+      <div class="grid" style="margin-top:14px"><article class="panel span12"><h2>최근 실행</h2><div id="recent-runs"></div></article></div>
     </section>
-    <section id="pipeline-runs" class="hidden"><article class="panel"><h2>Run history</h2><div id="all-runs"></div></article></section>
+    <section id="pipeline-runs" class="hidden"><article class="panel"><h2>전체 실행 이력</h2><div id="all-runs"></div></article></section>
     <section id="pipeline-quality" class="hidden">
-      <div class="quality-rule"><b>collection integrity</b> and <b>observed coverage</b> are separate dimensions. Sparse provider bars produce a warning, not a collection failure.</div>
-      <article class="panel"><h2>Latest run checks</h2><div id="quality-groups" class="empty">Select or load a recorded run.</div></article>
+      <div class="quality-rule"><b>수집 무결성(collection integrity)</b>과 <b>실제 관측 범위(observed coverage)</b>는 서로 다른 기준입니다. 제공자 가격 봉이 일부 비어 있으면 경고로 기록하며, 수집 실패로 바꾸지 않습니다.</div>
+      <article class="panel"><h2>최근 실행 품질 검사</h2><div id="quality-groups" class="empty">기록된 실행을 불러오는 중입니다.</div></article>
     </section>
-    <section id="pipeline-lineage" class="hidden"><article class="panel"><h2>Project-level lineage</h2><p class="sub">The Kafka/Spark branch is a bounded reliability path, not the source of the full research dataset.</p><div id="lineage-nodes" class="lineage"></div></article></section>
+    <section id="pipeline-lineage" class="hidden"><article class="panel"><h2>프로젝트 수준 데이터 흐름</h2><p class="sub">Kafka/Spark 경로는 범위가 정해진 신뢰성 검증 경로이며, 전체 분석 데이터셋의 수집 경로가 아닙니다.</p><div id="lineage-nodes" class="lineage"></div></article></section>
   </main>
   <script>
     const $=id=>document.getElementById(id);let latestRun=null;
     async function json(url){const r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}
-    const value=v=>v==null?'not recorded':Number(v).toLocaleString();
+    const value=v=>v==null?'기록 없음':Number(v).toLocaleString('ko-KR');
     const cls=s=>s==='SUCCEEDED'||s==='PASS'?'ok':s==='WARN'?'warn':'fail';
-    function table(runs){if(!runs.length)return '<div class="empty">No recorded runs.</div>';return `<table><thead><tr><th>Started</th><th>DAG</th><th>Status</th><th class="num">Work</th><th class="num">Warnings</th><th class="num">Failures</th><th class="num">Duration</th></tr></thead><tbody>${runs.map(r=>`<tr><td>${new Date(r.started_at).toLocaleString()}</td><td>${r.dag_id}</td><td class="status ${cls(r.status)}">${r.status}</td><td class="num">${value(r.work_item_count)}</td><td class="num warn">${value(r.warning_check_count)}</td><td class="num ${r.failed_check_count?'fail':''}">${value(r.failed_check_count)}</td><td class="num">${r.duration_seconds==null?'running':r.duration_seconds.toFixed(1)+'s'}</td></tr>`).join('')}</tbody></table>`}
-    async function load(){try{const [overview,lineage]=await Promise.all([json('/api/v1/pipelines/overview'),json('/api/v1/pipelines/lineage')]);latestRun=overview.latest_run;const r=latestRun;const cards=r?[['Status',r.status],['Work items',value(r.work_item_count)],['Warnings',value(r.warning_check_count)],['Failures',value(r.failed_check_count)],['Open alerts',value(r.open_alert_count)],['Quality contract',r.quality_contract]]:[['Status','No runs']];$('overview-metrics').innerHTML=cards.map(([k,v])=>`<div class="metric"><small>${k}</small><strong>${v}</strong></div>`).join('');$('recent-runs').innerHTML=table(overview.recent_runs);$('all-runs').innerHTML=table(await json('/api/v1/pipelines/runs?limit=100'));$('lineage-nodes').innerHTML=lineage.nodes.map(n=>`<div class="node">${n.label}<small>${n.plane}</small></div>`).join('');if(r){const q=await json(`/api/v1/pipelines/quality?pipeline_run_id=${encodeURIComponent(r.pipeline_run_id)}`);const legacy=r.quality_contract==='legacy-pre-separation'?'<div class="quality-rule"><b>Historical contract:</b> this run predates separate observed-coverage checks. Do not reinterpret its collection checks as current coverage.</div>':'';$('quality-groups').innerHTML=legacy+(q.groups.length?`<table><thead><tr><th>Check</th><th>Status</th><th class="num">Count</th></tr></thead><tbody>${q.groups.map(g=>`<tr><td>${g.check_name}</td><td class="${cls(g.status)}">${g.status}</td><td class="num">${g.count}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No checks recorded.</div>')}}
-      catch(e){$('overview-metrics').innerHTML=`<div class="error">Unable to read pipeline audit data: ${e.message}</div>`}}
+    function table(runs){if(!runs.length)return '<div class="empty">기록된 실행이 없습니다.</div>';return `<table><thead><tr><th>시작 시각</th><th>DAG</th><th>상태</th><th class="num">작업</th><th class="num">경고</th><th class="num">실패</th><th class="num">소요 시간</th></tr></thead><tbody>${runs.map(r=>`<tr><td>${new Date(r.started_at).toLocaleString('ko-KR')}</td><td>${r.dag_id}</td><td class="status ${cls(r.status)}">${r.status}</td><td class="num">${value(r.work_item_count)}</td><td class="num warn">${value(r.warning_check_count)}</td><td class="num ${r.failed_check_count?'fail':''}">${value(r.failed_check_count)}</td><td class="num">${r.duration_seconds==null?'실행 중':r.duration_seconds.toFixed(1)+'초'}</td></tr>`).join('')}</tbody></table>`}
+    async function load(){try{const [overview,lineage]=await Promise.all([json('/api/v1/pipelines/overview'),json('/api/v1/pipelines/lineage')]);latestRun=overview.latest_run;const r=latestRun;const cards=r?[['상태',r.status],['작업 수',value(r.work_item_count)],['경고',value(r.warning_check_count)],['실패',value(r.failed_check_count)],['미해결 알림',value(r.open_alert_count)],['품질 계약',r.quality_contract]]:[['상태','실행 없음']];$('overview-metrics').innerHTML=cards.map(([k,v])=>`<div class="metric"><small>${k}</small><strong>${v}</strong></div>`).join('');$('recent-runs').innerHTML=table(overview.recent_runs);$('all-runs').innerHTML=table(await json('/api/v1/pipelines/runs?limit=100'));$('lineage-nodes').innerHTML=lineage.nodes.map(n=>`<div class="node">${n.label}<small>${n.plane}</small></div>`).join('');if(r){const q=await json(`/api/v1/pipelines/quality?pipeline_run_id=${encodeURIComponent(r.pipeline_run_id)}`);const legacy=r.quality_contract==='legacy-pre-separation'?'<div class="quality-rule"><b>과거 품질 계약:</b> 이 실행은 관측 범위 검사를 분리하기 전 기록입니다. 당시 수집 검사를 현재 관측 범위로 재해석하지 않습니다.</div>':'';$('quality-groups').innerHTML=legacy+(q.groups.length?`<table><thead><tr><th>검사</th><th>상태</th><th class="num">건수</th></tr></thead><tbody>${q.groups.map(g=>`<tr><td>${g.check_name}</td><td class="${cls(g.status)}">${g.status}</td><td class="num">${g.count}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">기록된 검사가 없습니다.</div>')}}
+      catch(e){$('overview-metrics').innerHTML=`<div class="error">파이프라인 감사 데이터를 읽지 못했습니다: ${e.message}</div>`}}
     document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hidden',s.id!==b.dataset.view))});load();
   </script>
 </body>
