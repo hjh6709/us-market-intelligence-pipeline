@@ -1,5 +1,7 @@
 # 과제 발표 자료
 
+> 이 폴더의 기존 PPTX는 초기 과정 과제 자료입니다. 2026-09-10 최종 발표 제작 정본은 [final presentation handoff](final/PRESENTATION_TRUTH.md)이며, 실제 최종 PPTX/PDF는 다음 제작 턴에서 생성합니다.
+
 - 발표 자료: `us-market-pipeline-assignment.pptx`
 - 예상 질문: [발표 Q&A](../presentation-qa.md)
 - 실행 증거: [CPI Kafka·Spark 실행 증거](../evidence/cpi-kafka-spark/README.md)

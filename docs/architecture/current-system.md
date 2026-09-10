@@ -54,6 +54,6 @@ Paper 로컬 기록은 서버에 고정한 `ALPACA_PAPER_ACCOUNT_ID`로 읽고, 
 - Paper POST is never automatically retried; uncertain outcomes are reconciled with GET.
 - Research output never becomes a Paper order input.
 
-See the [interactive Archify diagram](../diagrams/session7-architecture.html) and the application `/pipelines` lineage panel.
+See the final-presentation [current architecture source](../presentation/final/CURRENT_ARCHITECTURE.mmd) and the application `/pipelines` lineage panel. The older Session 7 Archify artifact is historical and predates the validation-storage isolation now described here.
 
 The approved target diagram is separately published as [target-platform.html](../diagrams/target-platform.html). A target node is not evidence of current implementation; use the [current-versus-target matrix](../engineering/current-vs-target.md).

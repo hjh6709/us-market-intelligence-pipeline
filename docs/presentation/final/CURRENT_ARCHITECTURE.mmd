@@ -1,0 +1,47 @@
+flowchart LR
+  classDef source fill:#E8F0FE,stroke:#2563EB,color:#0F172A
+  classDef process fill:#F3E8FF,stroke:#7C3AED,color:#0F172A
+  classDef store fill:#E8F7F0,stroke:#059669,color:#0F172A
+  classDef product fill:#FFF7E6,stroke:#D97706,color:#0F172A
+  classDef boundary fill:#F8FAFC,stroke:#64748B,color:#334155,stroke-dasharray:5 4
+
+  subgraph R["CURRENT · Research plane"]
+    direction LR
+    OFF["Official release schedules\nBLS · BEA · Federal Reserve"]:::source
+    ALP["Alpaca provider-aggregated\nSIP bars"]:::source
+    FRED["FRED / ALFRED\nPIT macro context"]:::source
+    AIR["Airflow historical backfills\n202 event tasks · 2,020 work items"]:::process
+    RPG[("PostgreSQL research tables\nmarket_bars · macro contexts")]:::store
+    LEG["Legacy v1 event impact\nand exploratory strategy"]:::process
+    OFF --> AIR
+    ALP --> AIR
+    FRED --> AIR
+    AIR --> RPG --> LEG
+  end
+
+  subgraph V["CURRENT · Validation plane"]
+    direction LR
+    RAW["Archived Raw SIP trades\nlicensed · not committed"]:::source
+    K["Bounded Kafka replay"]:::process
+    S["Spark validation\ndedup · event-time aggregation"]:::process
+    VPG[("PostgreSQL validation-only\nimmutable run + reconstructed bars")]:::store
+    RAW --> K --> S --> VPG
+  end
+
+  subgraph P["CURRENT · Product plane"]
+    direction LR
+    REPO["Repository → Service"]:::process
+    API["FastAPI"]:::process
+    UI["Browser\nOverview · Research · Pipelines"]:::product
+    JPG[("PostgreSQL\nPaper intent journal")]:::store
+    PAPER["Manual guarded\nAlpaca Paper"]:::boundary
+    RPG --> REPO --> API --> UI
+    UI -. "manual intent" .-> API
+    API --> JPG
+    API -. "guarded submit / GET reconcile" .-> PAPER
+  end
+
+  VPG -. "comparison / evidence only" .-> RPG
+
+  NOTE["Invariant: the 202 × 10 research dataset\nwas not produced by the Raw SIP Kafka/Spark route"]:::boundary
+  VPG --- NOTE
