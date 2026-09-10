@@ -20,6 +20,8 @@ class EventSessionFoundationMigrationTest(unittest.TestCase):
             "economic_surprises",
             "trading_sessions",
             "economic_event_markers",
+            "calendar_snapshots",
+            "validation_runs",
             "validation_reconstructed_bars",
         ):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", self.sql)
@@ -98,22 +100,25 @@ class EventSessionFoundationMigrationTest(unittest.TestCase):
         ):
             self.assertIn(field, self.sql)
 
-    def test_markers_have_durable_identity_and_one_primary_role(self) -> None:
+    def test_markers_have_durable_revision_identity_and_current_primary_rule(self) -> None:
         for field in (
             "economic_event_marker_id TEXT PRIMARY KEY",
             "marker_kind TEXT NOT NULL",
             "marker_role TEXT NOT NULL",
+            "marker_revision INTEGER NOT NULL",
         ):
             self.assertIn(field, self.sql)
-        self.assertIn("economic_event_markers_one_primary", self.sql)
+        self.assertIn("VIEW current_economic_event_markers", self.sql)
+        self.assertIn("FUNCTION enforce_event_marker_revision_chain", self.sql)
+        self.assertIn("different current primary marker", self.sql)
 
     def test_validation_bars_are_physically_separate_from_research_bars(self) -> None:
-        for field in (
-            "validation_run_id TEXT NOT NULL",
-            "processor_version TEXT NOT NULL",
-            "checkpoint_namespace TEXT NOT NULL",
-        ):
+        for field in ("workload_id TEXT NOT NULL", "processor_version TEXT NOT NULL", "checkpoint_namespace TEXT NOT NULL"):
             self.assertIn(field, self.sql)
+        self.assertIn("validation_run_id TEXT NOT NULL REFERENCES validation_runs", self.sql)
+        self.assertIn("FUNCTION record_validation_run", self.sql)
+        self.assertIn("FUNCTION record_validation_reconstructed_bar", self.sql)
+        self.assertNotIn("ON CONFLICT (\n    validation_run_id", self.sql)
         self.assertIn("CREATE OR REPLACE VIEW market_bar_origin_comparison", self.sql)
 
 

@@ -172,6 +172,7 @@ def run_processor(args: argparse.Namespace) -> None:
                 postgres_bar_sink(
                     args.database_url,
                     validation_run_id=args.validation_run_id,
+                    workload_id=args.topic,
                     processor_version=PROCESSOR_VERSION,
                     checkpoint_namespace=str(bars_checkpoint),
                 )

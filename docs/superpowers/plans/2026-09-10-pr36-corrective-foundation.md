@@ -87,12 +87,12 @@
 
 **Interfaces:**
 - Provider aggregate path writes only `market_bars`.
-- Spark/raw replay path writes only `validation_reconstructed_bars` using `(validation_run_id, processor_version, symbol, bar_start, timeframe, source, feed)` identity.
+- Spark/raw replay first records immutable `validation_runs(validation_run_id, workload_id, processor_version, checkpoint_namespace, source_manifest_identity)`, then writes only append-only `validation_reconstructed_bars` using run + bar identity.
 - `market_bar_origin_comparison` is comparison-only; legacy research queries continue reading `market_bars`.
 
 - [ ] Add tests proving provider and raw-derived identities cannot overwrite one another, legacy research reads provider storage only, and validation can compare both origins.
 - [ ] Run targeted tests and record RED against the shared-table sink.
-- [ ] Split provider SQL from validation SQL, route the Spark sink to the validation table, retain a clearly deprecated compatibility function name only where existing callers require it, and update lineage labels.
+- [ ] Split provider SQL from validation recording, route Spark through the immutable run parent and append-only validation-bar function, and update lineage labels without a mutating compatibility UPSERT.
 - [ ] Run targeted tests and PostgreSQL integration tests and require zero failures.
 - [ ] If the historical DB is reachable, run the bounded `condition_policy/spark_batch_id` audit; otherwise record that historical collision was not asserted.
 

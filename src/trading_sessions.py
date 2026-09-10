@@ -79,10 +79,13 @@ class EventMarker:
     kind: MarkerKind
     role: MarkerRole
     at: datetime
+    marker_revision: int = 1
 
     def __post_init__(self) -> None:
         if not self.marker_id.strip():
             raise ValueError("marker identity must not be empty")
+        if self.marker_revision < 1:
+            raise ValueError("marker revision must be positive")
         object.__setattr__(self, "at", _normalize_aware(self.at, "marker timestamp"))
 
 
@@ -125,17 +128,29 @@ def _validated_sessions(sessions: Iterable[TradingSession]) -> tuple[TradingSess
 
 
 def _validated_markers(markers: Iterable[EventMarker]) -> tuple[EventMarker, ...]:
-    ordered = tuple(sorted(markers, key=lambda item: (item.at, item.kind.value)))
+    ordered = tuple(
+        sorted(markers, key=lambda item: (item.kind.value, item.marker_revision))
+    )
     if not ordered:
         raise ValueError("at least one event marker is required")
     if len({item.marker_id for item in ordered}) != len(ordered):
         raise ValueError("marker identity must be unique")
-    if len({item.kind for item in ordered}) != len(ordered):
-        raise ValueError("marker kind must be unique per event")
-    primary = [item for item in ordered if item.role is MarkerRole.PRIMARY]
+
+    current: list[EventMarker] = []
+    for kind in {item.kind for item in ordered}:
+        revisions = [item for item in ordered if item.kind is kind]
+        revision_numbers = [item.marker_revision for item in revisions]
+        if len(set(revision_numbers)) != len(revision_numbers):
+            raise ValueError("marker revision must be unique per event and kind")
+        if revision_numbers != list(range(1, max(revision_numbers) + 1)):
+            raise ValueError("marker revisions must form a consecutive chain")
+        current.append(max(revisions, key=lambda item: item.marker_revision))
+
+    current_markers = tuple(sorted(current, key=lambda item: (item.at, item.kind.value)))
+    primary = [item for item in current_markers if item.role is MarkerRole.PRIMARY]
     if len(primary) != 1:
         raise ValueError("event requires exactly one primary marker")
-    return ordered
+    return current_markers
 
 
 def plan_event_session(

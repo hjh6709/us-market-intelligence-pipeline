@@ -73,7 +73,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         self.assertEqual(plan.release_phase, subject.ReleasePhase.REGULAR_SESSION)
         self.assertEqual(plan.s0.session_date, date(2026, 8, 12))
 
-    def test_post_market_maps_next_session_to_reaction_s0(self) -> None:
+    def test_T22_post_market_maps_next_session_to_reaction_s0(self) -> None:
         plan = self.plan("2026-08-13T00:30:00Z")
 
         self.assertEqual(plan.release_phase, subject.ReleasePhase.POST_MARKET)
@@ -136,7 +136,16 @@ class TradingSessionPlannerTest(unittest.TestCase):
 
         self.assertEqual(plan.canonical_marker.at, aware("2026-08-12T12:30:00Z"))
 
-    def test_rejects_wrong_market_timezone(self) -> None:
+    def test_T19_rejects_unsupported_market_code(self) -> None:
+        with self.assertRaisesRegex(ValueError, "supported market code"):
+            self.session(
+                date(2026, 8, 12),
+                "2026-08-12T13:30:00Z",
+                "2026-08-12T20:00:00Z",
+                market_code="XNYS",
+            )
+
+    def test_T20_rejects_wrong_market_timezone(self) -> None:
         with self.assertRaisesRegex(ValueError, "trusted timezone"):
             self.session(
                 date(2026, 8, 12),
@@ -200,6 +209,31 @@ class TradingSessionPlannerTest(unittest.TestCase):
         self.assertEqual(plan.canonical_marker.kind, subject.MarkerKind.STATEMENT)
         self.assertEqual(len([item for item in plan.markers if item.role is subject.MarkerRole.PRIMARY]), 1)
         self.assertNotIn(subject.MarkerKind.RELEASE, {item.kind for item in plan.markers})
+
+    def test_planner_uses_latest_marker_revision_as_current_primary(self) -> None:
+        old = subject.EventMarker(
+            "event:release:v1",
+            subject.MarkerKind.RELEASE,
+            subject.MarkerRole.PRIMARY,
+            aware("2026-08-12T20:30:00Z"),
+            marker_revision=1,
+        )
+        corrected = subject.EventMarker(
+            "event:release:v2",
+            subject.MarkerKind.RELEASE,
+            subject.MarkerRole.PRIMARY,
+            aware("2026-08-12T12:30:00Z"),
+            marker_revision=2,
+        )
+
+        plan = subject.plan_event_session(
+            markers=(old, corrected),
+            sessions=self.normal_sessions(),
+            planner_version="verified_session_planner_v2",
+        )
+
+        self.assertEqual(plan.canonical_marker.marker_id, "event:release:v2")
+        self.assertEqual(plan.s0.session_date, date(2026, 8, 12))
 
     def test_rejects_two_primary_markers(self) -> None:
         markers = (

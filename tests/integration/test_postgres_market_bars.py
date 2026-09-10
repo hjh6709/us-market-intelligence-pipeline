@@ -7,7 +7,7 @@ from pathlib import Path
 import psycopg
 from pyspark.sql import functions as F
 
-from src.postgres import upsert_validation_bars
+from src.postgres import record_validation_bars
 from src.spark_session import create_local_spark
 
 
@@ -36,7 +36,10 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
 
     def setUp(self) -> None:
         with psycopg.connect(DATABASE_URL) as connection:
-            connection.execute("TRUNCATE market_bars, validation_reconstructed_bars")
+            connection.execute(
+                "TRUNCATE market_bars, validation_reconstructed_bars, validation_runs "
+                "RESTART IDENTITY CASCADE"
+            )
 
     def bars_frame(self, specs: list[tuple[str, Decimal]]):
         rows = []
@@ -83,31 +86,29 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
                 """
             ).fetchall()
 
-    def test_replay_keeps_row_count_and_later_batch_updates_value(self) -> None:
+    def record(self, frame, batch_id: int, *, run_id: str = "run:replay") -> int:
+        return record_validation_bars(
+            frame,
+            batch_id,
+            database_url=DATABASE_URL,
+            validation_run_id=run_id,
+            workload_id="raw.market-sip.v1",
+            processor_version="raw_sip_reconstruction_v1",
+            checkpoint_namespace="workload:test:v1",
+            source_manifest_identity="manifest:test:v1",
+        )
+
+    def test_replay_is_idempotent_and_different_content_conflicts(self) -> None:
         original = self.bars_frame(
             [("NVDA", Decimal("102.000000")), ("SPY", Decimal("101.500000"))]
         )
 
         self.assertEqual(
-            upsert_validation_bars(
-                original,
-                10,
-                database_url=DATABASE_URL,
-                validation_run_id="run:replay",
-                processor_version="raw_sip_reconstruction_v1",
-                checkpoint_namespace="workload:test:v1",
-            ),
+            self.record(original, 10),
             2,
         )
         self.assertEqual(
-            upsert_validation_bars(
-                original,
-                11,
-                database_url=DATABASE_URL,
-                validation_run_id="run:replay",
-                processor_version="raw_sip_reconstruction_v1",
-                checkpoint_namespace="workload:test:v1",
-            ),
+            self.record(original, 11),
             2,
         )
         self.assertEqual(len(self.read_bars()), 2)
@@ -115,21 +116,11 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         corrected = self.bars_frame(
             [("NVDA", Decimal("103.000000")), ("SPY", Decimal("101.500000"))]
         )
-        upsert_validation_bars(
-            corrected,
-            12,
-            database_url=DATABASE_URL,
-            validation_run_id="run:replay",
-            processor_version="raw_sip_reconstruction_v1",
-            checkpoint_namespace="workload:test:v1",
-        )
-
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.record(corrected, 12)
         self.assertEqual(
             self.read_bars(),
-            [
-                ("NVDA", Decimal("103.000000"), 12),
-                ("SPY", Decimal("101.500000"), 12),
-            ],
+            [("NVDA", Decimal("102.000000"), 10), ("SPY", Decimal("101.500000"), 10)],
         )
 
     def test_constraint_failure_rolls_back_entire_micro_batch(self) -> None:
@@ -138,14 +129,7 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         )
 
         with self.assertRaises(psycopg.errors.CheckViolation):
-            upsert_validation_bars(
-                invalid_batch,
-                20,
-                database_url=DATABASE_URL,
-                validation_run_id="run:invalid",
-                processor_version="raw_sip_reconstruction_v1",
-                checkpoint_namespace="workload:test:v1",
-            )
+            self.record(invalid_batch, 20, run_id="run:invalid")
 
         self.assertEqual(self.read_bars(), [])
 
@@ -153,24 +137,19 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         batch = self.bars_frame([("NVDA", Decimal("102.000000"))])
 
         with self.assertRaises(psycopg.OperationalError):
-            upsert_validation_bars(
+            record_validation_bars(
                 batch,
                 30,
                 database_url="postgresql://market:market@127.0.0.1:1/market",
                 validation_run_id="run:recovery",
+                workload_id="raw.market-sip.v1",
                 processor_version="raw_sip_reconstruction_v1",
                 checkpoint_namespace="workload:test:v1",
+                source_manifest_identity="manifest:test:v1",
             )
 
         self.assertEqual(
-            upsert_validation_bars(
-                batch,
-                30,
-                database_url=DATABASE_URL,
-                validation_run_id="run:recovery",
-                processor_version="raw_sip_reconstruction_v1",
-                checkpoint_namespace="workload:test:v1",
-            ),
+            self.record(batch, 30, run_id="run:recovery"),
             1,
         )
         self.assertEqual(self.read_bars()[0][0], "NVDA")
@@ -192,14 +171,7 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
             )
 
         raw = self.bars_frame([("NVDA", Decimal("103.000000"))])
-        upsert_validation_bars(
-            raw,
-            40,
-            database_url=DATABASE_URL,
-            validation_run_id="run:compare",
-            processor_version="raw_sip_reconstruction_v1",
-            checkpoint_namespace="workload:test:v1",
-        )
+        self.record(raw, 40, run_id="run:compare")
 
         with psycopg.connect(DATABASE_URL) as connection:
             research_close = connection.execute(

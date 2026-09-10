@@ -5,6 +5,162 @@ import src.platform_contracts as contracts
 
 
 class PlatformContractsTest(unittest.TestCase):
+    def test_T23_post_market_event_to_close_is_not_applicable(self) -> None:
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.EVENT_TO_CLOSE,
+            marker_at=datetime(2026, 8, 12, 20, 30, tzinfo=UTC),
+            release_phase="POST_MARKET",
+            s0_open=datetime(2026, 8, 13, 13, 30, tzinfo=UTC),
+            s0_close=datetime(2026, 8, 13, 20, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(
+            window.analysis_eligibility,
+            contracts.AnalysisEligibility.NOT_APPLICABLE,
+        )
+        self.assertIsNone(window.start_at)
+        self.assertIsNone(window.end_at)
+
+    def test_T24_0830_post_5m_uses_0829_close_to_0834_close(self) -> None:
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.POST_5M,
+            marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
+            release_phase="PRE_MARKET",
+            s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
+            s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(window.start_at, datetime(2026, 8, 12, 12, 29, tzinfo=UTC))
+        self.assertEqual(window.end_at, datetime(2026, 8, 12, 12, 34, tzinfo=UTC))
+        self.assertEqual((window.start_price, window.end_price), ("CLOSE", "CLOSE"))
+
+    def test_T25_release_to_open_ends_at_last_valid_pre_open_close(self) -> None:
+        reference = datetime(2026, 8, 12, 13, 29, tzinfo=UTC)
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.RELEASE_TO_OPEN,
+            marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
+            release_phase="PRE_MARKET",
+            s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
+            s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+            pre_open_reference_at=reference,
+        )
+
+        self.assertEqual(window.start_at, datetime(2026, 8, 12, 12, 29, tzinfo=UTC))
+        self.assertEqual(window.end_at, reference)
+        self.assertEqual((window.start_price, window.end_price), ("CLOSE", "CLOSE"))
+
+    def test_T26_open_gap_uses_pre_open_close_to_0930_open(self) -> None:
+        reference = datetime(2026, 8, 12, 13, 29, tzinfo=UTC)
+        open_at = datetime(2026, 8, 12, 13, 30, tzinfo=UTC)
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.OPEN_GAP,
+            marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
+            release_phase="PRE_MARKET",
+            s0_open=open_at,
+            s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+            pre_open_reference_at=reference,
+        )
+
+        self.assertEqual((window.start_at, window.end_at), (reference, open_at))
+        self.assertEqual((window.start_price, window.end_price), ("CLOSE", "OPEN"))
+
+    def test_T27_open_30m_uses_0930_open_to_0959_close(self) -> None:
+        open_at = datetime(2026, 8, 12, 13, 30, tzinfo=UTC)
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.OPEN_30M,
+            marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
+            release_phase="PRE_MARKET",
+            s0_open=open_at,
+            s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(window.start_at, open_at)
+        self.assertEqual(window.end_at, datetime(2026, 8, 12, 13, 59, tzinfo=UTC))
+        self.assertEqual((window.start_price, window.end_price), ("OPEN", "CLOSE"))
+
+    def test_T28_marker_id_is_part_of_reaction_identity(self) -> None:
+        statement = contracts.ReactionIdentity(
+            economic_event_marker_id="fomc:statement:v1",
+            symbol="SPY",
+            reaction_metric=contracts.ReactionMetric.POST_5M,
+        )
+        press = contracts.ReactionIdentity(
+            economic_event_marker_id="fomc:press:v1",
+            symbol="SPY",
+            reaction_metric=contracts.ReactionMetric.POST_5M,
+        )
+
+        self.assertNotEqual(statement, press)
+        self.assertEqual(statement.reaction_metric, press.reaction_metric)
+
+    def test_T29_normal_quality_success_without_reason_is_valid(self) -> None:
+        assessment = contracts.QualityAssessment(
+            work_item_outcome=contracts.WorkItemOutcome.SUCCEEDED,
+            market_interval_type=contracts.MarketIntervalType.REGULAR,
+            coverage_status=contracts.CoverageStatus.COMPLETE,
+            analysis_eligibility=contracts.AnalysisEligibility.ELIGIBLE,
+            reason_code=None,
+            reason_detail=None,
+        )
+
+        self.assertTrue(assessment.analysis_allowed)
+
+    def test_T30_data_not_available_with_complete_coverage_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "data-not-available.*complete"):
+            contracts.QualityAssessment(
+                work_item_outcome=contracts.WorkItemOutcome.DATA_NOT_AVAILABLE,
+                market_interval_type=contracts.MarketIntervalType.REGULAR,
+                coverage_status=contracts.CoverageStatus.COMPLETE,
+                analysis_eligibility=contracts.AnalysisEligibility.INSUFFICIENT_DATA,
+                reason_code=contracts.ReasonCode.SOURCE_NOT_PUBLISHED,
+                reason_detail="not published",
+            )
+
+    def test_T31_skipped_work_item_cannot_be_eligible(self) -> None:
+        with self.assertRaisesRegex(ValueError, "skipped work item"):
+            contracts.QualityAssessment(
+                work_item_outcome=contracts.WorkItemOutcome.SKIPPED,
+                market_interval_type=contracts.MarketIntervalType.REGULAR,
+                coverage_status=contracts.CoverageStatus.NO_OBSERVATIONS,
+                analysis_eligibility=contracts.AnalysisEligibility.ELIGIBLE,
+                reason_code=contracts.ReasonCode.NOT_YET_MATURE,
+                reason_detail="deferred",
+            )
+
+    def test_quality_rejects_remaining_non_negotiable_invalid_states(self) -> None:
+        with self.assertRaisesRegex(ValueError, "data-not-available.*eligible"):
+            contracts.QualityAssessment(
+                contracts.WorkItemOutcome.DATA_NOT_AVAILABLE,
+                contracts.MarketIntervalType.REGULAR,
+                contracts.CoverageStatus.NO_OBSERVATIONS,
+                contracts.AnalysisEligibility.ELIGIBLE,
+                contracts.ReasonCode.PROVIDER_SAFETY_LAG,
+                "lag",
+            )
+        with self.assertRaisesRegex(ValueError, "requires eligible_at"):
+            contracts.QualityAssessment(
+                contracts.WorkItemOutcome.SUCCEEDED,
+                contracts.MarketIntervalType.REGULAR,
+                contracts.CoverageStatus.PARTIAL,
+                contracts.AnalysisEligibility.NOT_YET_MATURE,
+                contracts.ReasonCode.NOT_YET_MATURE,
+                "future endpoint",
+            )
+        with self.assertRaisesRegex(ValueError, "eligible_at cannot be in the future"):
+            contracts.QualityAssessment(
+                contracts.WorkItemOutcome.SUCCEEDED,
+                contracts.MarketIntervalType.REGULAR,
+                contracts.CoverageStatus.COMPLETE,
+                contracts.AnalysisEligibility.ELIGIBLE,
+                None,
+                None,
+                eligible_at=datetime(2026, 8, 13, tzinfo=UTC),
+                assessed_at=datetime(2026, 8, 12, tzinfo=UTC),
+            )
+
+    def test_early_close_is_not_a_market_interval_type(self) -> None:
+        self.assertNotIn("EARLY_CLOSE", {item.value for item in contracts.MarketIntervalType})
+
     def test_good_friday_has_no_observations_and_metric_is_not_applicable(self) -> None:
         assessment = contracts.QualityAssessment(
             work_item_outcome=contracts.WorkItemOutcome.SUCCEEDED,

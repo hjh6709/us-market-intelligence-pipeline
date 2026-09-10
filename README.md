@@ -71,7 +71,8 @@ flowchart LR
   end
 
   subgraph Product[Product plane]
-    PG[(PostgreSQL)]
+    PG[(PostgreSQL research/serving tables)]
+    VPG[(PostgreSQL validation-only tables)]
     A[Versioned impact analysis]
     API[FastAPI serving layer]
     UI[Overview · Research · Pipelines]
@@ -81,7 +82,7 @@ flowchart LR
   end
 
   AF --> PG
-  S --> PG
+  S --> VPG
 ```
 
 핵심 데이터 계약은 다음과 같습니다.
@@ -107,7 +108,7 @@ API·pagination·요청 범위가 정상 종료된 성긴 bar 응답은 수집 �
 - source/feed/version을 명시한 시장 데이터와 분석 결과 보존
 - 시장 데이터 Airflow 실행·work item·품질 검사·alert를 durable telemetry로 기록
 - Kafka/Spark 원시 체결 검증과 분석용 provider-bar 경로의 의미 분리
-- PostgreSQL business key와 upsert로 재실행 중복 방지
+- legacy curated table은 business key/upsert로, normalized fact와 validation evidence는 append-only idempotency/conflict로 재실행 의미 보존
 - 저장 결과를 FastAPI와 웹 UI로 실제 조회
 - 연구 신호, 과거 시뮬레이션, 주문 행동을 서로 다른 계약으로 유지
 
@@ -248,12 +249,17 @@ RUN_POSTGRES_INTEGRATION=1 \
 | `macro_event_impacts` | event·symbol·window 연구 결과 | source·feed·analysis version 포함 |
 | `event_strategy_results` | 기준 전략 관측 | strategy name·version 포함 |
 | `paper_order_intents` | Paper 주문 intent와 상태 | account scope·request ID |
-| `economic_release_observations` | 공식 값의 append-only revision foundation | event·metric·revision·observed time |
-| `economic_consensus_snapshots` | point-in-time consensus foundation | event·metric·provider·observed time |
+| `canonical_economic_events` / `economic_event_lifecycle_versions` | canonical event identity와 append-only 상태 revision foundation | event / event·lifecycle version |
+| `economic_observation_registry` | 정확한 event·observation·unit ontology | observation code |
+| `economic_release_observations` | 공식 값의 append-only revision foundation | event·observation code·revision |
+| `economic_consensus_snapshots` | provider-local point-in-time consensus foundation | event·observation code·provider·snapshot time |
 | `economic_surprises` | actual/consensus 입력을 참조하는 파생 foundation | actual observation·consensus·algorithm version |
-| `trading_sessions` / `economic_event_markers` | verified calendar·marker foundation | exchange·session date·calendar version / event·kind·time |
+| `calendar_snapshots` / `trading_sessions` | immutable market-calendar generation과 session foundation | snapshot / snapshot·session date |
+| `economic_event_markers` | append-only marker revisions와 current primary foundation | event·kind·revision |
+| `validation_runs` | immutable raw-validation execution lineage | validation run ID |
+| `validation_reconstructed_bars` | raw-derived append-only validation bars | run·symbol·start·timeframe·source·feed |
 
-마지막 네 foundation 테이블은 이번에 schema만 추가했습니다. 공식-source ingestion, backfill, 새 reaction 계산 및 UI 연결은 아직 구현하지 않았습니다.
+Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 production adapter, backfill, v2 reaction 계산, UI 연결은 아직 구현하지 않았습니다. `validation_runs`와 `validation_reconstructed_bars`는 현재 raw-SIP Spark sink가 사용하지만 연구용 `market_bars` 및 serving과 물리적으로 분리됩니다. 자세한 현재/target 구분은 [current-vs-target](docs/engineering/current-vs-target.md)을 따릅니다.
 
 ## 다음 단계
 

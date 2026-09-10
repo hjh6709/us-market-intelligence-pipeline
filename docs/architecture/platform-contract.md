@@ -1,6 +1,6 @@
 # Economic Event Intelligence & Strategy Validation Platform contract
 
-Status: canonical target contract. Baseline revision: `63633a50c85c88e507be458067ecf6706220f813` (2026-09-10). Corrective artifact revision is recorded in the dated verification receipt after commit.
+Status: canonical contract. Its migration/pure-contract subset is implemented as a **foundation only**; adapters, backfill, v2 reaction calculation, and serving integration remain target-only. Baseline revision: `63633a50c85c88e507be458067ecf6706220f813` (2026-09-10). The final corrective revision is recorded in the dated verification receipt.
 
 This document defines the approved destination. It does not claim that every component is implemented. For implementation truth, read [current-system.md](current-system.md) and [current-vs-target.md](../engineering/current-vs-target.md). Dated evidence remains true only for the run it records.
 
@@ -35,14 +35,14 @@ Interactive target diagram: [target-platform.html](../diagrams/target-platform.h
 
 ## Hard invariants
 
-1. Official actual values and external consensus snapshots are separate records with source-appropriate timestamps. Provider display labels are mapped to canonical `observation_code` values and units.
-2. An upcoming canonical event can exist with `scheduled_at`, nullable `released_at`, and an append-only lifecycle version. Legacy `economic_events` fields remain compatibility-only.
-3. Release observations are append-only by deterministic `(event, observation_code, revision)` identity. `published_at`, `first_observed_at`, and `ingested_at` are not interchangeable.
-4. Canonical event-time surprise uses the initial official observation and latest valid external consensus strictly before the event's primary marker, with identical units and verified arithmetic.
-5. `S0` is the first regular trading session able to absorb the primary marker. Post-market and closed-day releases use the next session; FOMC `STATEMENT` is primary and `PRESS_CONFERENCE` is secondary.
+1. Canonical event type is exactly `CPI | EMPLOYMENT | PCE | FOMC`; official observations and consensus must satisfy the exact event/code/unit ontology in [data-contracts.md](data-contracts.md).
+2. Lifecycle and marker corrections are append-only consecutive revisions. Current means the highest valid revision; old facts are never updated.
+3. Release observation identity is `(event, observation_code, revision_number)`. Polling time is excluded; conflicting revision type, value, unit, publication time, source, source revision, or payload hash is rejected.
+4. Consensus selection takes an explicit provider and chooses that provider's latest snapshot strictly before the current primary marker. Canonical surprise uses an initial official observation, exact unit/arithmetic, and keeps standardized surprise null.
+5. `S0` is the first regular trading session able to absorb the current primary marker. Post-market and closed-day releases use the next session; FOMC statement and press conference keep distinct marker identities.
 6. Run outcome, work-item outcome, session/interval type, coverage, analysis eligibility, reason code, and per-metric maturity are distinct semantics.
 7. Reaction metrics declare category, marker, endpoints, prices, clipping, tolerance, maturity, applicability and version. Legacy `PRE_60M`/`POST_*` outputs remain legacy baselines.
-8. Provider-aggregated research bars live in `market_bars`; raw-derived validation bars live in `validation_reconstructed_bars`. Research serving reads the former only.
+8. Provider-aggregated research bars live in `market_bars`; raw-derived validation bars live in `validation_reconstructed_bars`. Immutable `validation_runs` freezes run/process/checkpoint lineage. Research serving reads provider bars only.
 9. Raw provider payloads and raw trade archives are immutable; Kafka is transport, not source of truth.
 10. PostgreSQL curated writes use deterministic business keys. This is not a blanket exactly-once guarantee.
 11. Research hypotheses, simulations and Paper experiments have different identifiers and lifecycles.

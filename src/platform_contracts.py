@@ -1,7 +1,7 @@
 """Stable legacy identities and corrected target foundation contracts."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 MARKET_SOURCE = "alpaca"
@@ -38,7 +38,6 @@ class SessionDayType(StrEnum):
 class MarketIntervalType(StrEnum):
     REGULAR = "REGULAR"
     EXTENDED = "EXTENDED"
-    EARLY_CLOSE = "EARLY_CLOSE"
     CLOSED = "CLOSED"
 
 
@@ -142,16 +141,16 @@ def _definition(
 REACTION_METRIC_DEFINITIONS = {
     metric: definition
     for metric, definition in (
-        (ReactionMetric.POST_1M, _definition(ReactionMetric.POST_1M, "ANNOUNCEMENT", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "MARKER_PLUS_1M_BAR_END")),
-        (ReactionMetric.POST_5M, _definition(ReactionMetric.POST_5M, "ANNOUNCEMENT", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "MARKER_PLUS_5M_BAR_END")),
-        (ReactionMetric.POST_15M, _definition(ReactionMetric.POST_15M, "ANNOUNCEMENT", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "MARKER_PLUS_15M_BAR_END")),
-        (ReactionMetric.POST_30M, _definition(ReactionMetric.POST_30M, "ANNOUNCEMENT", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "MARKER_PLUS_30M_BAR_END")),
-        (ReactionMetric.POST_60M, _definition(ReactionMetric.POST_60M, "ANNOUNCEMENT", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "MARKER_PLUS_60M_BAR_END")),
-        (ReactionMetric.RELEASE_TO_OPEN, _definition(ReactionMetric.RELEASE_TO_OPEN, "SESSION_OPEN", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "S0_REGULAR_OPEN", end_price="OPEN", applicability="PRIMARY_MARKER_BEFORE_S0_OPEN")),
+        (ReactionMetric.POST_1M, _definition(ReactionMetric.POST_1M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_MINUTE_BAR_CLOSE")),
+        (ReactionMetric.POST_5M, _definition(ReactionMetric.POST_5M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_4M_BAR_CLOSE")),
+        (ReactionMetric.POST_15M, _definition(ReactionMetric.POST_15M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_14M_BAR_CLOSE")),
+        (ReactionMetric.POST_30M, _definition(ReactionMetric.POST_30M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_29M_BAR_CLOSE")),
+        (ReactionMetric.POST_60M, _definition(ReactionMetric.POST_60M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_59M_BAR_CLOSE")),
+        (ReactionMetric.RELEASE_TO_OPEN, _definition(ReactionMetric.RELEASE_TO_OPEN, "SESSION_OPEN", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "LAST_VALID_PRE_OPEN_REFERENCE", applicability="PRE_MARKET_WITH_VALID_PRE_OPEN_REFERENCE")),
         (ReactionMetric.OPEN_GAP, _definition(ReactionMetric.OPEN_GAP, "SESSION_OPEN", "S0_OPEN", "LAST_VALID_PRE_OPEN_REFERENCE", "FIRST_S0_REGULAR_BAR", end_price="OPEN", applicability="VALID_PRE_OPEN_REFERENCE_REQUIRED")),
-        (ReactionMetric.OPEN_30M, _definition(ReactionMetric.OPEN_30M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR", "S0_OPEN_PLUS_30M_BAR_END", start_price="OPEN")),
-        (ReactionMetric.OPEN_60M, _definition(ReactionMetric.OPEN_60M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR", "S0_OPEN_PLUS_60M_BAR_END", start_price="OPEN")),
-        (ReactionMetric.EVENT_TO_CLOSE, _definition(ReactionMetric.EVENT_TO_CLOSE, "SESSION", "PRIMARY", "LAST_COMPLETED_BAR_BEFORE_MARKER", "S0_REGULAR_CLOSE", applicability="PRIMARY_MARKER_NOT_AFTER_S0_CLOSE")),
+        (ReactionMetric.OPEN_30M, _definition(ReactionMetric.OPEN_30M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR_OPEN", "S0_OPEN_PLUS_29M_BAR_CLOSE", start_price="OPEN")),
+        (ReactionMetric.OPEN_60M, _definition(ReactionMetric.OPEN_60M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR_OPEN", "S0_OPEN_PLUS_59M_BAR_CLOSE", start_price="OPEN")),
+        (ReactionMetric.EVENT_TO_CLOSE, _definition(ReactionMetric.EVENT_TO_CLOSE, "SESSION", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "S0_REGULAR_CLOSE", applicability="PRE_MARKET_OR_REGULAR_SESSION_ONLY")),
         (ReactionMetric.SESSION_RETURN_S0, _definition(ReactionMetric.SESSION_RETURN_S0, "SESSION", "S0_OPEN", "S0_REGULAR_OPEN", "S0_REGULAR_CLOSE", start_price="OPEN")),
         (ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, "PERSISTENCE", "S0_CLOSE", "S0_REGULAR_CLOSE", "S_PLUS_1_REGULAR_CLOSE", maturity="S_PLUS_1_CLOSE_AVAILABLE")),
         (ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, "PERSISTENCE", "S0_CLOSE", "S0_REGULAR_CLOSE", "S_PLUS_3_REGULAR_CLOSE", maturity="S_PLUS_3_CLOSE_AVAILABLE")),
@@ -165,23 +164,151 @@ REACTION_METRIC_DEFINITIONS = {
 
 
 @dataclass(frozen=True)
+class ReactionIdentity:
+    economic_event_marker_id: str
+    symbol: str
+    reaction_metric: ReactionMetric
+    metric_contract_version: str = REACTION_METRIC_VERSION
+
+    def __post_init__(self) -> None:
+        if not self.economic_event_marker_id.strip() or not self.symbol.strip():
+            raise ValueError("reaction identity requires marker and symbol")
+        if self.metric_contract_version != REACTION_METRIC_VERSION:
+            raise ValueError("reaction identity requires the canonical metric contract")
+
+
+@dataclass(frozen=True)
+class ReactionWindow:
+    start_at: datetime | None
+    end_at: datetime | None
+    start_price: str | None
+    end_price: str | None
+    analysis_eligibility: AnalysisEligibility
+
+
+def resolve_reaction_window(
+    metric: ReactionMetric,
+    *,
+    marker_at: datetime,
+    release_phase: str,
+    s0_open: datetime,
+    s0_close: datetime,
+    pre_open_reference_at: datetime | None = None,
+) -> ReactionWindow:
+    """Resolve exact one-minute endpoint semantics without reading market data."""
+    instants = (marker_at, s0_open, s0_close)
+    if any(item.tzinfo is None or item.utcoffset() is None for item in instants):
+        raise ValueError("reaction window instants must be timezone-aware")
+    if s0_open >= s0_close:
+        raise ValueError("S0 open must precede S0 close")
+    if pre_open_reference_at is not None and (
+        pre_open_reference_at.tzinfo is None
+        or pre_open_reference_at.utcoffset() is None
+    ):
+        raise ValueError("pre-open reference must be timezone-aware")
+
+    post_minutes = {
+        ReactionMetric.POST_1M: 0,
+        ReactionMetric.POST_5M: 4,
+        ReactionMetric.POST_15M: 14,
+        ReactionMetric.POST_30M: 29,
+        ReactionMetric.POST_60M: 59,
+    }
+    if metric in post_minutes:
+        return ReactionWindow(
+            marker_at - timedelta(minutes=1),
+            marker_at + timedelta(minutes=post_minutes[metric]),
+            "CLOSE",
+            "CLOSE",
+            AnalysisEligibility.ELIGIBLE,
+        )
+    if metric is ReactionMetric.EVENT_TO_CLOSE:
+        if release_phase in {"POST_MARKET", "MARKET_CLOSED"}:
+            return ReactionWindow(
+                None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
+            )
+        return ReactionWindow(
+            marker_at - timedelta(minutes=1),
+            s0_close,
+            "CLOSE",
+            "CLOSE",
+            AnalysisEligibility.ELIGIBLE,
+        )
+    if metric in {ReactionMetric.RELEASE_TO_OPEN, ReactionMetric.OPEN_GAP}:
+        if release_phase != "PRE_MARKET" or pre_open_reference_at is None:
+            return ReactionWindow(
+                None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
+            )
+        if not marker_at <= pre_open_reference_at < s0_open:
+            raise ValueError("pre-open reference must be between marker and S0 open")
+        if metric is ReactionMetric.RELEASE_TO_OPEN:
+            return ReactionWindow(
+                marker_at - timedelta(minutes=1),
+                pre_open_reference_at,
+                "CLOSE",
+                "CLOSE",
+                AnalysisEligibility.ELIGIBLE,
+            )
+        return ReactionWindow(
+            pre_open_reference_at,
+            s0_open,
+            "CLOSE",
+            "OPEN",
+            AnalysisEligibility.ELIGIBLE,
+        )
+    if metric in {ReactionMetric.OPEN_30M, ReactionMetric.OPEN_60M}:
+        offset = 29 if metric is ReactionMetric.OPEN_30M else 59
+        end_at = s0_open + timedelta(minutes=offset)
+        if end_at > s0_close:
+            return ReactionWindow(
+                None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
+            )
+        return ReactionWindow(
+            s0_open,
+            end_at,
+            "OPEN",
+            "CLOSE",
+            AnalysisEligibility.ELIGIBLE,
+        )
+    raise ValueError(f"exact instant resolution is not defined for {metric.value}")
+
+
+@dataclass(frozen=True)
 class QualityAssessment:
     work_item_outcome: WorkItemOutcome
     market_interval_type: MarketIntervalType
     coverage_status: CoverageStatus
     analysis_eligibility: AnalysisEligibility
-    reason_code: ReasonCode
-    reason_detail: str
+    reason_code: ReasonCode | None = None
+    reason_detail: str | None = None
     eligible_at: datetime | None = None
+    assessed_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if not self.reason_detail.strip():
-            raise ValueError("quality assessment requires reason_detail")
+        if (self.reason_code is None) != (self.reason_detail is None):
+            raise ValueError("reason_code and reason_detail must be supplied together")
+        if self.reason_detail is not None and not self.reason_detail.strip():
+            raise ValueError("quality assessment reason_detail must not be empty")
         if (
             self.work_item_outcome is WorkItemOutcome.FAILED
             and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
         ):
             raise ValueError("failed work item cannot be analysis eligible")
+        if (
+            self.work_item_outcome is WorkItemOutcome.DATA_NOT_AVAILABLE
+            and self.coverage_status is CoverageStatus.COMPLETE
+        ):
+            raise ValueError("data-not-available work item cannot have complete coverage")
+        if (
+            self.work_item_outcome is WorkItemOutcome.DATA_NOT_AVAILABLE
+            and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
+        ):
+            raise ValueError("data-not-available work item cannot be eligible")
+        if (
+            self.work_item_outcome is WorkItemOutcome.SKIPPED
+            and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
+        ):
+            raise ValueError("skipped work item cannot be eligible")
         if (
             self.analysis_eligibility is AnalysisEligibility.NOT_YET_MATURE
             and self.eligible_at is None
@@ -191,6 +318,18 @@ class QualityAssessment:
             self.eligible_at.tzinfo is None or self.eligible_at.utcoffset() is None
         ):
             raise ValueError("eligible_at must be timezone-aware")
+        if self.assessed_at is not None and (
+            self.assessed_at.tzinfo is None or self.assessed_at.utcoffset() is None
+        ):
+            raise ValueError("assessed_at must be timezone-aware")
+        if (
+            self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
+            and self.eligible_at is not None
+        ):
+            if self.assessed_at is None:
+                raise ValueError("eligible assessment with eligible_at requires assessed_at")
+            if self.eligible_at > self.assessed_at:
+                raise ValueError("eligible_at cannot be in the future for eligible analysis")
 
     @property
     def work_item_succeeded(self) -> bool:

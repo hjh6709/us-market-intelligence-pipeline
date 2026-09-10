@@ -1,73 +1,74 @@
 # Research and validation contracts
 
-Status: target contract. The complete vocabulary and planner are foundation code only; current stored impact rows remain legacy metrics and are not reinterpreted.
+Status: **foundation implemented, reaction calculation not implemented**. `src/platform_contracts.py` and `src/trading_sessions.py` enforce the vocabulary and pure planning semantics below. Current stored impact rows remain legacy `multi_event_sip_v1` results and are never renamed into v2.
 
 ## Event-session model
 
-Each target research unit binds an event, symbol, exact primary/secondary marker IDs, verified calendar snapshot, `S-1/S0/S+N`, provider-aggregate source/feed and metric-specific quality decision. All persisted instants are UTC; exchange-local time determines business semantics.
+The canonical market is `US_EQUITIES` in `America/New_York`. `S0` is the first session able to absorb the current primary marker:
 
-`S0` is the first regular trading session that can absorb the primary marker. Premarket and regular-session releases use the same-day session. Post-market and market-closed releases use the next session. `release_calendar_date` and nullable `release_day_session` are preserved separately.
+| Release phase | Reaction S0 |
+| --- | --- |
+| `PRE_MARKET` | same-day session |
+| `REGULAR_SESSION` | same-day session |
+| `POST_MARKET` | next trading session |
+| `MARKET_CLOSED` | next trading session |
+
+Early close is a session-day property. Market interval is only `REGULAR`, `EXTENDED`, or `CLOSED`. A marker correction is a new revision; the planner uses the latest revision and preserves marker identity in downstream reaction identity.
 
 ## Reaction metric contract v2
 
-Target announcement metrics: `POST_1M`, `POST_5M`, `POST_15M`, `POST_30M`, `POST_60M`.
+Every v2 reaction identity includes `(economic_event_marker_id, symbol, reaction_metric, metric_contract_version)`. Therefore an FOMC statement and press conference can each have `POST_5M` without inventing secondary-marker metric names.
 
-Target session/open metrics: `RELEASE_TO_OPEN`, `OPEN_GAP`, `OPEN_30M`, `OPEN_60M`, `EVENT_TO_CLOSE`, `SESSION_RETURN_S0`.
+All definitions use `event_session_reaction_v2`, endpoint tolerance 60 seconds, and `NO_CROSS_SESSION_FILL`. `CLOSE`/`OPEN` below are the required price fields.
 
-Target persistence metrics: `S0_CLOSE_TO_S+1_CLOSE`, `S0_CLOSE_TO_S+3_CLOSE`, `S0_CLOSE_TO_S+7_CLOSE`.
+| Metric | Exact start -> end | Applicability / maturity |
+| --- | --- | --- |
+| `POST_1M` | marker−1m bar `CLOSE` -> marker-minute bar `CLOSE` | both endpoints required |
+| `POST_5M` | marker−1m bar `CLOSE` -> marker+4m bar `CLOSE` | both endpoints required |
+| `POST_15M` | marker−1m bar `CLOSE` -> marker+14m bar `CLOSE` | both endpoints required |
+| `POST_30M` | marker−1m bar `CLOSE` -> marker+29m bar `CLOSE` | both endpoints required |
+| `POST_60M` | marker−1m bar `CLOSE` -> marker+59m bar `CLOSE` | both endpoints required |
+| `RELEASE_TO_OPEN` | marker−1m bar `CLOSE` -> last valid pre-open reference `CLOSE` | pre-market with valid reference |
+| `OPEN_GAP` | last valid pre-open reference `CLOSE` -> first S0 regular bar `OPEN` | valid pre-open reference required |
+| `OPEN_30M` | first S0 regular bar `OPEN` -> S0 open+29m bar `CLOSE` | both endpoints required |
+| `OPEN_60M` | first S0 regular bar `OPEN` -> S0 open+59m bar `CLOSE` | both endpoints required |
+| `EVENT_TO_CLOSE` | marker−1m bar `CLOSE` -> S0 regular close `CLOSE` | pre-market/regular only; post-market/closed is `NOT_APPLICABLE` |
+| `SESSION_RETURN_S0` | S0 regular open `OPEN` -> S0 regular close `CLOSE` | both endpoints required |
+| `S0_CLOSE_TO_S+1_CLOSE` | S0 regular close `CLOSE` -> S+1 regular close `CLOSE` | matures at S+1 close |
+| `S0_CLOSE_TO_S+3_CLOSE` | S0 regular close `CLOSE` -> S+3 regular close `CLOSE` | matures at S+3 close |
+| `S0_CLOSE_TO_S+7_CLOSE` | S0 regular close `CLOSE` -> S+7 regular close `CLOSE` | matures at S+7 close |
+| `EVENT_VOLUME_RATIO` | event-window `VOLUME` / reference-window `VOLUME` | reference window required |
+| `OPEN_60M_VOLUME_RATIO` | S0 opening-60m `VOLUME` / reference opening-60m `VOLUME` | reference window required |
+| `EVENT_REALIZED_VOL` | event-window returns -> realized volatility | minimum return count required |
+| `EVENT_VOLATILITY_RATIO` | event realized volatility / reference realized volatility | reference window required |
 
-Target activity metrics: `EVENT_VOLUME_RATIO`, `OPEN_60M_VOLUME_RATIO`, `EVENT_REALIZED_VOL`, `EVENT_VOLATILITY_RATIO`.
+For an 08:30 ET release, the POST endpoints are exactly 08:29→08:30, 08:29→08:34, 08:29→08:44, 08:29→08:59, and 08:29→09:29. For a 09:30 open, `OPEN_30M` ends at 09:59 and `OPEN_60M` at 10:29. Missing endpoints are not filled across sessions.
 
-Pre-event drift is context, not event reaction. Legacy `PRE_60M`, `POST_5M`, `POST_30M`, and `POST_60M` rows retain their original `multi_event_sip_v1` definitions and evidence.
+Pre-event drift is context, not reaction. Legacy `PRE_60M`, `POST_5M`, `POST_30M`, and `POST_60M` retain their recorded v1 definitions.
 
-Every v2 definition in `REACTION_METRIC_DEFINITIONS` declares category, anchor marker, start/end endpoints, start/end price, session clipping, endpoint tolerance, maturity, applicability and `event_session_reaction_v2`. Examples:
+## Quality state contract
 
-```text
-POST_5M
-start = last completed bar strictly before primary marker, CLOSE
-end   = bar ending at marker + 5 minutes, CLOSE
-
-OPEN_GAP
-start = last valid pre-open/premarket reference, CLOSE
-end   = first regular-session bar, OPEN
-
-S0_CLOSE_TO_S+1_CLOSE
-start = S0 regular close, CLOSE
-end   = S+1 regular close, CLOSE
-```
-
-Metric readiness is evaluated separately. On a closed day, a same-session immediate metric may be `NOT_APPLICABLE`, while an S0 persistence metric can mature after the next trading session. Future S+7 is `NOT_YET_MATURE` with `eligible_at`; provider safety lag is `DATA_NOT_AVAILABLE`, not missing coverage.
-
-## Point-in-time macro features and regimes
-
-The target layers remain `PIT observations -> PIT features -> macro regimes`. Historical eligibility uses source-time/vintage semantics such as official `published_at` or FRED/ALFRED `realtime_start`, never backfill `first_observed_at` alone. The current event's newly released value cannot enter its own `PRE_EVENT` regime. Daily FRED context is not intraday market state.
-
-Persist `pit_selection_version`, `macro_feature_version`, and `macro_regime_version`. Initial explainable dimensions are inflation, labor, policy-rate direction, 2s10s curve and volatility percentile/state. Unsupported risk-on/risk-off or restrictive/accommodative labels are prohibited.
-
-## Comparable events
-
-Canonical v1 is deterministic filtering, not forced top-k nearest neighbors:
+This normal state is valid and requires no reason:
 
 ```text
-L0 same event type
-L1 + same observation code
-L2 + same surprise direction
-L3 + surprise magnitude bucket
-L4 + selected macro-regime dimensions
-L5 + same release/session relation
-L6 + confound/overlap policy
+SUCCEEDED + REGULAR + COMPLETE + ELIGIBLE + reason=None
 ```
 
-Persist requested and effective criteria, explicit relaxation steps, candidate/eligible counts, selected members, match rationale, sample count, distribution statistics and version. Never silently relax or use top-k to manufacture sample size. Default interpretation is N>=10 descriptive, 5<=N<10 `LIMITED_SAMPLE`, and N<5 `INSUFFICIENT_SAMPLE`. Similarity is descriptive, not causal.
+These states are invalid:
 
-## Hypotheses and historical simulation
+```text
+FAILED + ELIGIBLE
+DATA_NOT_AVAILABLE + COMPLETE
+DATA_NOT_AVAILABLE + ELIGIBLE
+SKIPPED + ELIGIBLE
+NOT_YET_MATURE without eligible_at
+ELIGIBLE while eligible_at is later than assessed_at
+```
 
-A strategy hypothesis freezes inputs, signal rule, entry/exit markers, universe, quality rules, cost model and version before evaluation. If a signal needs bar N's close, earliest execution is the next eligible bar's open. Simulation evidence records signal time, target/actual entry and exit, prices, gross return, costs, net return, MAE, MFE, simulation version and cost-model version.
+Reason code and detail are either both absent or both present. Closed-day and sparse-extended-hours outcomes remain explicit; provider safety lag is availability, not coverage. Metric maturity is per metric, so `POST_5M` may be eligible while S+7 remains `NOT_YET_MATURE`.
 
-Time-split validation is mandatory before predictive or Paper-eligible promotion. Exploratory descriptive simulation may exist without predictive claims. The existing negative legacy strategy result remains historical evidence and is not upgraded to target simulation.
+## Target-only research layers
 
-## Corporate actions and interpretation
+PIT macro features/regimes, comparable-event computation, hypothesis registry, and historical simulation remain target-only. Future implementations must use source-time/vintage semantics, deterministic comparable relaxation, next-eligible-bar execution after a close-based signal, explicit cost models, and time-split validation. They are not implemented by migration 009.
 
-Provider historical requests currently use raw adjustment. Target S+1/S+3/S+7 individual-stock persistence keeps raw source prices but flags or excludes samples materially affected by splits, dividends or other corporate actions. Raw close-to-close returns are not universally clean across such events.
-
-Event association is not causation. Results are not expected returns, portfolio returns or investment advice.
+Corporate-action handling is also target-only. Event association is not causation, and research results are not expected returns, portfolio returns, or investment advice.

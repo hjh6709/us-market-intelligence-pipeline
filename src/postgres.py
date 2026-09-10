@@ -28,33 +28,13 @@ MARKET_BAR_COLUMNS = (
     "condition_policy",
 )
 
-UPSERT_VALIDATION_BAR_SQL = """
-INSERT INTO validation_reconstructed_bars (
-    validation_run_id, processor_version, checkpoint_namespace,
-    symbol, bar_start, timeframe, open, high, low, close,
-    volume, trade_count, vwap, source, feed, is_final,
-    condition_policy, spark_batch_id
-) VALUES (
-    %s, %s, %s,
-    %s, %s, %s, %s, %s, %s, %s,
+RECORD_VALIDATION_RUN_SQL = "SELECT record_validation_run(%s, %s, %s, %s, %s)"
+
+RECORD_VALIDATION_BAR_SQL = """
+SELECT record_validation_reconstructed_bar(
+    %s, %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s, %s, %s
 )
-ON CONFLICT (
-    validation_run_id, processor_version, symbol, bar_start,
-    timeframe, source, feed
-)
-DO UPDATE SET
-    open = EXCLUDED.open,
-    high = EXCLUDED.high,
-    low = EXCLUDED.low,
-    close = EXCLUDED.close,
-    volume = EXCLUDED.volume,
-    trade_count = EXCLUDED.trade_count,
-    vwap = EXCLUDED.vwap,
-    is_final = EXCLUDED.is_final,
-    condition_policy = EXCLUDED.condition_policy,
-    spark_batch_id = EXCLUDED.spark_batch_id,
-    updated_at = CURRENT_TIMESTAMP
 """
 
 
@@ -63,12 +43,10 @@ def validation_bar_rows(
     spark_batch_id: int,
     *,
     validation_run_id: str,
-    processor_version: str,
-    checkpoint_namespace: str,
 ) -> list[tuple]:
     """Convert raw-derived finalized bars into validation-storage rows."""
-    if not validation_run_id or not processor_version or not checkpoint_namespace:
-        raise ValueError("validation bar lineage fields must not be empty")
+    if not validation_run_id:
+        raise ValueError("validation_run_id must not be empty")
     records = []
     selected = batch_df.select(
         F.col("symbol"),
@@ -87,8 +65,6 @@ def validation_bar_rows(
         records.append(
             (
                 validation_run_id,
-                processor_version,
-                checkpoint_namespace,
                 row.symbol,
                 bar_start,
                 row.timeframe,
@@ -109,30 +85,41 @@ def validation_bar_rows(
     return records
 
 
-def upsert_validation_bars(
+def record_validation_bars(
     batch_df: DataFrame,
     spark_batch_id: int,
     *,
     validation_run_id: str,
+    workload_id: str,
     processor_version: str,
     checkpoint_namespace: str,
+    source_manifest_identity: str | None,
     database_url: str,
 ) -> int:
-    """Atomically upsert one raw-derived validation micro-batch."""
+    """Atomically record one immutable validation run and its derived bars."""
+    if not all((validation_run_id, workload_id, processor_version, checkpoint_namespace)):
+        raise ValueError("validation run lineage fields must not be empty")
     rows = validation_bar_rows(
         batch_df,
         spark_batch_id,
         validation_run_id=validation_run_id,
-        processor_version=processor_version,
-        checkpoint_namespace=checkpoint_namespace,
     )
-    if not rows:
-        return 0
 
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SET TIME ZONE 'UTC'")
-            cursor.executemany(UPSERT_VALIDATION_BAR_SQL, rows)
+            cursor.execute(
+                RECORD_VALIDATION_RUN_SQL,
+                (
+                    validation_run_id,
+                    workload_id,
+                    processor_version,
+                    checkpoint_namespace,
+                    source_manifest_identity,
+                ),
+            )
+            if rows:
+                cursor.executemany(RECORD_VALIDATION_BAR_SQL, rows)
     return len(rows)
 
 
@@ -140,14 +127,18 @@ def postgres_bar_sink(
     database_url: str,
     *,
     validation_run_id: str,
+    workload_id: str,
     processor_version: str,
     checkpoint_namespace: str,
+    source_manifest_identity: str | None = None,
 ) -> Callable[[DataFrame, int], int]:
     """Bind validation lineage and a secret-bearing DSN for Spark."""
     return partial(
-        upsert_validation_bars,
+        record_validation_bars,
         database_url=database_url,
         validation_run_id=validation_run_id,
+        workload_id=workload_id,
         processor_version=processor_version,
         checkpoint_namespace=checkpoint_namespace,
+        source_manifest_identity=source_manifest_identity,
     )

@@ -18,9 +18,9 @@ Research provider bars and archived raw trades are intentionally separate. The 2
 
 ## Corrective foundation now present
 
-Migration 009 adds empty normalized lifecycle/observation/consensus/surprise/session foundations. `src/trading_sessions.py` adds a pure verified-session planner and `src/platform_contracts.py` adds quality/maturity/reaction definitions. These foundations are executable and tested but are not populated by production adapters and do not replace current serving.
+Migration 009 adds empty normalized lifecycle/observation/consensus/surprise/calendar/session foundations with exact ontology, append-only revisions, provider-local PIT selection, and immutable validation lineage. `src/trading_sessions.py` adds a pure current-marker verified-session planner and `src/platform_contracts.py` adds exact quality/maturity/reaction definitions. These foundations are executable and tested but are not populated by production adapters and do not replace current serving.
 
-Provider-aggregated research bars remain in `market_bars`. Raw-SIP Spark sinks now write `validation_reconstructed_bars` with validation-run, processor-version and checkpoint lineage. Current research serving queries `market_bars` only. Historical evidence predating this correction remains evidence of its recorded run, not proof that the new table was used then.
+Provider-aggregated research bars remain in `market_bars`. Raw-SIP Spark sinks record an immutable `validation_runs` parent and append-only `validation_reconstructed_bars`; conflicting output under the same run/bar identity fails instead of updating evidence. Current research serving queries `market_bars` only. Historical evidence predating this correction remains evidence of its recorded run, not proof that the new table was used then.
 
 ## Lineage
 
@@ -50,7 +50,7 @@ Paper 로컬 기록은 서버에 고정한 `ALPACA_PAPER_ACCOUNT_ID`로 읽고, 
 - Provider collection failures, pagination truncation, malformed bars and persistence failures are failures.
 - Successful sparse bar responses are successful collections with separate quality metadata.
 - Market closure or unavailable future data is an explicit warning/data-not-available state.
-- PostgreSQL writes use deterministic business keys and upserts.
+- Legacy curated writes use deterministic business keys and upserts; normalized source facts and validation evidence are append-only with explicit idempotency/conflict functions.
 - Paper POST is never automatically retried; uncertain outcomes are reconciled with GET.
 - Research output never becomes a Paper order input.
 

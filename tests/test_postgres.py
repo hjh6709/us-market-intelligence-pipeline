@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pyspark.sql import functions as F
 
-from src.postgres import UPSERT_VALIDATION_BAR_SQL, validation_bar_rows
+from src.postgres import RECORD_VALIDATION_BAR_SQL, validation_bar_rows
 from src.spark_session import create_local_spark
 
 
@@ -54,8 +54,6 @@ class PostgresMarketBarTest(unittest.TestCase):
             frame,
             spark_batch_id=42,
             validation_run_id="run:42",
-            processor_version="raw_sip_reconstruction_v1",
-            checkpoint_namespace="workload:opening-hour:v1",
         )
 
         self.assertEqual(len(rows), 1)
@@ -63,8 +61,6 @@ class PostgresMarketBarTest(unittest.TestCase):
             rows[0],
             (
                 "run:42",
-                "raw_sip_reconstruction_v1",
-                "workload:opening-hour:v1",
                 "NVDA",
                 bar_start.replace(tzinfo=UTC),
                 "1m",
@@ -117,8 +113,6 @@ class PostgresMarketBarTest(unittest.TestCase):
                 frame,
                 spark_batch_id=7,
                 validation_run_id="run:7",
-                processor_version="raw_sip_reconstruction_v1",
-                checkpoint_namespace="workload:test:v1",
             )
 
     def test_preserves_utc_instant_across_spark_python_boundary(self) -> None:
@@ -143,18 +137,17 @@ class PostgresMarketBarTest(unittest.TestCase):
             frame,
             spark_batch_id=8,
             validation_run_id="run:8",
-            processor_version="raw_sip_reconstruction_v1",
-            checkpoint_namespace="workload:test:v1",
         )
 
         self.assertEqual(
-            rows[0][4],
+            rows[0][2],
             datetime(2026, 8, 19, 13, 30, tzinfo=UTC),
         )
 
     def test_raw_reconstruction_sql_never_targets_research_market_bars(self) -> None:
-        self.assertIn("INSERT INTO validation_reconstructed_bars", UPSERT_VALIDATION_BAR_SQL)
-        self.assertNotIn("INSERT INTO market_bars", UPSERT_VALIDATION_BAR_SQL)
+        self.assertIn("record_validation_reconstructed_bar", RECORD_VALIDATION_BAR_SQL)
+        self.assertNotIn("INSERT INTO market_bars", RECORD_VALIDATION_BAR_SQL)
+        self.assertNotIn("ON CONFLICT", RECORD_VALIDATION_BAR_SQL)
 
 
 if __name__ == "__main__":

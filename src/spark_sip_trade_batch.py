@@ -10,7 +10,7 @@ from typing import Sequence
 from pyspark.sql import functions as F
 from pyspark import StorageLevel
 
-from src.postgres import upsert_validation_bars
+from src.postgres import record_validation_bars
 from src.preprocess import (
     aggregate_minute_bars,
     apply_minute_bar_condition_policy,
@@ -83,13 +83,15 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             "source", F.lit("alpaca_replay")
         )
         output_count = bars.count()
-        stored_count = upsert_validation_bars(
+        stored_count = record_validation_bars(
             bars,
             0,
             database_url=args.database_url,
             validation_run_id=args.trace_id,
+            workload_id=args.topic,
             processor_version=PROCESSOR_VERSION,
             checkpoint_namespace=f"bounded-batch:{args.topic}",
+            source_manifest_identity=f"kafka-offsets:{args.offset_ranges}",
         )
         return {
             "step": "spark_summary",

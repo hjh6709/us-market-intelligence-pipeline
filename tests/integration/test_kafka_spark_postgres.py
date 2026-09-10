@@ -35,7 +35,10 @@ class KafkaSparkPostgresIntegrationTest(unittest.TestCase):
         with psycopg.connect(DATABASE_URL) as connection:
             for migration in sorted(Path("db/migrations").glob("*.sql")):
                 connection.execute(migration.read_text(encoding="utf-8"))
-            connection.execute("TRUNCATE validation_reconstructed_bars")
+            connection.execute(
+                "TRUNCATE validation_reconstructed_bars, validation_runs "
+                "RESTART IDENTITY CASCADE"
+            )
 
         spark = create_market_spark("kafka-spark-postgres-integration")
         query = None
@@ -125,6 +128,7 @@ class KafkaSparkPostgresIntegrationTest(unittest.TestCase):
                 postgres_bar_sink(
                     DATABASE_URL,
                     validation_run_id="integration:vertical-slice",
+                    workload_id="raw.market-sip.v1",
                     processor_version="raw_sip_reconstruction_v1",
                     checkpoint_namespace=str(checkpoint),
                 )

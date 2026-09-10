@@ -28,11 +28,11 @@ raw/sip/trades/
 
 Existing event-oriented raw archives remain immutable and readable; the 7.36M archive is not rewritten. Target validation workloads remain W1 announcement burst, W2 opening hour, W3 full session and W4 multi-session recovery. Raw-tick collection for all 202×10×3 sessions is not required merely to manufacture scale.
 
-Validation lineage retains workload/validation run ID, processor version and checkpoint namespace. Streaming checkpoints are isolated by validation run and processor version. This corrective pass establishes physical storage and local checkpoint seams; it does not claim managed object storage or always-on workers.
+Migration 009 and the current Spark PostgreSQL sink implement an immutable `validation_runs` parent containing run ID, workload ID, processor version, checkpoint namespace, and optional source-manifest identity. Reconstructed bars are append-only: identical replay is idempotent and conflicting content under the same run/bar identity raises a determinism conflict. Streaming checkpoints are isolated by validation run and processor version. This is a local foundation; managed object storage and always-on workers remain target-only.
 
 ## Market-data validation
 
-Target provider collection verifies requested interval and symbol, normal pagination termination, token-cycle failures, duplicate identities and conflicting duplicate content. DB upsert must not hide a provider conflict. Corporate-action policy for multi-session persistence is governed by [research-contracts.md](research-contracts.md).
+Current provider collection verifies requested interval/symbol and pagination termination. Stricter provider conflict handling remains target-only. Validation evidence is never updated to hide a raw-reconstruction conflict. Corporate-action policy for multi-session persistence is governed by [research-contracts.md](research-contracts.md).
 
 ## Serving and deployment
 
