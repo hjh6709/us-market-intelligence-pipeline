@@ -1,6 +1,6 @@
 # 아키텍처 다이어그램
 
-이 디렉터리는 README와 발표에서 사용하는 데이터 파이프라인 다이어그램을 관리한다.
+이 디렉터리는 README와 발표에서 사용하는 데이터 파이프라인 다이어그램을 관리한다. PR #36 이후 현재 구현의 slide-neutral source는 [final presentation current architecture](../presentation/final/CURRENT_ARCHITECTURE.mmd)이며, 아래 Session 7·과정 과제 자산은 당시 상태를 보존한 historical artifact다.
 
 | 파일 | 용도 |
 | --- | --- |
@@ -8,12 +8,12 @@
 | `target-platform.html` | current/evolving/foundation tag와 plane 경계를 탐색하는 target 구성도 |
 | `target-platform.visual-check.*` | target 구성도의 4개 viewport·양 테마 자동 검증 receipt와 캡처 |
 | `target-platform.manual-review.json` | delivered artifact hash에 고정한 light/dark 시각 검토 기록 |
-| `session7-architecture.architecture.json` | merged main `7f55721` 소스 증거를 연결한 Archify 정본 |
+| `session7-architecture.architecture.json` | merged main `7f55721` 당시 소스 증거를 연결한 historical Archify 정본; PR #36 이후 current storage boundary에는 사용하지 않음 |
 | `session7-architecture.html` | 검색·guided view·trace motion이 있는 제출용 대화형 구성도 |
 | `session7-architecture.visual-check.*` | 4개 데스크톱 viewport와 라이트·다크 자동 브라우저 검증 receipt·캡처 |
 | `session7-architecture.manual-review.json` | 전달된 artifact에 결합한 별도 수동 시각 검토 기록 |
-| `pipeline-architecture.svg` | 전체 프로젝트 정본. CPI raw 부하, 202회·10종목 시장·경제 데이터, 이벤트 분석, 실제 서빙과 미구현 주문 계층을 구분 |
-| `pipeline-architecture.png` | 루트 README에서 사용하는 전체 프로젝트 렌더 결과 |
+| `pipeline-architecture.svg` | 과정 과제 당시 전체 흐름. 일봉 30,250 등 최신 재검증값과 다른 historical 수치를 포함하므로 final deck에서 사용하지 않음 |
+| `pipeline-architecture.png` | 위 historical SVG의 렌더; final deck에서 사용하지 않음 |
 | `cpi-sip-kafka-spark-assignment.svg` | 한 CPI 발표일의 Kafka·Spark 과제 실행 정본 |
 | `cpi-sip-kafka-spark-assignment.png` | 과제 문서와 발표에서 사용하는 실행 결과 렌더 |
 

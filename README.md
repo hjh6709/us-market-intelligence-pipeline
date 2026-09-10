@@ -6,7 +6,7 @@
 
 [Overview](http://127.0.0.1:8000/overview) · [Research](http://127.0.0.1:8000/) · [Pipelines](http://127.0.0.1:8000/pipelines) · [Paper Execution](http://127.0.0.1:8000/paper) · [API docs](http://127.0.0.1:8000/docs)
 
-![실제 PostgreSQL 집계를 읽는 플랫폼 Overview](docs/images/portfolio/overview.jpg)
+![실제 PostgreSQL 집계를 읽는 현재 플랫폼 Overview](docs/evidence/corrective-pass/overview.png)
 
 ### Architecture
 
@@ -279,7 +279,8 @@ Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 pro
 - [3차시 Kafka·Spark 과제](docs/kafka-spark-assignment.md)
 - [Paper execution 계약과 증거](docs/paper-execution.md)
 - [최종 테스트·통합·브라우저 검증](docs/evidence/final-portfolio/verification.md)
-- [Archify 대화형 구성도](docs/diagrams/session7-architecture.html)
+- [최종 발표 truth·storyboard·asset handoff](docs/presentation/final/PRESENTATION_TRUTH.md)
+- [현재 아키텍처 재현 원본](docs/presentation/final/CURRENT_ARCHITECTURE.mmd) · [approved target Archify](docs/diagrams/target-platform.html)
 - [과정 발표 자료와 과거 실행 기록](docs/README.md#과정-아카이브)
 
 현재 구현과 한계의 정본은 코드·migration·테스트와 최신 검증 증거입니다. 날짜가 붙은 과제 자료는 당시 실행을 보존하는 역사 기록이며 현재 계약을 덮어쓰지 않습니다.
