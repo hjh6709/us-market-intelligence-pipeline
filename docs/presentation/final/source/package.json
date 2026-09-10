@@ -1,0 +1,7 @@
+{
+  "name": "economic-event-intelligence-final-deck",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "node build.mjs", "capture": "node capture_ui.mjs assets" },
+  "dependencies": { "pptxgenjs": "^4.0.1", "puppeteer-core": "^24.0.0" }
+}
