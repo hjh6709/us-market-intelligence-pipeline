@@ -3,13 +3,13 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Economic Event Intelligence & Strategy Validation Platform",
-    "subtitle": "Target contract over baseline 63633a5 · artifact source revision e3e447b",
+    "subtitle": "Target contract over baseline 63633a5 · foundation source revision b7e738e",
     "quality_profile": "showcase",
     "visual_preset": "blueprint",
     "animation": "trace",
     "repository": {
       "url": "https://github.com/hjh6709/us-market-intelligence-pipeline",
-      "revision": "e3e447b5fcf02a505f53faa8ce1bc87a80259cbf"
+      "revision": "b7e738eb575e2f561a0f2e7d87ad717920c290dd"
     },
     "views": [
       {
@@ -34,20 +34,20 @@
   },
   "components": [
     {"id": "official-sources", "type": "external", "label": "Official Sources", "sublabel": "economic schedule · numeric releases", "tag": "TARGET SOURCE", "sources": [{"path": "config/market_event_catalog.json", "line": 1, "label": "Current catalog"}], "pos": [20, 55], "size": [155, 66]},
-    {"id": "consensus-provider", "type": "external", "label": "External Consensus", "sublabel": "provider snapshots", "tag": "TARGET SOURCE", "sources": [{"path": "docs/architecture/data-contracts.md", "line": 31, "label": "Consensus contract"}], "pos": [20, 145], "size": [155, 66]},
-    {"id": "event-facts", "type": "database", "label": "Canonical Event Facts", "sublabel": "lifecycle · facts · PIT surprise", "tag": "SCHEMA FOUNDATION", "sources": [{"path": "db/migrations/009_event_session_foundations.sql", "line": 4, "label": "Migration 009"}], "pos": [195, 100], "size": [155, 72]},
-    {"id": "session-planner", "type": "backend", "label": "Trading Session Planner", "sublabel": "primary marker · verified S0", "tag": "PURE LOGIC FOUNDATION", "sources": [{"path": "src/trading_sessions.py", "line": 141, "label": "Pure planner"}], "pos": [375, 100], "size": [155, 72]},
+    {"id": "consensus-provider", "type": "external", "label": "External Consensus", "sublabel": "explicit provider snapshots", "tag": "TARGET SOURCE", "sources": [{"path": "docs/architecture/data-contracts.md", "line": 44, "label": "Consensus contract"}], "pos": [20, 145], "size": [155, 66]},
+    {"id": "event-facts", "type": "database", "label": "Canonical Event Facts", "sublabel": "append-only revisions · PIT", "tag": "SCHEMA FOUNDATION", "sources": [{"path": "db/migrations/009_event_session_foundations.sql", "line": 13, "label": "Migration 009"}], "pos": [195, 100], "size": [155, 72]},
+    {"id": "session-planner", "type": "backend", "label": "Trading Session Planner", "sublabel": "current marker · verified S0", "tag": "PURE LOGIC FOUNDATION", "sources": [{"path": "src/trading_sessions.py", "line": 130, "label": "Current-marker planner"}], "pos": [375, 100], "size": [155, 72]},
     {"id": "target-research", "type": "backend", "label": "Canonical Research", "sublabel": "v2 metrics · comparisons", "tag": "TARGET ONLY", "sources": [{"path": "docs/architecture/research-contracts.md", "line": 1, "label": "Target contract"}], "pos": [555, 100], "size": [155, 72]},
     {"id": "target-paper", "type": "security", "label": "Paper Experiments", "sublabel": "fills · positions · outcomes", "tag": "TARGET ONLY", "sources": [{"path": "docs/architecture/operations-and-deployment.md", "line": 1, "label": "Target Paper ops"}], "pos": [735, 100], "size": [155, 72]},
     {"id": "provider-bars", "type": "database", "label": "Provider Research Bars", "sublabel": "market_bars · SIP aggregate", "tag": "CURRENT", "sources": [{"path": "src/historical_bars.py", "line": 1, "label": "Provider writer"}], "pos": [195, 245], "size": [155, 68]},
     {"id": "legacy-research", "type": "backend", "label": "Legacy Research", "sublabel": "current impacts · PRE/POST", "tag": "CURRENT", "sources": [{"path": "src/macro_event_impact.py", "line": 1, "label": "Current impacts"}], "pos": [375, 245], "size": [155, 68]},
-    {"id": "research-store", "type": "database", "label": "Research PostgreSQL", "sublabel": "provider bars · facts · results", "tag": "CURRENT + FOUNDATION", "sources": [{"path": "db/migrations/001_market_bars.sql", "line": 1, "label": "Current research bars"}, {"path": "db/migrations/009_event_session_foundations.sql", "line": 1, "label": "Empty foundation"}], "pos": [555, 245], "size": [155, 68]},
+    {"id": "research-store", "type": "database", "label": "Research PostgreSQL", "sublabel": "legacy serving · empty foundation", "tag": "CURRENT + FOUNDATION", "sources": [{"path": "db/migrations/001_market_bars.sql", "line": 1, "label": "Current research bars"}, {"path": "db/migrations/009_event_session_foundations.sql", "line": 13, "label": "Empty event foundation"}], "pos": [555, 245], "size": [155, 68]},
     {"id": "serving", "type": "frontend", "label": "FastAPI + Browser", "sublabel": "provider-only research reads", "tag": "CURRENT", "sources": [{"path": "src/serving_repository.py", "line": 1, "label": "Current reads"}], "pos": [735, 245], "size": [155, 68]},
     {"id": "current-paper", "type": "security", "label": "Guarded Paper Intent", "sublabel": "approve · journal · reconcile", "tag": "CURRENT", "sources": [{"path": "src/paper_web.py", "line": 1, "label": "Current Paper UI"}], "pos": [735, 340], "size": [155, 66]},
     {"id": "raw-archive", "type": "cloud", "label": "Immutable Raw SIP", "sublabel": "historical Parquet archive", "tag": "CURRENT", "sources": [{"path": "src/market_trade_archive.py", "line": 1, "label": "Raw archive"}], "pos": [195, 420], "size": [155, 66]},
     {"id": "kafka", "type": "messagebus", "label": "Kafka Replay", "sublabel": "bounded transport", "tag": "CURRENT", "sources": [{"path": "src/kafka_publisher.py", "line": 1, "label": "Replay publisher"}], "pos": [375, 420], "size": [155, 66]},
     {"id": "spark", "type": "backend", "label": "Spark Validation", "sublabel": "validate · dedupe · reconstruct", "tag": "CURRENT", "sources": [{"path": "src/spark_market_processor.py", "line": 1, "label": "Processor"}], "pos": [555, 420], "size": [155, 66]},
-    {"id": "validation-store", "type": "database", "label": "Validation Bars", "sublabel": "raw-derived · isolated · run lineage", "tag": "SCHEMA FOUNDATION", "sources": [{"path": "db/migrations/009_event_session_foundations.sql", "line": 388, "label": "Separate table"}, {"path": "src/postgres.py", "line": 139, "label": "Validation sink"}], "pos": [735, 420], "size": [155, 66]}
+    {"id": "validation-store", "type": "database", "label": "Validation Evidence", "sublabel": "immutable run · append-only bars", "tag": "CURRENT FOUNDATION", "sources": [{"path": "db/migrations/009_event_session_foundations.sql", "line": 625, "label": "Run and bar tables"}, {"path": "src/postgres.py", "line": 88, "label": "Validation recorder"}], "pos": [735, 420], "size": [155, 66]}
   ],
   "boundaries": [
     {"kind": "region", "label": "Research and product plane", "wraps": ["official-sources", "consensus-provider", "event-facts", "session-planner", "provider-bars", "legacy-research", "target-research", "research-store", "serving", "current-paper", "target-paper"], "pad": 18},

@@ -7,8 +7,8 @@
   "visualReview": "pending",
   "artifact": {
     "path": "/Users/hanjeonghyun/dev/2026/for_my_stock/.worktrees/platform-contract-2026-09-10/docs/diagrams/target-platform.html",
-    "sha256": "3dec9506df6074cd02ffc83b261b6d60782a23b401498f1f08da7c8b67d64dad",
-    "bytes": 730234
+    "sha256": "bfc9fbd39c477c21d356c2bdf700fe53408a6ee9066ab63dc396cf71940012fe",
+    "bytes": 730277
   },
   "state": {
     "detail": "read",
@@ -64,8 +64,8 @@
         "overflowX": false,
         "overflowY": false,
         "ok": true,
-        "readerWidth": 1114,
-        "diagramWidth": 1084,
+        "readerWidth": 1084,
+        "diagramWidth": 1054,
         "viewBoxWidth": 948,
         "minimumProjectedNodeTextPx": 6.8,
         "minimumProjectedNodeText": "economic schedule · numeric releases",
@@ -194,8 +194,8 @@
         "overflowX": false,
         "overflowY": false,
         "ok": true,
-        "readerWidth": 1114,
-        "diagramWidth": 1084,
+        "readerWidth": 1084,
+        "diagramWidth": 1054,
         "viewBoxWidth": 948,
         "minimumProjectedNodeTextPx": 6.8,
         "minimumProjectedNodeText": "economic schedule · numeric releases",
@@ -323,8 +323,8 @@
         "overflowX": false,
         "overflowY": false,
         "ok": true,
-        "readerWidth": 1114,
-        "diagramWidth": 1084,
+        "readerWidth": 1084,
+        "diagramWidth": 1054,
         "viewBoxWidth": 948,
         "minimumProjectedNodeTextPx": 6.8,
         "minimumProjectedNodeText": "economic schedule · numeric releases",

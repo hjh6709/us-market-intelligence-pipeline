@@ -20,7 +20,7 @@ Use this page for the next PPT. It deliberately separates existing evidence, thi
 - Additive PostgreSQL foundations exist for release observations, consensus snapshots, derived surprises, trading sessions and event markers. Point-in-time facts reject update/delete, and surprise inputs must match the same event and metric.
 - A pure planner maps releases to verified `S-1/S0/S+1` sessions and preserves pre-market, regular-session, post-market, holiday and early-close semantics.
 - Shared types keep collection, market state, observed coverage and analysis eligibility separate.
-- Final post-change verification ran 235 Python tests successfully with 12 skipped and 6 Node UI tests successfully with none failed. Migrations `001..009` applied twice to fresh disposable PostgreSQL; append-only mutation and cross-event surprise lineage checks also passed in PostgreSQL 17.
+- Final post-change verification ran 299 Python tests with zero failures (44 opt-in integration skips) and 6 Node UI tests with zero failures. On a fresh disposable PostgreSQL 17.6 database, migrations `001..009` applied successfully and `009` reapplied successfully; 35 PostgreSQL foundation and validation-sink behavior tests then passed.
 
 ## Target architecture only
 

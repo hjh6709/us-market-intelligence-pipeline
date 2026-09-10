@@ -3,8 +3,14 @@
   "reviewedAt": "2026-09-10",
   "artifact": {
     "path": "target-platform.html",
-    "sha256": "3dec9506df6074cd02ffc83b261b6d60782a23b401498f1f08da7c8b67d64dad",
-    "bytes": 730234
+    "sha256": "bfc9fbd39c477c21d356c2bdf700fe53408a6ee9066ab63dc396cf71940012fe",
+    "bytes": 730277
+  },
+  "source": {
+    "path": "target-platform.architecture.json",
+    "sha256": "190f7968832d49e95dee9418abbb09608e5a72f6045ddd255362d0ed11a2d7c2",
+    "bytes": 7615,
+    "foundation_revision": "b7e738eb575e2f561a0f2e7d87ad717920c290dd"
   },
   "visual_review": "passed",
   "correction_rounds": 2,
@@ -15,7 +21,7 @@
     "target-platform.visual-check.2048x1320.dark.png"
   ],
   "observations": [
-    "CURRENT, SCHEMA FOUNDATION, PURE LOGIC FOUNDATION and TARGET ONLY tags remain visually distinct",
+    "CURRENT, CURRENT FOUNDATION, and TARGET ONLY semantics remain visually distinct",
     "research/product and raw SIP validation planes are spatially separated",
     "orthogonal routes do not obscure nodes or merge unrelated flows",
     "light and dark endpoint themes remain legible",
