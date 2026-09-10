@@ -1,6 +1,6 @@
 # PR #36 counterexample matrix — 2026-09-10
 
-Verified source revision: `3bd765f4b1ea8a2c03952cf1e521177d707166c2`
+Verified source revision: `fcfec150631788e50d7ce1d8746b78549f446816`
 
 Database verification: PostgreSQL 17.6, fresh migrations `001..009`, then a second apply of `009`
 
@@ -58,5 +58,6 @@ Database verification: PostgreSQL 17.6, fresh migrations `001..009`, then a seco
 | T48 | One provider source revision naming two internal revisions leaked an index name | Explicit source-revision lookup under the observation lock | Deterministic `CONFLICTING_SOURCE_FACT` | `test_T48_source_revision_conflict_uses_domain_error` |
 | T49 | No pure verified-calendar S+1 seam existed | Snapshot-scoped row-count resolver | Friday +1 resolves to Monday session | `test_T49_session_offset_counts_verified_sessions_after_friday` |
 | T50 | No pure verified-calendar S+7 seam existed | Same resolver counts seven stored sessions | Resolves to seventh session, not date +7 | `test_T50_session_offset_seven_uses_verified_calendar_not_date_math` |
+| T51 | Closed-market announcement POST metrics entered the endpoint branch before phase applicability and returned ELIGIBLE | Reject `MARKET_CLOSED` at the POST-metric boundary without changing `POST_MARKET` coverage | All five POST metrics return NOT_APPLICABLE with null endpoints | `test_T51_closed_market_post_metrics_are_not_applicable` |
 
 Additional exact guards also pass for lifecycle idempotency/conflict, observation material fields, current-marker demotion, corrected-marker consensus selection, marker/session immutability, revised-actual rejection, surprise arithmetic, concurrent validation-run idempotency, typed price/activity definitions, provider/raw physical isolation, and replay recovery.

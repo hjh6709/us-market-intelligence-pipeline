@@ -27,8 +27,8 @@ PR #36은 새 제품 기능을 확장하지 않고 canonical event/session found
 
 ## Corrective verification
 
-- [x] T01–T50 exact semantic tests: 50/50 GREEN
-- [x] Full Python: 317 run, 262 passed, 55 skipped, 0 failed
+- [x] T01–T51 exact semantic tests: 51/51 GREEN
+- [x] Full Python: 318 run, 263 passed, 55 skipped, 0 failed
 - [x] Node UI: 6/6 passed
 - [x] PostgreSQL 17.6: fresh migrations `001..009`, second `009` apply, 46/46 behavior tests passed
 - [x] Python compileall

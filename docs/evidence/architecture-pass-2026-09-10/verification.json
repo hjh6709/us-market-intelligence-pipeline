@@ -2,23 +2,23 @@
   "date": "2026-09-10",
   "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
   "corrective_starting_sha": "9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8",
-  "verified_foundation_source_sha": "3bd765f4b1ea8a2c03952cf1e521177d707166c2",
+  "verified_foundation_source_sha": "fcfec150631788e50d7ce1d8746b78549f446816",
   "branch": "architecture-contract-2026-09-10",
   "scope": "PR #36 canonical foundation corrections only; no target feature expansion",
   "counterexample_matrix": {
     "path": "counterexample-matrix.md",
-    "required_tests": 50,
-    "exact_tests_present": 50,
-    "green": 50,
-    "note": "T04 and original T09 were baseline-positive controls; T48 adds the missing semantic source-revision conflict. T35-T50 all produced RED before their minimal fixes."
+    "required_tests": 51,
+    "exact_tests_present": 51,
+    "green": 51,
+    "note": "T04 and original T09 were baseline-positive controls; T48 adds the missing semantic source-revision conflict. T35-T51 all produced RED before their minimal fixes."
   },
   "full_python": {
-    "tests": 317,
-    "passed": 262,
+    "tests": 318,
+    "passed": 263,
     "skipped": 55,
     "failed": 0,
     "result": "PASS",
-    "seconds": 15.159,
+    "seconds": 18.127,
     "execution_note": "Executed outside the filesystem sandbox because Spark/Py4J requires a local socket."
   },
   "node_ui": {
