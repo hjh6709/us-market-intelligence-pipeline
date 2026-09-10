@@ -7,7 +7,7 @@ from pathlib import Path
 import psycopg
 from pyspark.sql import functions as F
 
-from src.postgres import upsert_market_bars
+from src.postgres import record_validation_bars
 from src.spark_session import create_local_spark
 
 
@@ -26,9 +26,9 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.spark = create_local_spark("postgres-market-bars-integration")
-        migration = Path("db/migrations/001_market_bars.sql").read_text()
         with psycopg.connect(DATABASE_URL) as connection:
-            connection.execute(migration)
+            for migration in sorted(Path("db/migrations").glob("*.sql")):
+                connection.execute(migration.read_text(encoding="utf-8"))
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -36,7 +36,10 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
 
     def setUp(self) -> None:
         with psycopg.connect(DATABASE_URL) as connection:
-            connection.execute("TRUNCATE market_bars")
+            connection.execute(
+                "TRUNCATE market_bars, validation_reconstructed_bars, validation_runs "
+                "RESTART IDENTITY CASCADE"
+            )
 
     def bars_frame(self, specs: list[tuple[str, Decimal]]):
         rows = []
@@ -78,22 +81,34 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
             return connection.execute(
                 """
                 SELECT symbol, close, spark_batch_id
-                FROM market_bars
+                FROM validation_reconstructed_bars
                 ORDER BY symbol
                 """
             ).fetchall()
 
-    def test_replay_keeps_row_count_and_later_batch_updates_value(self) -> None:
+    def record(self, frame, batch_id: int, *, run_id: str = "run:replay") -> int:
+        return record_validation_bars(
+            frame,
+            batch_id,
+            database_url=DATABASE_URL,
+            validation_run_id=run_id,
+            workload_id="raw.market-sip.v1",
+            processor_version="raw_sip_reconstruction_v1",
+            checkpoint_namespace="workload:test:v1",
+            source_manifest_identity="manifest:test:v1",
+        )
+
+    def test_replay_is_idempotent_and_different_content_conflicts(self) -> None:
         original = self.bars_frame(
             [("NVDA", Decimal("102.000000")), ("SPY", Decimal("101.500000"))]
         )
 
         self.assertEqual(
-            upsert_market_bars(original, 10, database_url=DATABASE_URL),
+            self.record(original, 10),
             2,
         )
         self.assertEqual(
-            upsert_market_bars(original, 11, database_url=DATABASE_URL),
+            self.record(original, 11),
             2,
         )
         self.assertEqual(len(self.read_bars()), 2)
@@ -101,14 +116,11 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         corrected = self.bars_frame(
             [("NVDA", Decimal("103.000000")), ("SPY", Decimal("101.500000"))]
         )
-        upsert_market_bars(corrected, 12, database_url=DATABASE_URL)
-
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.record(corrected, 12)
         self.assertEqual(
             self.read_bars(),
-            [
-                ("NVDA", Decimal("103.000000"), 12),
-                ("SPY", Decimal("101.500000"), 12),
-            ],
+            [("NVDA", Decimal("102.000000"), 10), ("SPY", Decimal("101.500000"), 10)],
         )
 
     def test_constraint_failure_rolls_back_entire_micro_batch(self) -> None:
@@ -117,7 +129,7 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         )
 
         with self.assertRaises(psycopg.errors.CheckViolation):
-            upsert_market_bars(invalid_batch, 20, database_url=DATABASE_URL)
+            self.record(invalid_batch, 20, run_id="run:invalid")
 
         self.assertEqual(self.read_bars(), [])
 
@@ -125,17 +137,56 @@ class PostgresMarketBarsIntegrationTest(unittest.TestCase):
         batch = self.bars_frame([("NVDA", Decimal("102.000000"))])
 
         with self.assertRaises(psycopg.OperationalError):
-            upsert_market_bars(
+            record_validation_bars(
                 batch,
                 30,
                 database_url="postgresql://market:market@127.0.0.1:1/market",
+                validation_run_id="run:recovery",
+                workload_id="raw.market-sip.v1",
+                processor_version="raw_sip_reconstruction_v1",
+                checkpoint_namespace="workload:test:v1",
+                source_manifest_identity="manifest:test:v1",
             )
 
         self.assertEqual(
-            upsert_market_bars(batch, 30, database_url=DATABASE_URL),
+            self.record(batch, 30, run_id="run:recovery"),
             1,
         )
         self.assertEqual(self.read_bars()[0][0], "NVDA")
+
+    def test_provider_and_raw_reconstructed_bars_cannot_overwrite_each_other(self) -> None:
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                """
+                INSERT INTO market_bars (
+                    symbol, bar_start, timeframe, open, high, low, close,
+                    volume, trade_count, vwap, source, feed, is_final,
+                    condition_policy, spark_batch_id
+                ) VALUES (
+                    'NVDA', '2026-08-19 13:30:00+00', '1m',
+                    100, 105, 99, 101, 11, 4, 101,
+                    'alpaca', 'iex', TRUE, 'provider_aggregated_v1', -1
+                )
+                """
+            )
+
+        raw = self.bars_frame([("NVDA", Decimal("103.000000"))])
+        self.record(raw, 40, run_id="run:compare")
+
+        with psycopg.connect(DATABASE_URL) as connection:
+            research_close = connection.execute(
+                "SELECT close FROM market_bars WHERE symbol='NVDA'"
+            ).fetchone()[0]
+            validation_close = connection.execute(
+                "SELECT close FROM validation_reconstructed_bars WHERE symbol='NVDA'"
+            ).fetchone()[0]
+            origins = connection.execute(
+                "SELECT bar_origin FROM market_bar_origin_comparison ORDER BY bar_origin"
+            ).fetchall()
+
+        self.assertEqual(research_close, Decimal("101.000000"))
+        self.assertEqual(validation_close, Decimal("103.000000"))
+        self.assertEqual(origins, [("PROVIDER_AGGREGATE",), ("RAW_RECONSTRUCTED",)])
 
 
 if __name__ == "__main__":

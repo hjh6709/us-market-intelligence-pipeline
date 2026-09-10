@@ -1,5 +1,7 @@
 # Data API and Processing Platform Selection
 
+> **역사 자료:** 2026-08-13 MVP 선택 기록입니다. 현재/target provider 계약은 [platform contract](architecture/platform-contract.md), [data contracts](architecture/data-contracts.md), [configuration contract](configuration/README.md)을 따릅니다.
+
 검증일: **2026-08-13**
 
 원칙: 장기적으로 자동매매까지 확장하더라도 Stage A는 시장·경제 데이터 API만 사용하며 주문 API를 호출하지 않는다. 경제지표 분석은 공식 발표 시각과 당시 공개된 vintage가 확인될 때만 수행한다.

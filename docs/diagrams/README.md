@@ -4,6 +4,10 @@
 
 | 파일 | 용도 |
 | --- | --- |
+| `target-platform.architecture.json` | `63633a5` source evidence에 고정한 approved target 정본; 현재 구현 완료를 뜻하지 않음 |
+| `target-platform.html` | current/evolving/foundation tag와 plane 경계를 탐색하는 target 구성도 |
+| `target-platform.visual-check.*` | target 구성도의 4개 viewport·양 테마 자동 검증 receipt와 캡처 |
+| `target-platform.manual-review.json` | delivered artifact hash에 고정한 light/dark 시각 검토 기록 |
 | `session7-architecture.architecture.json` | merged main `7f55721` 소스 증거를 연결한 Archify 정본 |
 | `session7-architecture.html` | 검색·guided view·trace motion이 있는 제출용 대화형 구성도 |
 | `session7-architecture.visual-check.*` | 4개 데스크톱 viewport와 라이트·다크 자동 브라우저 검증 receipt·캡처 |
@@ -39,6 +43,8 @@ showcase validation 9/9, composition 오류·경고 0이며 자동 브라우저 
 자동 receipt의 `visualReview: pending`은 브라우저 자동 검사가 사람의 시각 판단을 대신하지 않는다는 뜻이다.
 실제 캡처 검토 결과는 별도의 `session7-architecture.manual-review.json`에 artifact hash와 함께 기록한다.
 HTML의 고정 Viewer UI는 영어 fallback이고, 작성한 노드·설명은 한국어다.
+
+2026-09-10 target 구성도도 showcase validation 9/9, 오류·경고 0을 통과했다. Chrome 자동 검사는 1440×900, 1600×1000, 1920×1080, 2048×1320에서 overflow 없음, 최소 글자 6px, 라이트·다크 캡처를 확인했다. 이 구성도는 approved destination이며 `CURRENT`, `EVOLVING`, `P1 FOUNDATION` tag를 구현 증거처럼 읽으면 안 된다.
 
 ## PNG 생성
 

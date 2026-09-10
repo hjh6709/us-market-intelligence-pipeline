@@ -345,6 +345,11 @@ class PipelineServingService:
             LineageNode(id="archived_sip_trades", label="Archived SIP trades", plane="validation"),
             LineageNode(id="kafka", label="Kafka", plane="validation"),
             LineageNode(id="spark", label="Spark", plane="validation"),
+            LineageNode(
+                id="validation_reconstructed_bars",
+                label="raw-derived validation bars",
+                plane="validation",
+            ),
         ]
         edges = [
             LineageEdge(source="official_releases", target="airflow", label="공식 발표별 범위"),
@@ -362,6 +367,10 @@ class PipelineServingService:
             LineageEdge(source="strategy", target="serving"),
             LineageEdge(source="archived_sip_trades", target="kafka"),
             LineageEdge(source="kafka", target="spark"),
-            LineageEdge(source="spark", target="market_bars", label="bounded validation path"),
+            LineageEdge(
+                source="spark",
+                target="validation_reconstructed_bars",
+                label="bounded validation reconstruction",
+            ),
         ]
         return PipelineLineageView(nodes=nodes, edges=edges)

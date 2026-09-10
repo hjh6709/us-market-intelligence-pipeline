@@ -1,4 +1,4 @@
-# U.S. Economic Event Market Intelligence Platform
+# Economic Event Intelligence & Strategy Validation Platform
 
 공식 미국 경제 발표 시각과 당시 알 수 있었던 정보를 시장 데이터에 연결하는, 재현 가능한 데이터 플랫폼입니다.
 
@@ -10,13 +10,19 @@
 
 ### Architecture
 
-[현재 구조와 데이터 연결](docs/architecture/current-system.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md) · [이번 교정 검증](docs/engineering/corrective-pass.md)
+[현재 구현](docs/architecture/current-system.md) · [approved target contract](docs/architecture/platform-contract.md) · [현재와 target 차이](docs/engineering/current-vs-target.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md)
 
-아래 `플랫폼 구조`와 사이트의 `파이프라인 → 데이터 흐름`이 현재 연결을 설명합니다. 다음 이미지는 Kafka·Spark와 CPI 분석 경로를 함께 보여 주는 이전 발표 기준 구성도이며, 최신 계약은 이어지는 Mermaid 구조와 [현재 구조 문서](docs/architecture/current-system.md)를 따릅니다.
+아래 이미지는 구현 완료 그림이 아니라 approved target입니다. 노드의 `CURRENT`, `EVOLVING`, `P1 FOUNDATION` tag와 [현재/target 표](docs/engineering/current-vs-target.md)를 함께 읽어야 합니다. 이어지는 Mermaid는 현재 연결만 설명합니다.
+
+[![approved target architecture](docs/diagrams/target-platform.visual-check.1440x900.light.png)](docs/diagrams/target-platform.html)
+
+아래 정적 이미지는 과정 과제에서 사용한 기존 구현 흐름을 보존한 것입니다. approved target이나 최신 완료 범위를 뜻하지 않으며, 판단에는 위 target diagram과 current/target 표를 사용합니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
 ## 핵심 결과
+
+아래 수치는 날짜가 있는 기존 실행 evidence의 결과입니다. 이번 architecture pass가 같은 대용량 실행을 다시 수행했다는 뜻이 아닙니다.
 
 | 범위 | 검증된 결과 | 단위와 의미 |
 | --- | ---: | --- |
@@ -65,7 +71,8 @@ flowchart LR
   end
 
   subgraph Product[Product plane]
-    PG[(PostgreSQL)]
+    PG[(PostgreSQL research/serving tables)]
+    VPG[(PostgreSQL validation-only tables)]
     A[Versioned impact analysis]
     API[FastAPI serving layer]
     UI[Overview · Research · Pipelines]
@@ -75,7 +82,7 @@ flowchart LR
   end
 
   AF --> PG
-  S --> PG
+  S --> VPG
 ```
 
 핵심 데이터 계약은 다음과 같습니다.
@@ -101,7 +108,7 @@ API·pagination·요청 범위가 정상 종료된 성긴 bar 응답은 수집 �
 - source/feed/version을 명시한 시장 데이터와 분석 결과 보존
 - 시장 데이터 Airflow 실행·work item·품질 검사·alert를 durable telemetry로 기록
 - Kafka/Spark 원시 체결 검증과 분석용 provider-bar 경로의 의미 분리
-- PostgreSQL business key와 upsert로 재실행 중복 방지
+- legacy curated table은 business key/upsert로, normalized fact와 validation evidence는 append-only idempotency/conflict로 재실행 의미 보존
 - 저장 결과를 FastAPI와 웹 UI로 실제 조회
 - 연구 신호, 과거 시뮬레이션, 주문 행동을 서로 다른 계약으로 유지
 
@@ -242,6 +249,17 @@ RUN_POSTGRES_INTEGRATION=1 \
 | `macro_event_impacts` | event·symbol·window 연구 결과 | source·feed·analysis version 포함 |
 | `event_strategy_results` | 기준 전략 관측 | strategy name·version 포함 |
 | `paper_order_intents` | Paper 주문 intent와 상태 | account scope·request ID |
+| `canonical_economic_events` / `economic_event_lifecycle_versions` | canonical event identity와 append-only 상태 revision foundation | event / event·lifecycle version |
+| `economic_observation_registry` | 정확한 event·observation·unit ontology | observation code |
+| `economic_release_observations` | 공식 값의 append-only revision foundation | event·observation code·revision |
+| `economic_consensus_snapshots` | provider-local point-in-time consensus foundation | event·observation code·provider·snapshot time |
+| `economic_surprises` / `current_canonical_surprises` | marker·actual·consensus lineage를 보존하는 immutable history / 현재 marker와 provider별 최신 pre-release consensus에 다시 맞는 projection | marker·actual observation·consensus·algorithm version |
+| `calendar_snapshots` / `trading_sessions` | immutable market-calendar generation과 session foundation | snapshot / snapshot·session date |
+| `economic_event_markers` | append-only marker revisions와 current primary foundation | event·kind·revision |
+| `validation_runs` | immutable raw-validation execution lineage | validation run ID |
+| `validation_reconstructed_bars` | raw-derived append-only validation bars | run·symbol·start·timeframe·source·feed |
+
+Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 production adapter, backfill, v2 reaction 계산, UI 연결은 아직 구현하지 않았습니다. Foundation write functions는 같은 logical identity를 transaction 단위로 직렬화해 동일 내용은 같은 fact로 수렴하고 다른 내용은 domain conflict로 거부합니다. `validation_runs`와 `validation_reconstructed_bars`는 현재 raw-SIP Spark sink가 사용하지만 연구용 `market_bars` 및 serving과 물리적으로 분리됩니다. 자세한 현재/target 구분은 [current-vs-target](docs/engineering/current-vs-target.md)을 따릅니다.
 
 ## 다음 단계
 
@@ -254,6 +272,7 @@ RUN_POSTGRES_INTEGRATION=1 \
 ## 구현·과제 증거
 
 - [문서 허브](docs/README.md)
+- [2026-09-10 baseline audit](docs/engineering/baseline-audit-2026-09-10.md) · [target architecture](docs/diagrams/target-platform.html)
 - [플랫폼 감사](docs/engineering/platform-audit.md) · [API 계약](docs/engineering/api-contracts.md)
 - [7차시 서빙 과제](docs/serving-layer-assignment.md) · [최종 시연 증거](docs/evidence/serving-layer/README.md)
 - [6차시 부하·복구](docs/load-recovery-assignment.md)

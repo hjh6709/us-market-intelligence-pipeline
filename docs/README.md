@@ -6,20 +6,29 @@
 
 ### Architecture
 
+- [플랫폼 최상위 계약과 target architecture](architecture/platform-contract.md)
 - [현재 시스템과 세 개 plane](architecture/current-system.md)
-- [데이터 모델](data-model.md)
-- [데이터 lifecycle](data-lifecycle.md)
+- [정본 데이터·품질·lineage 계약](architecture/data-contracts.md)
+- [연구·검증 계약](architecture/research-contracts.md)
+- [운영·저장·배포 계약](architecture/operations-and-deployment.md)
+- [현재와 target 비교](engineering/current-vs-target.md)
 - [데이터 출처 catalog](data-source-catalog.md)
 - [Archify 구성도와 검증 receipt](diagrams/README.md)
+- [설정 경계와 current/target 구분](configuration/README.md)
+- [ADR 0001: additive event/session foundation](adr/0001-additive-event-session-foundation.md)
 
 ### Engineering
 
+- [2026-09-10 baseline audit](engineering/baseline-audit-2026-09-10.md)
+- [2026-09-10 contradiction self-review](engineering/contradiction-review-2026-09-10.md)
+- [2026-09-10 selected P0/P1 scope](engineering/implementation-scope-2026-09-10.md)
+- [2026-09-10 architecture pass verification](evidence/architecture-pass-2026-09-10/README.md)
+- [2026-09-10 presentation-ready facts](engineering/presentation-ready-summary-2026-09-10.md)
 - [최종 교정 진행 기록](engineering/corrective-pass.md)
 - [Airflow DAG별 계약·실패 경계](engineering/airflow-audit.md)
 - [과정 요구사항별 구현·검증 위치](engineering/course-acceptance.md)
 - [플랫폼 감사와 위험](engineering/platform-audit.md)
 - [API·source·version 계약](engineering/api-contracts.md)
-- [설계 결정](design-decisions.md)
 
 ### Research
 
@@ -52,10 +61,17 @@
 - [7차시 서빙](session7-submission.md)
 - [날짜별 test results](test-results/)
 - [발표 자료](presentation/README.md)
+- [이전 MVP architecture](architecture.md)
+- [이전 final vision](final-vision.md)
+- [이전 혼합 data model](data-model.md)
+- [이전 lifecycle policy](data-lifecycle.md)
+- [이전 MVP 설계 결정](design-decisions.md)
+- [4차시 발표 대본](presentation-script.md)
 
 ## 문서 유지 규칙
 
 - 현재 기능은 코드와 테스트가 있을 때만 현재형으로 표현합니다.
+- target contract는 구현 완료의 증거가 아니며, 현재 상태는 `architecture/current-system.md`와 `engineering/current-vs-target.md`로 확인합니다.
 - 집계에는 source table, unit, source/feed/version을 함께 적습니다.
 - `collection integrity`, `observed coverage`, `analysis eligibility`를 합치지 않습니다.
 - 연구 결과와 Paper 주문 결과를 같은 성과로 표현하지 않습니다.

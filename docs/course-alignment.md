@@ -1,5 +1,7 @@
 # 과정 학습 내용과 프로젝트 구현 연결
 
+> **역사 자료:** 과정 단계별 연결표이며 현재 architecture contract가 아닙니다. 현재 구현과 target은 [문서 허브](README.md)에서 분리해 확인합니다.
+
 이 문서는 데이터 엔지니어 과정에서 학습·실습한 기술을 경제지표 발표 영향 검증과 장기 자동매매 프로젝트에 **어떻게 연결하는지** 설명한다. 첫 분석 증거는 공식 발표 시각과 당시 vintage, SIP 시장 반응을 결합한 반복 가능한 macro event study다.
 
 2026-08-20 현재 Kafka Producer와 Spark Structured Streaming Consumer를 실제 local broker로 연결하고, final 1분 bar를 PostgreSQL에 transaction upsert한다. Spark schema·watermark·checkpoint 결과는 [Spark 테스트 보고서](test-results/2026-08-19-spark-market-processor-smoke.md), DB 재처리·rollback·실제 중단/복구 결과는 [PostgreSQL 테스트 보고서](test-results/2026-08-20-postgres-market-bars.md)에 기록한다.

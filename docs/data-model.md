@@ -1,5 +1,7 @@
 # 데이터 모델과 이벤트 계약
 
+> **Superseded mixed-era reference.** 이 문서는 여러 과제 시점의 구현과 후속 설계를 함께 담아 현재 정본으로 사용하지 않습니다. 현재/target 데이터 계약은 [canonical data contracts](architecture/data-contracts.md), 실제 baseline은 [current system](architecture/current-system.md), 차이는 [current versus target](engineering/current-vs-target.md)을 따릅니다. 아래 내용은 기존 schema와 결정 기록을 추적하기 위해 보존합니다.
+
 상태: 현재 구현과 후속 설계를 함께 기록하며, 각 절의 상태를 구분함
 
 기준일: 2026-09-01

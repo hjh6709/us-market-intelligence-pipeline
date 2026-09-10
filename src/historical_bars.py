@@ -14,11 +14,33 @@ from urllib.request import Request, urlopen
 
 import psycopg
 
-from src.postgres import UPSERT_MARKET_BAR_SQL
-
 
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
 SUPPORTED_TIMEFRAMES = {"1Min": "1m", "1Day": "1d"}
+
+UPSERT_PROVIDER_RESEARCH_BAR_SQL = """
+INSERT INTO market_bars (
+    symbol, bar_start, timeframe, open, high, low, close,
+    volume, trade_count, vwap, source, feed, is_final,
+    condition_policy, spark_batch_id
+) VALUES (
+    %s, %s, %s, %s, %s, %s, %s,
+    %s, %s, %s, %s, %s, %s, %s, %s
+)
+ON CONFLICT (symbol, bar_start, timeframe, source, feed)
+DO UPDATE SET
+    open = EXCLUDED.open,
+    high = EXCLUDED.high,
+    low = EXCLUDED.low,
+    close = EXCLUDED.close,
+    volume = EXCLUDED.volume,
+    trade_count = EXCLUDED.trade_count,
+    vwap = EXCLUDED.vwap,
+    is_final = EXCLUDED.is_final,
+    condition_policy = EXCLUDED.condition_policy,
+    spark_batch_id = EXCLUDED.spark_batch_id,
+    updated_at = CURRENT_TIMESTAMP
+"""
 
 
 class HistoricalBarError(RuntimeError):
@@ -228,7 +250,7 @@ def upsert_historical_bars(
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SET TIME ZONE 'UTC'")
-            cursor.executemany(UPSERT_MARKET_BAR_SQL, rows)
+            cursor.executemany(UPSERT_PROVIDER_RESEARCH_BAR_SQL, rows)
     return len(rows)
 
 

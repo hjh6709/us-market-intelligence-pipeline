@@ -1,5 +1,7 @@
 # 4차시 과제 발표 대본
 
+> **Historical presentation script.** 수치와 Airflow 계획은 당시 발표 범위이며 현재 상태가 아닙니다. 최신 현재/target 구분은 [documentation hub](README.md)에서 확인합니다.
+
 예상 시간: 약 4분
 
 ## 1. 프로젝트 소개

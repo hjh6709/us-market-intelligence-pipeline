@@ -1,0 +1,104 @@
+{
+  "date": "2026-09-10",
+  "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
+  "corrective_starting_sha": "9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8",
+  "verified_foundation_source_sha": "fcfec150631788e50d7ce1d8746b78549f446816",
+  "branch": "architecture-contract-2026-09-10",
+  "scope": "PR #36 canonical foundation corrections only; no target feature expansion",
+  "counterexample_matrix": {
+    "path": "counterexample-matrix.md",
+    "required_tests": 51,
+    "exact_tests_present": 51,
+    "green": 51,
+    "note": "T04 and original T09 were baseline-positive controls; T48 adds the missing semantic source-revision conflict. T35-T51 all produced RED before their minimal fixes."
+  },
+  "full_python": {
+    "tests": 318,
+    "passed": 263,
+    "skipped": 55,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 18.127,
+    "execution_note": "Executed outside the filesystem sandbox because Spark/Py4J requires a local socket."
+  },
+  "node_ui": {
+    "tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 0.10602375
+  },
+  "postgresql": {
+    "version": "17.6",
+    "image": "postgres:17.6-alpine",
+    "database": "isolated disposable pr36-corrective-postgres",
+    "fresh_migration_range": "001..009",
+    "migration_009_second_apply": "PASS",
+    "foundation_and_lineage_behavior_tests": 42,
+    "validation_sink_behavior_tests": 4,
+    "behavior_tests_total": 46,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 9.239
+  },
+  "archify": {
+    "diagram_type": "architecture",
+    "spec_sha256": "190f7968832d49e95dee9418abbb09608e5a72f6045ddd255362d0ed11a2d7c2",
+    "artifact_sha256": "bfc9fbd39c477c21d356c2bdf700fe53408a6ee9066ab63dc396cf71940012fe",
+    "artifact_bytes": 730277,
+    "showcase_checks": "9/9",
+    "errors": 0,
+    "warnings": 0,
+    "browser_viewports": [
+      "1440x900 light",
+      "1440x900 dark",
+      "1600x1000 light",
+      "1920x1080 light",
+      "2048x1320 light",
+      "2048x1320 dark"
+    ],
+    "visual_review": "PASS",
+    "semantic_source_grounding_review": "PASS"
+  },
+  "contract_completion": [
+    {"id": "C1", "requirement": "Exact four-value event universe", "satisfied": "YES"},
+    {"id": "C2", "requirement": "Exact event-observation ontology for official and consensus facts", "satisfied": "YES"},
+    {"id": "C3", "requirement": "Append-only lifecycle version chain with exact transitions", "satisfied": "YES"},
+    {"id": "C4", "requirement": "Official observation economic identity excludes polling metadata and concurrent writes serialize", "satisfied": "YES"},
+    {"id": "C5", "requirement": "Explicit provider-local strict pre-marker consensus selection and dynamic current surprise projection", "satisfied": "YES"},
+    {"id": "C6", "requirement": "Append-only marker revisions and transaction-safe exactly one current primary", "satisfied": "YES"},
+    {"id": "C7", "requirement": "Snapshot-owned US equities timezone, DB local-date, S0, early-close, interval and S+N semantics", "satisfied": "YES"},
+    {"id": "C8", "requirement": "Typed price/activity definitions, exact reaction endpoints, applicability, and no cross-session fill", "satisfied": "YES"},
+    {"id": "C9", "requirement": "Marker-level reaction identity", "satisfied": "YES"},
+    {"id": "C10", "requirement": "Quality taxonomy permits normal success, requires abnormal reasons and rejects invalid cross-states", "satisfied": "YES"},
+    {"id": "C11", "requirement": "Standardized surprise remains NULL without a normalization contract", "satisfied": "YES"},
+    {"id": "C12", "requirement": "Immutable calendar snapshot parent with session FK", "satisfied": "YES"},
+    {"id": "C13", "requirement": "Immutable validation run identity and reconstructed-bar determinism", "satisfied": "YES"},
+    {"id": "C14", "requirement": "Provider research bars and raw-derived validation bars remain isolated", "satisfied": "YES"},
+    {"id": "C15", "requirement": "Legacy serving/metrics remain historical and are not reinterpreted", "satisfied": "YES"}
+  ],
+  "market_bar_audit": {
+    "historical_query_result": [
+      {"condition_policy": "provider_aggregated_v1", "spark_batch_id": -1, "count": 308512}
+    ],
+    "conclusion": "The old shared identity allowed a code/schema collision, but the checked historical database contained only provider-aggregated rows. Historical overwrite is not asserted, and use of a separate historical raw database is unknown."
+  },
+  "static_checks": {
+    "compileall": "PASS",
+    "git_diff_check": "PASS",
+    "json_artifacts": {"checked": 48, "result": "PASS"},
+    "markdown_links": {"files_checked": 102, "missing_local_targets": 0, "result": "PASS"},
+    "secret_pattern_scan": {"hits": 0, "result": "PASS"}
+  },
+  "exact_head_ci_policy": "Verified externally after the final push and reported in the final Codex report; this committed receipt does not self-attest to its own commit.",
+  "merge_action": "DO_NOT_MERGE",
+  "not_proven": [
+    "production official-observation or external-consensus adapters/backfills",
+    "operational exchange-calendar ingestion",
+    "canonical session-aware reaction recomputation or backfill",
+    "macro-regime or comparable-event engine",
+    "strategy simulator or automated research-to-order execution",
+    "full Paper experiment/fill/outcome lifecycle",
+    "managed public or production deployment"
+  ]
+}
