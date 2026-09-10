@@ -11,8 +11,10 @@ PR #36은 새 제품 기능을 확장하지 않고 canonical event/session found
 ## FOUNDATION ONLY
 
 - migration `009`는 정확한 event universe/ontology, append-only lifecycle·official observation·consensus·marker·calendar·validation lineage와 PIT-safe surprise 제약을 제공합니다.
-- `src/trading_sessions.py`는 `US_EQUITIES`/`America/New_York`, current primary marker, pre/regular/post/closed S0 규칙을 검증합니다.
-- `src/platform_contracts.py`는 exact reaction-v2 endpoint/applicability와 quality/maturity taxonomy를 순수 계약으로 제공합니다.
+- immutable surprise history와 `current_canonical_surprises` projection은 marker correction이나 later consensus backfill 뒤 stale derivation을 current에서 제외합니다.
+- `src/trading_sessions.py`는 snapshot-owned `US_EQUITIES`/`America/New_York`, current primary marker, pre/regular/post/closed S0와 verified S+N 규칙을 검증합니다.
+- `src/platform_contracts.py`는 typed reaction-v2 price/activity definition, close guard와 quality/maturity taxonomy를 순수 계약으로 제공합니다.
+- marker와 immutable record functions는 transaction-scoped identity lock으로 concurrent same-content idempotency와 different-content domain conflict를 보장합니다.
 - normalized foundation은 이번 PR에서 legacy serving에 연결하거나 historical metric을 재해석하지 않습니다.
 
 ## TARGET ONLY
@@ -25,10 +27,10 @@ PR #36은 새 제품 기능을 확장하지 않고 canonical event/session found
 
 ## Corrective verification
 
-- [x] T01–T34 exact semantic tests: 34/34 GREEN
-- [x] Full Python: 299 run, 255 passed, 44 skipped, 0 failed
+- [x] T01–T50 exact semantic tests: 50/50 GREEN
+- [x] Full Python: 317 run, 262 passed, 55 skipped, 0 failed
 - [x] Node UI: 6/6 passed
-- [x] PostgreSQL 17.6: fresh migrations `001..009`, second `009` apply, 35/35 behavior tests passed
+- [x] PostgreSQL 17.6: fresh migrations `001..009`, second `009` apply, 46/46 behavior tests passed
 - [x] Python compileall
 - [x] Archify: 9/9, 0 errors, 0 warnings; automated viewport and manual light/dark review passed
 - Exact final-head GitHub CI is checked after the final push; the PR check result is the authoritative receipt for that commit.

@@ -1,6 +1,6 @@
 # PR #36 counterexample matrix — 2026-09-10
 
-Verified source revision: `b7e738eb575e2f561a0f2e7d87ad717920c290dd`
+Verified source revision: `1d297a2ddbf03ae128d4fe0135462ae4c000170a`
 
 Database verification: PostgreSQL 17.6, fresh migrations `001..009`, then a second apply of `009`
 
@@ -42,5 +42,21 @@ Database verification: PostgreSQL 17.6, fresh migrations `001..009`, then a seco
 | T32 | Validation run ID could be reused with changed checkpoint | Immutable run parent + conflict function | Changed checkpoint rejected | `test_T32_same_validation_run_different_checkpoint_is_rejected` |
 | T33 | Validation replay depended on mutable UPSERT | Append-only idempotent record function | Same bar content returns same row | `test_T33_same_reconstructed_bar_content_is_idempotent` |
 | T34 | Same reconstructed-bar identity could overwrite OHLC | Determinism conflict function; UPDATE removed | Different OHLC rejected | `test_T34_same_reconstructed_bar_identity_different_ohlc_conflicts` |
+| T35 | No current surprise projection existed after a marker correction | Marker lineage on immutable surprise history plus dynamic current view | Old surprise remains historical but is absent from current projection | `test_T35_marker_correction_removes_stale_surprise_from_current_projection` |
+| T36 | A later eligible provider snapshot could leave an older surprise looking current | Current view re-runs the provider-local strict pre-marker selector | Old surprise remains historical but is absent from current projection | `test_T36_later_eligible_consensus_makes_old_surprise_noncurrent` |
+| T37 | Stable canonical event identity fields were directly mutable | Identity-only UPDATE trigger; locator URL remains mutable | Event-type mutation rejected | `test_T37_canonical_event_identity_fields_are_immutable` |
+| T38 | DB accepted a session whose timestamps belonged to another New York date | Parent-snapshot timezone trigger | Local-date mismatch rejected | `test_T38_session_timestamp_local_date_must_match_session_date` |
+| T39 | Late regular-session POST_30M crossed the close and remained eligible | Typed definition-derived endpoint plus close guard | Returns `NOT_APPLICABLE` with no endpoint | `test_T39_late_regular_post_metric_cannot_cross_session_close` |
+| T40 | Raw phase typo could bypass phase policy | One canonical `ReleasePhase` enum at resolver boundary | `POSTMARKET` rejected | `test_T40_arbitrary_release_phase_is_rejected` |
+| T41 | `NO_OBSERVATIONS + ELIGIBLE` was accepted | Explicit cross-taxonomy guard | Invalid state rejected | `test_T41_no_observations_cannot_be_eligible` |
+| T42 | Abnormal quality states could omit reason metadata | Exact normal tuple exemption plus abnormal reason rule | Failed/partial/insufficient without reason rejected | `test_T42_abnormal_quality_state_requires_reason` |
+| T43 | Deterministic two-transaction race committed two different primary kinds | Event-scoped transaction advisory lock before marker-chain checks | Exactly one commit; loser receives domain conflict | `test_T43_concurrent_primary_marker_insert_has_one_domain_winner` |
+| T44 | Concurrent identical observations leaked a raw identity UniqueViolation | Event/code transaction advisory lock before read-then-insert | One fact; both callers receive the same ID | `test_T44_concurrent_identical_observations_return_same_id` |
+| T45 | Concurrent identical consensus snapshots leaked a raw identity UniqueViolation | Event/code/provider transaction advisory lock | One fact; both callers receive the same ID | `test_T45_concurrent_identical_consensus_returns_same_id` |
+| T46 | Concurrent identical validation bars leaked a raw identity UniqueViolation | Full bar-identity transaction advisory lock | One fact; both callers receive the same ID | `test_T46_concurrent_identical_validation_bars_return_same_id` |
+| T47 | Concurrent different validation bars leaked a timing-dependent raw UniqueViolation | Same serialized bar identity plus existing material comparison | One fact; loser receives `VALIDATION_BAR_DETERMINISM_CONFLICT` | `test_T47_concurrent_different_validation_bars_use_domain_conflict` |
+| T48 | One provider source revision naming two internal revisions leaked an index name | Explicit source-revision lookup under the observation lock | Deterministic `CONFLICTING_SOURCE_FACT` | `test_T48_source_revision_conflict_uses_domain_error` |
+| T49 | No pure verified-calendar S+1 seam existed | Snapshot-scoped row-count resolver | Friday +1 resolves to Monday session | `test_T49_session_offset_counts_verified_sessions_after_friday` |
+| T50 | No pure verified-calendar S+7 seam existed | Same resolver counts seven stored sessions | Resolves to seventh session, not date +7 | `test_T50_session_offset_seven_uses_verified_calendar_not_date_math` |
 
-Additional exact guards also pass for lifecycle idempotency/conflict, observation material fields, current-marker demotion, corrected-marker consensus selection, marker/session immutability, revised-actual rejection, surprise arithmetic, validation-run/bar immutability, provider/raw physical isolation, and replay recovery.
+Additional exact guards also pass for lifecycle idempotency/conflict, observation material fields, current-marker demotion, corrected-marker consensus selection, marker/session immutability, revised-actual rejection, surprise arithmetic, concurrent validation-run idempotency, typed price/activity definitions, provider/raw physical isolation, and replay recovery.

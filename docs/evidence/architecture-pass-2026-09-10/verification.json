@@ -1,24 +1,24 @@
 {
   "date": "2026-09-10",
   "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
-  "corrective_starting_sha": "96fed9cb1102f90bc0529c82ff617cd5d2684e46",
-  "verified_foundation_source_sha": "b7e738eb575e2f561a0f2e7d87ad717920c290dd",
+  "corrective_starting_sha": "9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8",
+  "verified_foundation_source_sha": "1d297a2ddbf03ae128d4fe0135462ae4c000170a",
   "branch": "architecture-contract-2026-09-10",
   "scope": "PR #36 canonical foundation corrections only; no target feature expansion",
   "counterexample_matrix": {
     "path": "counterexample-matrix.md",
-    "required_tests": 34,
-    "exact_tests_present": 34,
-    "green": 34,
-    "note": "T04 and T09 were baseline-positive controls and did not produce an artificial RED; all other recorded correction packages produced RED before the minimal fix."
+    "required_tests": 50,
+    "exact_tests_present": 50,
+    "green": 50,
+    "note": "T04 and original T09 were baseline-positive controls; T48 adds the missing semantic source-revision conflict. T35-T50 all produced RED before their minimal fixes."
   },
   "full_python": {
-    "tests": 299,
-    "passed": 255,
-    "skipped": 44,
+    "tests": 317,
+    "passed": 262,
+    "skipped": 55,
     "failed": 0,
     "result": "PASS",
-    "seconds": 15.785,
+    "seconds": 15.159,
     "execution_note": "Executed outside the filesystem sandbox because Spark/Py4J requires a local socket."
   },
   "node_ui": {
@@ -26,7 +26,7 @@
     "passed": 6,
     "failed": 0,
     "result": "PASS",
-    "seconds": 0.102735334
+    "seconds": 0.10602375
   },
   "postgresql": {
     "version": "17.6",
@@ -34,12 +34,12 @@
     "database": "isolated disposable pr36-corrective-postgres",
     "fresh_migration_range": "001..009",
     "migration_009_second_apply": "PASS",
-    "foundation_and_lineage_behavior_tests": 31,
+    "foundation_and_lineage_behavior_tests": 42,
     "validation_sink_behavior_tests": 4,
-    "behavior_tests_total": 35,
+    "behavior_tests_total": 46,
     "failed": 0,
     "result": "PASS",
-    "seconds": 7.208
+    "seconds": 9.239
   },
   "archify": {
     "diagram_type": "architecture",
@@ -64,13 +64,13 @@
     {"id": "C1", "requirement": "Exact four-value event universe", "satisfied": "YES"},
     {"id": "C2", "requirement": "Exact event-observation ontology for official and consensus facts", "satisfied": "YES"},
     {"id": "C3", "requirement": "Append-only lifecycle version chain with exact transitions", "satisfied": "YES"},
-    {"id": "C4", "requirement": "Official observation economic identity excludes polling metadata", "satisfied": "YES"},
-    {"id": "C5", "requirement": "Explicit provider-local strict pre-marker consensus selection", "satisfied": "YES"},
-    {"id": "C6", "requirement": "Append-only marker revisions and exactly one current primary", "satisfied": "YES"},
-    {"id": "C7", "requirement": "US equities timezone, S0, early-close, and interval semantics", "satisfied": "YES"},
-    {"id": "C8", "requirement": "Exact reaction endpoints, applicability, and no cross-session fill", "satisfied": "YES"},
+    {"id": "C4", "requirement": "Official observation economic identity excludes polling metadata and concurrent writes serialize", "satisfied": "YES"},
+    {"id": "C5", "requirement": "Explicit provider-local strict pre-marker consensus selection and dynamic current surprise projection", "satisfied": "YES"},
+    {"id": "C6", "requirement": "Append-only marker revisions and transaction-safe exactly one current primary", "satisfied": "YES"},
+    {"id": "C7", "requirement": "Snapshot-owned US equities timezone, DB local-date, S0, early-close, interval and S+N semantics", "satisfied": "YES"},
+    {"id": "C8", "requirement": "Typed price/activity definitions, exact reaction endpoints, applicability, and no cross-session fill", "satisfied": "YES"},
     {"id": "C9", "requirement": "Marker-level reaction identity", "satisfied": "YES"},
-    {"id": "C10", "requirement": "Quality taxonomy permits normal success and rejects invalid cross-states", "satisfied": "YES"},
+    {"id": "C10", "requirement": "Quality taxonomy permits normal success, requires abnormal reasons and rejects invalid cross-states", "satisfied": "YES"},
     {"id": "C11", "requirement": "Standardized surprise remains NULL without a normalization contract", "satisfied": "YES"},
     {"id": "C12", "requirement": "Immutable calendar snapshot parent with session FK", "satisfied": "YES"},
     {"id": "C13", "requirement": "Immutable validation run identity and reconstructed-bar determinism", "satisfied": "YES"},
