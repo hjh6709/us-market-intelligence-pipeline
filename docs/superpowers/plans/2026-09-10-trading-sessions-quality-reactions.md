@@ -20,7 +20,7 @@ Files: `tests/test_trading_sessions.py`, `tests/test_platform_contracts.py`.
 
 Files: `src/trading_sessions.py`, `src/platform_contracts.py`.
 
-Interface: `plan_event_sessions(*, event_id: str, markers: Sequence[EventMarker], sessions: Sequence[TradingSession], market_code: str, planner_version: str) -> EventSessionPlan`; `metric_maturity(...) -> QualityAssessment`.
+Interface: `plan_event_session(*, event_id: str, markers: Sequence[EventMarker], sessions: Sequence[TradingSession], market_code: str, planner_version: str) -> EventSessionPlan`; `metric_maturity(...) -> QualityAssessment`.
 
 - [ ] Minimally implement pure marker/session validation and S-1/S0/S+1 selection; do not add a provider or persistence.
 - [ ] Add distinct status enums and the full immutable `event_session_reaction_v2` registry; do not compute or rename legacy rows.

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-preset="classic">
+<html lang="en" data-theme="dark" data-preset="blueprint">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.17.0-dev.1">
-  <title>Economic Event Intelligence &amp; Strategy Validation — Target Architecture Diagram</title>
+  <title>Economic Event Intelligence &amp; Strategy Validation Platform Diagram</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -4955,12 +4955,13 @@
            data-preset-badge-blueprint="BLUEPRINT / REV 01"
            data-preset-badge-editorial="EDITORIAL / FIELD NOTE">
         <div class="pulse-dot"></div>
-        <h1>Economic Event Intelligence &amp; Strategy Validation — Target Architecture</h1>
+        <h1>Economic Event Intelligence &amp; Strategy Validation Platform</h1>
       </div>
+      <p class="subtitle">Target contract over baseline 63633a5 · artifact source revision e3e447b</p>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"research-lifecycle","label":"Research lifecycle","focus":["official-sources","event-facts","session-planner","sip-bars","quality","research","postgres","serving"],"note":"Follow point-in-time event facts through session-aware research and serving."},{"id":"validation-plane","label":"Raw SIP validation","focus":["raw-archive","kafka","spark","postgres"],"note":"Raw trades validate replay, deduplication and recovery; they are not the 202×10 research source."},{"id":"paper-evidence","label":"Forward Paper evidence","focus":["research","postgres","serving","paper"],"note":"Research evidence may support a hypothesis, but only an explicit Paper experiment may own orders."}]</script>
-    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"https://github.com/hjh6709/us-market-intelligence-pipeline","revision":"63633a50c85c88e507be458067ecf6706220f813","shortRevision":"63633a5"},"referenceCount":12,"nodes":{"official-sources":[{"path":"config/market_event_catalog.json","line":1,"label":"Current event catalog","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/config/market_event_catalog.json#L1"}],"event-facts":[{"path":"db/migrations/002_macro_event_analysis.sql","line":29,"label":"Current event table","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/db/migrations/002_macro_event_analysis.sql#L29"}],"session-planner":[{"path":"src/market_event_context.py","line":1,"label":"Current event windows","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/market_event_context.py#L1"}],"sip-bars":[{"path":"src/historical_bars.py","line":29,"label":"SIP bar contract","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/historical_bars.py#L29"}],"quality":[{"path":"src/market_context_backfill.py","line":416,"label":"Current coverage logic","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/market_context_backfill.py#L416"}],"research":[{"path":"src/macro_event_impact.py","line":162,"label":"Current impact metrics","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/macro_event_impact.py#L162"}],"postgres":[{"path":"db/migrations/001_market_bars.sql","line":1,"label":"Curated bar schema","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/db/migrations/001_market_bars.sql#L1"}],"serving":[{"path":"src/serving_api.py","line":57,"label":"Current serving API","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/serving_api.py#L57"}],"paper":[{"path":"src/paper_web.py","line":41,"label":"Current Paper service","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/paper_web.py#L41"}],"raw-archive":[{"path":"src/market_trade_archive.py","line":118,"label":"Current raw archive","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/market_trade_archive.py#L118"}],"kafka":[{"path":"src/kafka_publisher.py","line":25,"label":"Current Kafka publisher","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/kafka_publisher.py#L25"}],"spark":[{"path":"src/spark_market_processor.py","line":130,"label":"Current Spark processor","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/63633a50c85c88e507be458067ecf6706220f813/src/spark_market_processor.py#L130"}]}}</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"event-research","label":"Event research","focus":["official-sources","consensus-provider","event-facts","session-planner","provider-bars","legacy-research","target-research","research-store","serving"],"note":"Official observations and external consensus remain separate before PIT surprise and session-aware research."},{"id":"validation-plane","label":"Raw SIP validation","focus":["raw-archive","kafka","spark","validation-store"],"note":"Raw-derived validation bars use storage physically distinct from provider-aggregated research bars."},{"id":"paper-boundary","label":"Paper boundary","focus":["legacy-research","target-research","serving","current-paper","target-paper","research-store"],"note":"Current guarded Paper intent is distinct from target experiments, fills and outcomes."}]</script>
+    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"https://github.com/hjh6709/us-market-intelligence-pipeline","revision":"e3e447b5fcf02a505f53faa8ce1bc87a80259cbf","shortRevision":"e3e447b"},"referenceCount":17,"nodes":{"official-sources":[{"path":"config/market_event_catalog.json","line":1,"label":"Current catalog","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/config/market_event_catalog.json#L1"}],"consensus-provider":[{"path":"docs/architecture/data-contracts.md","line":31,"label":"Consensus contract","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/docs/architecture/data-contracts.md#L31"}],"event-facts":[{"path":"db/migrations/009_event_session_foundations.sql","line":4,"label":"Migration 009","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/db/migrations/009_event_session_foundations.sql#L4"}],"session-planner":[{"path":"src/trading_sessions.py","line":141,"label":"Pure planner","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/trading_sessions.py#L141"}],"target-research":[{"path":"docs/architecture/research-contracts.md","line":1,"label":"Target contract","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/docs/architecture/research-contracts.md#L1"}],"target-paper":[{"path":"docs/architecture/operations-and-deployment.md","line":1,"label":"Target Paper ops","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/docs/architecture/operations-and-deployment.md#L1"}],"provider-bars":[{"path":"src/historical_bars.py","line":1,"label":"Provider writer","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/historical_bars.py#L1"}],"legacy-research":[{"path":"src/macro_event_impact.py","line":1,"label":"Current impacts","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/macro_event_impact.py#L1"}],"research-store":[{"path":"db/migrations/001_market_bars.sql","line":1,"label":"Current research bars","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/db/migrations/001_market_bars.sql#L1"},{"path":"db/migrations/009_event_session_foundations.sql","line":1,"label":"Empty foundation","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/db/migrations/009_event_session_foundations.sql#L1"}],"serving":[{"path":"src/serving_repository.py","line":1,"label":"Current reads","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/serving_repository.py#L1"}],"current-paper":[{"path":"src/paper_web.py","line":1,"label":"Current Paper UI","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/paper_web.py#L1"}],"raw-archive":[{"path":"src/market_trade_archive.py","line":1,"label":"Raw archive","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/market_trade_archive.py#L1"}],"kafka":[{"path":"src/kafka_publisher.py","line":1,"label":"Replay publisher","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/kafka_publisher.py#L1"}],"spark":[{"path":"src/spark_market_processor.py","line":1,"label":"Processor","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/spark_market_processor.py#L1"}],"validation-store":[{"path":"db/migrations/009_event_session_foundations.sql","line":388,"label":"Separate table","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/db/migrations/009_event_session_foundations.sql#L388"},{"path":"src/postgres.py","line":139,"label":"Validation sink","href":"https://github.com/hjh6709/us-market-intelligence-pipeline/blob/e3e447b5fcf02a505f53faa8ce1bc87a80259cbf/src/postgres.py#L139"}]}}</script>
     <script id="archify-i18n-data" type="application/json">{"locale":"en","messages":{"viewer.kind.frontend":"Frontend","viewer.kind.backend":"Backend","viewer.kind.database":"Database","viewer.kind.cloud":"Cloud","viewer.kind.security":"Security","viewer.kind.messagebus":"Message bus","viewer.kind.external":"External","viewer.kind.neutral":"Neutral","viewer.kind.node":"Node","viewer.kind.start":"Start","viewer.kind.active":"Active","viewer.kind.waiting":"Waiting","viewer.kind.decision":"Decision","viewer.kind.success":"Success","viewer.kind.failure":"Failure","viewer.toolbar.actions":"Diagram actions","viewer.theme.toggle.title":"Toggle theme (T)","viewer.theme.toggle":"Toggle color theme","viewer.theme.dark":"Dark","viewer.theme.light":"Light","viewer.preset.choose.title":"Choose visual style (S cycles)","viewer.preset.choose":"Choose visual style","viewer.preset.style":"Style","viewer.preset.menu":"Visual style","viewer.preset.identity":"Visual identity","viewer.preset.cycles":"S cycles","viewer.preset.classic":"Classic","viewer.preset.classic.short":"Classic","viewer.preset.classic.hint":"Stable technical default","viewer.preset.flow":"Signal Flow","viewer.preset.flow.short":"Flow","viewer.preset.flow.hint":"Motion-forward presentation","viewer.preset.blueprint":"Blueprint","viewer.preset.blueprint.hint":"Engineering review","viewer.preset.editorial":"Editorial","viewer.preset.editorial.hint":"Publication and launch notes","viewer.preset.badge.signalFlow":"SIGNAL FLOW","viewer.preset.badge.blueprint":"BLUEPRINT / REV 01","viewer.preset.badge.editorial":"EDITORIAL / FIELD NOTE","viewer.preset.badge.editorialPlate":"ARCHIFY / PLATE 04","viewer.preset.current":"Visual style: {style}. Choose visual style","viewer.motion.live":"Live","viewer.motion.still":"Still","viewer.motion.pause":"Pause motion","viewer.motion.resume":"Resume motion","viewer.motion.reduced":"Motion paused by reduced-motion preference","viewer.motion.hidden":"Motion paused while this page is hidden","viewer.motion.yielding":"Pause motion; currently yielding to {owner}","viewer.motion.yielding.title":"Live preview enabled · yielding to {owner}","viewer.owner.story":"the guided story","viewer.owner.chapter":"the active chapter","viewer.owner.chapterPreview":"the chapter delta preview","viewer.owner.handoff":"the chapter handoff","viewer.owner.route":"Route Probe","viewer.owner.lens":"Semantic Lens","viewer.owner.relationship":"Relationship Preview","viewer.owner.intent":"Intent Trace","viewer.owner.focus":"semantic focus","viewer.owner.legend":"legend preview","viewer.owner.reader":"reader interaction","viewer.present.enter":"Enter presentation stage","viewer.present.enter.title":"Presentation stage (F)","viewer.present.exit":"Exit presentation stage","viewer.present.exit.title":"Exit presentation stage (F or Escape)","viewer.present.present":"Present","viewer.present.exit.label":"Exit","viewer.export.button":"Export","viewer.export.button.title":"Export diagram (E)","viewer.export.diagram":"Export diagram","viewer.export.menu":"Export","viewer.export.subtitle":"Portable, clean outputs","viewer.export.share":"Share","viewer.export.shareCard":"Share Card","viewer.export.routeShareCard":"Route Share Card","viewer.export.reachShareCard":"Reach Share Card","viewer.export.copyShareCard":"Copy Share Card","viewer.export.copyDiagram":"Copy diagram","viewer.export.clipboardPng":"PNG to clipboard","viewer.export.raster":"Raster images","viewer.export.image":"Image","viewer.export.lossless":"Lossless image","viewer.export.compact":"Compact image","viewer.export.modern":"Modern image","viewer.export.vectorMotion":"Vector and motion","viewer.export.vectorMotion.heading":"Vector \u0026 motion","viewer.export.editable":"Editable vector","viewer.export.motion6s":"6s motion","viewer.export.unsupported":"Not supported by this browser","viewer.export.clipboardUnsupported":"Clipboard image write not supported by this browser","viewer.export.clipboardUnsupported.period":"Clipboard image write not supported by this browser.","viewer.export.clipboardUnsupported.short":"Clipboard image write not supported in this browser.","viewer.export.motionUnavailable":"Motion capture unavailable in this browser","viewer.export.webmUnavailable":"WebM unavailable in this browser","viewer.export.failed":"Export failed: {message}","viewer.export.unknownVariant":"Unknown Share Card variant: {variant}","viewer.export.routeRequired":"Trace a route before exporting a Route Share Card","viewer.export.reachRequired":"Trace authored reach before exporting a Reach Share Card","viewer.export.unknown":"unknown","viewer.export.routeFailed":"Route Share Card export failed: {message}","viewer.export.reachFailed":"Reach Share Card export failed: {message}","viewer.export.copyFailed":"Copy failed: {message}","viewer.export.copiedPng":"Copied PNG to clipboard","viewer.export.copiedShare":"Copied Share Card","viewer.export.downloadedShare":"Downloaded Share Card","viewer.export.downloadedRoute":"Downloaded Route Share Card","viewer.export.downloadedReach":"Downloaded Reach Share Card","viewer.export.downloadedWebm":"Downloaded WebM","viewer.export.recording":"Recording 6 seconds of motion…","viewer.export.card.routeSummary.one":"Route: {source} → {target} · {count} directed hop","viewer.export.card.routeSummary.other":"Route: {source} → {target} · {count} directed hops","viewer.export.card.reachSummary":"Authored {direction} from {origin} · {nodes} · {links} · max {hops}","viewer.export.card.node.one":"{count} node","viewer.export.card.node.other":"{count} nodes","viewer.export.card.link.one":"{count} link","viewer.export.card.link.other":"{count} links","viewer.export.card.hop.one":"{count} hop","viewer.export.card.hop.other":"{count} hops","viewer.export.card.routeBadge":"ARCHIFY · ROUTE · {hops}","viewer.export.card.reachBadge":"ARCHIFY · {direction} REACH","viewer.export.card.defaultBadge":"ARCHIFY · {preset} · {theme}","viewer.export.direction.upstream":"Upstream","viewer.export.direction.downstream":"Downstream","viewer.export.error.canvasUnavailable":"Canvas unavailable for {label}","viewer.export.error.contextUnavailable":"2D canvas context unavailable for {label}","viewer.export.error.toBlobUnavailable":"canvas.toBlob unavailable for {label}","viewer.export.error.toBlobNull":"canvas.toBlob returned no data for {label}","viewer.export.error.variantsCombined":"Share Card variants cannot be combined","viewer.export.error.viewerState":"Share Card export could not remove temporary viewer state","viewer.export.error.routeState":"Route Card export could not preserve the resolved route safely","viewer.export.error.reachState":"Reach Card export could not preserve authored reach safely","viewer.export.error.webmRequirements":"WebM motion export requires a trace animation and browser MediaRecorder support","viewer.export.error.mediaRecorder":"MediaRecorder failed","viewer.export.error.emptyWebm":"MediaRecorder produced an empty WebM","viewer.export.error.webmBackground":"SVG background could not be loaded for WebM export","viewer.guided.region":"Guided diagram views","viewer.guided.previous":"Previous guided view","viewer.guided.previous.title":"Previous guided view ([)","viewer.guided.next":"Next guided view","viewer.guided.next.title":"Next guided view (])","viewer.guided.views":"Guided views","viewer.guided.explore":"Explore this system","viewer.guided.intro":"Step through curated paths without changing the source diagram.","viewer.guided.trail":"Story trail","viewer.guided.beat":"Beat","viewer.guided.nextBeat":"Next","viewer.guided.play":"Play guided story","viewer.guided.play.title":"Play guided story (P)","viewer.guided.pause":"Pause guided story","viewer.guided.pause.title":"Pause guided story (P)","viewer.guided.replay":"Replay guided story","viewer.guided.replay.title":"Replay guided story (P)","viewer.guided.playStory":"Play story","viewer.guided.pauseStory":"Pause","viewer.guided.replayStory":"Replay story","viewer.guided.motionUnavailable":"Story playback unavailable while motion is Still","viewer.guided.enableMotion":"Switch motion to Live to play the guided story","viewer.guided.selectBeatLink":"Select a Story Beat to copy its exact link","viewer.guided.copyMoment":"Copy moment","viewer.guided.momentCopied":"Moment link copied","viewer.guided.momentCopyFailed":"Could not copy story moment link","viewer.guided.copied":"Copied","viewer.guided.copyFailed":"Copy failed","viewer.guided.showAll":"Show all","viewer.guided.showAll.aria":"Show entire diagram","viewer.guided.chapters":"Story chapters","viewer.guided.storyTrail":"Story trail for {label}: {count} beats","viewer.guided.chapter.open":"Open chapter {index} of {total}: {label}, {count} stops","viewer.guided.chapter.current":"Current chapter {index} of {total}: {label}, {count} stops","viewer.guided.chapter.selectedNodes":"{count} selected nodes","viewer.guided.chapter.stops":"{count} stops","viewer.guided.chapter.stop.one":"{count} stop","viewer.guided.chapter.stop.other":"{count} stops","viewer.guided.chapter.current.title":"{label} — current chapter, {count} stops","viewer.guided.chapter.delta.expanded":"{stay} stay, {enter} enter, {leave} leave","viewer.guided.chapter.delta.aria":"Open chapter {index} of {total}: {label}. Chapter focus delta: {delta}","viewer.guided.chapter.delta.title":"{label} — {delta} chapter focus","viewer.guided.handoff":"{from} → {to} · via {label}","viewer.guided.share.chapter":"Chapter {index} / {total}","viewer.guided.share.initial":"Chapter 01 / 01","viewer.guided.share.default":"Guided chapter","viewer.guided.state.ready":"Ready","viewer.guided.state.playing":"Playing","viewer.guided.state.settled":"Settled","viewer.guided.state.paused":"Paused","viewer.guided.state.pinned":"Pinned","viewer.guided.state.still":"Still","viewer.guided.share.step":"Step {index} / {total} · {label}","viewer.guided.share.staticMoment":"{step} · Static moment","viewer.guided.share.complete":"{count} steps complete · {note}","viewer.guided.share.settled":"Path settled for reading.","viewer.guided.share.staticPath":"{count} steps · Static path","viewer.guided.share.ready":"{count} steps · Ready","viewer.guided.share.aria":"{state} chapter {index} of {total}: {label}. {beat}. {route}","viewer.guided.beat.start":"Beat {index} / {total} · {label} · starting point","viewer.guided.beat.forward":"Beat {index} / {total} · {from} → {to}","viewer.guided.beat.reverse":"Beat {index} / {total} · {from} → {to} · reverse authored link","viewer.guided.beat.multiple":"Beat {index} / {total} · {from} ⇄ {to} · {count} authored links","viewer.guided.beat.group":"Beat {index} / {total} · {from} · {to} · grouped · no direct link","viewer.guided.beat.aria.prefix":"Story beat {index} of {total}: {label}. ","viewer.guided.beat.aria.start":"Starting point.","viewer.guided.beat.aria.forward":"From {from} through one authored forward relationship.","viewer.guided.beat.aria.reverse":"From {from}; the authored relationship points from {to} to {from}.","viewer.guided.beat.aria.multiple":"From {from} through {count} authored relationships; shown without arbitrary motion.","viewer.guided.beat.aria.group":"Grouped from {from} with no direct authored relationship.","viewer.guided.caption.start":"Starting point","viewer.guided.caption.grouped":"Grouped transition · no direct authored link","viewer.guided.caption.more":" +{count} more","viewer.guided.caption.reverse":"Reverse authored relationship","viewer.guided.caption.relationships":"{count} authored relationships","viewer.guided.caption.relationship":"Authored relationship","viewer.guided.caption.direction":"authored direction: {from} → {to}","viewer.guided.caption.starting":"Authored starting point","viewer.guided.beatLink":"Copy link to current story moment: Beat {index} of {total}: {label}","viewer.guided.noStory":"This diagram has no authored guided story.","viewer.guide.eyebrow":"Diagram guide","viewer.guide.close":"Close diagram guide","viewer.guide.inspecting":"Inspecting compiled semantics","viewer.guide.actions":"Diagram exploration actions","viewer.guide.find":"Find any node","viewer.guide.find.hint":"Search labels, responsibilities, kinds, and stable IDs.","viewer.guide.route":"Trace a route","viewer.guide.route.aria":"Trace a directed route","viewer.guide.route.hint":"Ask how two semantic nodes connect in authored direction.","viewer.guide.map":"See the whole system","viewer.guide.map.hint":"Open Semantic Radar with a live viewport and stable nodes.","viewer.guide.lens":"Compare semantic kinds","viewer.guide.lens.hint":"Count roles, reveal their traffic, and compare direct authored links.","viewer.guide.story":"Play the guided story","viewer.guide.story.hint":"Walk the authored chapters and real relationships.","viewer.guide.present":"Enter Presentation Stage","viewer.guide.present.hint":"Give the live diagram the viewport without changing export.","viewer.guide.shortcuts":"Additional keyboard shortcuts","viewer.guide.shortcut.export":"Export","viewer.guide.shortcut.theme":"Theme","viewer.guide.shortcut.style":"Style","viewer.guide.shortcut.reset":"Reset","viewer.guide.shortcut.zoomIn":"Zoom in","viewer.guide.shortcut.zoomOut":"Zoom out","viewer.guide.shortcut.close":"Close","viewer.guide.facts":"{nodes} · {relationships} · {views}","viewer.guide.fact.node.one":"{count} semantic node","viewer.guide.fact.node.other":"{count} semantic nodes","viewer.guide.fact.relationship.one":"{count} relationship","viewer.guide.fact.relationship.other":"{count} relationships","viewer.guide.fact.view.one":"{count} guided view","viewer.guide.fact.view.other":"{count} guided views","viewer.guide.story.available.one":"Walk {count} authored chapter and its real relationships.","viewer.guide.story.available.other":"Walk {count} authored chapters and their real relationships.","viewer.guide.story.unavailable":"No authored guided story in this diagram.","viewer.guide.open":"Open diagram guide","viewer.guide.noStory":"This diagram has no authored guided story.","viewer.finder.title":"Find a node","viewer.finder.close":"Close node finder","viewer.finder.placeholder":"Search labels or IDs","viewer.finder.search":"Search diagram nodes","viewer.finder.results":"Diagram nodes","viewer.finder.empty":"No matching nodes","viewer.finder.result.focus":"Focus {label}","viewer.finder.result.routeStart":"Choose {label} as route start","viewer.finder.result.routeTarget":"Choose {label} as route destination, {links}","viewer.finder.status.empty":"No matching nodes","viewer.finder.status.count.one":"{count} matching node","viewer.finder.status.count.other":"{count} matching nodes","viewer.finder.noun.nodes":"nodes","viewer.finder.link.one":"{count} link","viewer.finder.link.other":"{count} links","viewer.finder.result.focus.one":"Focus {label}, {count} related connection","viewer.finder.result.focus.other":"Focus {label}, {count} related connections","viewer.finder.status.filtered":"{visible} of {available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"Semantic passport","viewer.passport.metadata":"Node metadata","viewer.passport.evidence":"Verified source evidence","viewer.passport.verified":"Verified source","viewer.passport.reach":"Authored reach","viewer.passport.reach.trace":"Trace authored reachability","viewer.passport.upstream":"Upstream","viewer.passport.downstream":"Downstream","viewer.passport.upstream.trace":"Trace upstream authored reachability","viewer.passport.downstream.trace":"Trace downstream authored reachability","viewer.passport.close":"Close semantic passport","viewer.passport.copy":"Copy link","viewer.passport.copy.focus":"Copy link to focused node","viewer.passport.relations":"Relations","viewer.passport.relations.show":"Show connected relationships","viewer.passport.relations.hide":"Hide connected relationships","viewer.passport.relations.list":"Connected relationships","viewer.passport.copyRelation":"Copy relation","viewer.passport.copyNode":"Copy node","viewer.passport.copyPinned":"Copy link to pinned relationship","viewer.passport.copySource":"Copy link to source node","viewer.passport.copy.focused.success":"Focused node link copied","viewer.passport.copy.pinned.success":"Pinned relationship link copied","viewer.passport.copy.focused.failed":"Could not copy focused node link","viewer.passport.copy.pinned.failed":"Could not copy pinned relationship link","viewer.passport.relationship.none":"No connected relationships","viewer.passport.relationship.count.one":"{count} relation","viewer.passport.relationship.count.other":"{count} relations","viewer.passport.relationship.show.one":"Show {count} connected relationship","viewer.passport.relationship.show.other":"Show {count} connected relationships","viewer.passport.relationship.summary":"{out} outgoing · {in} incoming{loops}","viewer.passport.relationship.loops":" · {count} loop","viewer.passport.relationship.explorer":"Direct relationship explorer","viewer.passport.relationship.help":"Use arrow keys to explore relationships. Press Enter or Space to pin details; Escape clears.","viewer.passport.relationship.loopsBack":"loops back","viewer.passport.relationship.connectsTo":"connects to","viewer.passport.relationship.connectsFrom":"connects from","viewer.passport.relationship.pinned":"Pinned relationship · {from} → {to} · {label}","viewer.passport.relationship.inspect":"Inspect relationship {index} of {total}: {from} to {to}, {label}. Press Enter for details.","viewer.passport.relationship.group.out":"Outgoing","viewer.passport.relationship.group.in":"Incoming","viewer.passport.relationship.group.loop":"Self loops","viewer.passport.relationship.row":"{group}: {relationship}, {neighbor}","viewer.passport.relationship.direction.out":"OUT →","viewer.passport.relationship.direction.in":"← IN","viewer.passport.relationship.direction.loop":"LOOP","viewer.passport.sourceCount.one":"{count} verified source reference","viewer.passport.sourceCount.other":"{count} verified source references","viewer.passport.sourceMarker":"SRC","viewer.passport.beacon.one":"{count} verified source; focus this node to inspect","viewer.passport.beacon.other":"{count} verified sources; focus this node to inspect","viewer.passport.repository.open":"Open verified repository revision {revision}","viewer.passport.source.open":"Open verified source {path} at revision {revision}","viewer.passport.source.openLink":"Open ↗","viewer.passport.reach.upstream.one":"Trace {count} upstream authored node","viewer.passport.reach.upstream.other":"Trace {count} upstream authored nodes","viewer.passport.reach.downstream.one":"Trace {count} downstream authored node","viewer.passport.reach.downstream.other":"Trace {count} downstream authored nodes","viewer.passport.reach.noUpstream":"No upstream authored nodes","viewer.passport.reach.noDownstream":"No downstream authored nodes","viewer.passport.reach.status":"{direction} · {nodes} nodes · {links} links · max {hops} hops","viewer.route.eyebrow":"Route probe","viewer.route.start":"Choose a start node","viewer.route.start.find":"Find start","viewer.route.start.find.aria":"Find a route start","viewer.route.copy":"Copy link","viewer.route.copy.aria":"Copy link to traced route","viewer.route.clear":"Clear","viewer.route.clear.aria":"Clear route probe","viewer.route.traced":"Traced route","viewer.route.pickTwo":"Pick two semantic nodes on the diagram","viewer.route.pickOne":"Pick a semantic node on the diagram","viewer.route.controls":"Route journey controls","viewer.route.previous":"Previous route position","viewer.route.play":"Play route journey","viewer.route.pause":"Pause route journey","viewer.route.replay":"Replay route journey","viewer.route.next":"Next route position","viewer.route.journey":"Journey","viewer.route.pause.label":"Pause","viewer.route.replay.label":"Replay","viewer.route.overview":"Overview","viewer.route.overview.aria":"Show complete route overview","viewer.route.instructions":"Choose the source, then the destination. Direction matters.","viewer.route.destination":"Choose a destination from {label}","viewer.route.destination.find":"Find target","viewer.route.destination.find.aria":"Find a reachable route destination","viewer.route.differentDestination":"Choose a different destination","viewer.route.distinct":"A route needs two distinct semantic nodes.","viewer.route.unreachable":"No directed route to {label}","viewer.route.unreachable.detail":"{target} is not reachable from {source}. Pick a highlighted destination.","viewer.route.start.instructions":"Select the source. The next step will reveal only directed destinations.","viewer.route.copy.success":"Traced route link copied","viewer.route.copy.failed":"Could not copy traced route link","viewer.route.position":"Route position {index} of {total}: {label}","viewer.route.step":"Step {index} of {total} · {phase} · {label}","viewer.route.motionRequired":"Automatic journey requires Live motion","viewer.route.trigger.clear":"Clear traced route","viewer.route.overview.status":"{nodes} · {hops} · shortest authored route","viewer.route.overview.node.one":"{count} node","viewer.route.overview.node.other":"{count} nodes","viewer.route.overview.hop.one":"{count} directed hop","viewer.route.overview.hop.other":"{count} directed hops","viewer.route.phase.playing":"Playing","viewer.route.phase.complete":"Complete","viewer.route.phase.inspecting":"Inspecting","viewer.route.destination.count.one":"{count} directed destination available. Pick a highlighted node.","viewer.route.destination.count.other":"{count} directed destinations available. Pick a highlighted node.","viewer.route.noOutgoing":"No outgoing route starts here. Clear and choose another source.","viewer.route.result.title":"{source} to {target}","viewer.route.finder.source.title":"Choose route start","viewer.route.finder.source.placeholder":"Search route sources","viewer.route.finder.source.empty":"No matching route sources","viewer.route.finder.source.results":"Nodes that can start a route","viewer.route.finder.source.noun":"route sources","viewer.route.finder.source.badge":"start","viewer.route.finder.target.title":"Destination from {label}","viewer.route.finder.target.placeholder":"Search reachable destinations","viewer.route.finder.target.empty":"No matching reachable destinations","viewer.route.finder.target.results":"Reachable route destinations","viewer.route.finder.target.noun":"reachable destinations","viewer.route.hop.one":"{count} hop","viewer.route.hop.other":"{count} hops","viewer.lens.eyebrow":"Semantic lens","viewer.lens.title":"Compare system roles","viewer.lens.close":"Close semantic lens","viewer.lens.instruction":"Choose up to two semantic kinds. One reveals its real traffic; two compare only direct authored relationships.","viewer.lens.kinds":"Semantic kinds","viewer.lens.choose":"Choose a kind to inspect its nodes and touching relationships.","viewer.lens.copy":"Copy link to semantic lens","viewer.lens.clear":"Clear semantic lens","viewer.lens.open":"Open semantic lens","viewer.lens.openActive":"Open active semantic lens","viewer.lens.legend":"Semantic legend","viewer.lens.legend.inspect.one":"Inspect {label}, {count} node","viewer.lens.legend.inspect.other":"Inspect {label}, {count} nodes","viewer.lens.kind.count.one":"{label}, {count} node","viewer.lens.kind.count.other":"{label}, {count} nodes","viewer.lens.compare.one":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} direct relationship","viewer.lens.compare.other":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} direct relationships","viewer.lens.single":"{nodes} · {relationships} · connected peers remain visible","viewer.lens.node.one":"{count} {label} node","viewer.lens.node.other":"{count} {label} nodes","viewer.lens.relationship.one":"{count} touching relationship","viewer.lens.relationship.other":"{count} touching relationships","viewer.radar.title":"Semantic radar","viewer.radar.building":"Building overview","viewer.radar.openFull":"Open full semantic radar","viewer.radar.open":"Open radar","viewer.radar.close":"Close semantic radar","viewer.radar.surface":"Diagram overview. Click a node to focus it, or use arrow keys to pan.","viewer.radar.click":"Click node","viewer.radar.drag":"Drag to pan","viewer.radar.space":"Semantic radar needs more MAP space.","viewer.radar.nodes":"Semantic diagram radar nodes","viewer.radar.focus":"Focus {label} from Semantic Radar","viewer.radar.status":"{count} nodes · {viewport}","viewer.radar.fullMap":"{count} nodes · full map","viewer.radar.compacted":"Radar compacted to avoid covering the Semantic Passport or MAP controls.","viewer.radar.cancelWaiting":"Cancel semantic radar waiting for more MAP space","viewer.radar.needsSpace":"Semantic radar needs more visible MAP space","viewer.radar.viewport.full":"full map","viewer.radar.viewport.width":"{percent}% width","viewer.radar.viewport.scale":"{percent}% viewport","viewer.nav.controls":"Diagram view controls","viewer.nav.route":"Trace a directed route","viewer.nav.route.title":"Trace route (R)","viewer.nav.route.short":"PATH","viewer.nav.radar":"Open semantic radar","viewer.nav.radar.title":"Semantic radar (M)","viewer.nav.radar.short":"MAP","viewer.nav.lens":"Open semantic lens","viewer.nav.lens.title":"Semantic lens (L)","viewer.nav.lens.short":"LENS","viewer.nav.find":"Find a node","viewer.nav.find.title":"Find a node (/)","viewer.nav.guide":"Open diagram guide","viewer.nav.guide.title":"Diagram guide (?)","viewer.nav.zoomOut":"Zoom out","viewer.nav.zoomOut.title":"Zoom out (-)","viewer.nav.reset":"Reset diagram view","viewer.nav.reset.title":"Reset view (0)","viewer.nav.read":"READ","viewer.nav.zoomIn":"Zoom in","viewer.nav.zoomIn.title":"Zoom in (+)","viewer.nav.camera":"{hint}. Reset diagram view","viewer.nav.camera.title":"{semantic}{hint} · reset view (0)","viewer.nav.camera.semantic":"Semantic camera active · ","viewer.nav.level.map":"MAP","viewer.nav.level.read":"READ","viewer.nav.level.full":"FULL","viewer.nav.level.auto":"AUTO","viewer.nav.detail.map":"Zoom in to reveal relationship labels and node context","viewer.nav.detail.read":"Zoom in again to reveal tags and annotations","viewer.nav.detail.full":"Full diagram detail","viewer.intent.summary":"{label}. {out} outgoing, {in} incoming{loops}. {total} connections. Press Enter for details.","viewer.intent.loops":", {count} self loop","viewer.common.copied":"Copied","viewer.common.copyFailed":"Copy failed","viewer.common.copyLink":"Copy link","viewer.common.clear":"Clear","viewer.common.close":"Close"}}</script>
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
       <button id="guided-view-prev" type="button" aria-label="Previous guided view" title="Previous guided view ([)">&#8592;</button>
@@ -5004,9 +5005,9 @@
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 930 588" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
-        <title id="archify-diagram-title">Economic Event Intelligence &amp; Strategy Validation — Target Architecture</title>
-        <desc id="archify-diagram-description">An architecture diagram generated by Archify.</desc>
+      <svg viewBox="0 0 948 574" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="blueprint" data-quality-profile="showcase">
+        <title id="archify-diagram-title">Economic Event Intelligence &amp; Strategy Validation Platform</title>
+        <desc id="archify-diagram-description">Target contract over baseline 63633a5 · artifact source revision e3e447b</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -5030,267 +5031,280 @@
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Research and product plane" x="16" y="66" width="874" height="280" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Research and product plane" x="2" y="31" width="906" height="395" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Independent raw SIP validation plane" x="180" y="406" width="546" height="114" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="Independent raw SIP validation plane" x="177" y="396" width="731" height="110" rx="12" class="c-region" stroke-width="1"/>
 
         <!-- Connection paths (before components for correct z-order) -->
-        <path data-edge-from="official-sources" data-edge-to="event-facts" data-edge-label="official actual + PIT consensus" data-edge-key="0" data-edge-id="sources-events" data-composition-points="180,125;204,125" d="M 180 125 L 204 125" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="event-facts" data-edge-to="session-planner" data-edge-label="release + markers" data-edge-key="1" data-edge-id="events-sessions" data-composition-points="354,125;378,125" d="M 354 125 L 378 125" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="session-planner" data-edge-to="quality" data-edge-label="expected session intervals" data-edge-key="2" data-edge-id="sessions-quality" data-composition-points="453,160;453,205;796,205;796,160" d="M 453 160 L 453 197 Q 453 205 461 205 L 788 205 Q 796 205 796 197 L 796 160" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="sip-bars" data-edge-to="quality" data-edge-label="observed 1m / 1d bars" data-edge-key="3" data-edge-id="bars-quality" data-composition-points="702,125;726,125" d="M 702 125 L 726 125" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="quality" data-edge-to="research" data-edge-key="4" data-edge-id="quality-research" data-composition-points="796,160;796,250" d="M 796 160 L 796 250" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="research" data-edge-to="postgres" data-edge-label="derived + quality evidence" data-edge-key="5" data-edge-id="research-store" data-composition-points="726,288;702,288" d="M 726 288 L 702 288" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="postgres" data-edge-to="serving" data-edge-label="read-only resources" data-edge-key="6" data-edge-id="store-serving" data-composition-points="552,288;528,288" d="M 552 288 L 528 288" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="serving" data-edge-to="paper" data-edge-label="explicit approval" data-edge-key="7" data-edge-id="serving-paper" data-composition-points="378,288;354,288" d="M 378 288 L 354 288" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="paper" data-edge-to="postgres" data-edge-label="journal · fills · outcomes" data-edge-key="8" data-edge-id="paper-store" data-composition-points="279,326;279,370;627,370;627,326" d="M 279 326 L 279 362 Q 279 370 287 370 L 619 370 Q 627 370 627 362 L 627 326" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="raw-archive" data-edge-to="kafka" data-edge-label="deterministic replay" data-edge-key="9" data-edge-id="archive-kafka" data-composition-points="354,465;378,465" d="M 354 465 L 378 465" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="kafka" data-edge-to="spark" data-edge-label="versioned raw envelopes" data-edge-key="10" data-edge-id="kafka-spark" data-composition-points="528,465;552,465" d="M 528 465 L 552 465" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="spark" data-edge-to="postgres" data-edge-label="validated 1m + run evidence" data-edge-key="11" data-edge-id="spark-store" data-composition-points="627,430;627,326" d="M 627 430 L 627 326" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="official-sources" data-edge-to="event-facts" data-edge-key="0" data-composition-points="175,88;185,88;185,129;195,129" d="M 175 88 L 180 88 Q 185 88 185 93 L 185 124 Q 185 129 190 129 L 195 129" class="a-emphasis" data-animate="edge" style="--step:0" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="consensus-provider" data-edge-to="event-facts" data-edge-key="1" data-composition-points="175,178;185,178;185,143;195,143" d="M 175 178 L 180 178 Q 185 178 185 173 L 185 148 Q 185 143 190 143 L 195 143" class="a-dashed" data-animate="edge" style="--step:1" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="event-facts" data-edge-to="session-planner" data-edge-key="2" data-composition-points="350,136;375,136" d="M 350 136 L 375 136" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="session-planner" data-edge-to="target-research" data-edge-key="3" data-composition-points="530,136;555,136" d="M 530 136 L 555 136" class="a-dashed" data-animate="edge" style="--step:3" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="provider-bars" data-edge-to="legacy-research" data-edge-key="4" data-composition-points="350,279;375,279" d="M 350 279 L 375 279" class="a-emphasis" data-animate="edge" style="--step:4" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="provider-bars" data-edge-to="target-research" data-edge-key="5" data-composition-points="272.5,245;272.5,210;632.5,210;632.5,172" d="M 272.5 245 L 272.5 218 Q 272.5 210 280.5 210 L 624.5 210 Q 632.5 210 632.5 202 L 632.5 172" class="a-dashed" data-animate="edge" style="--step:5" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="legacy-research" data-edge-to="research-store" data-edge-key="6" data-composition-points="530,279;555,279" d="M 530 279 L 555 279" class="a-emphasis" data-animate="edge" style="--step:6" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="target-research" data-edge-to="research-store" data-edge-key="7" data-composition-points="632.5,172;632.5,245" d="M 632.5 172 L 632.5 245" class="a-dashed" data-animate="edge" style="--step:7" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="research-store" data-edge-to="serving" data-edge-key="8" data-composition-points="710,279;735,279" d="M 710 279 L 735 279" class="a-emphasis" data-animate="edge" style="--step:8" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="serving" data-edge-to="current-paper" data-edge-key="9" data-composition-points="812.5,313;812.5,340" d="M 812.5 313 L 812.5 340" class="a-security" data-animate="edge" style="--step:9" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="target-research" data-edge-to="target-paper" data-edge-key="10" data-composition-points="710,136;735,136" d="M 710 136 L 735 136" class="a-dashed" data-animate="edge" style="--step:10" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="target-paper" data-edge-to="research-store" data-edge-key="11" data-composition-points="812.5,172;812.5,205;632.5,205;632.5,245" d="M 812.5 172 L 812.5 197 Q 812.5 205 804.5 205 L 640.5 205 Q 632.5 205 632.5 213 L 632.5 245" class="a-dashed" data-animate="edge" style="--step:11" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="raw-archive" data-edge-to="kafka" data-edge-key="12" data-composition-points="350,453;375,453" d="M 350 453 L 375 453" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="kafka" data-edge-to="spark" data-edge-key="13" data-composition-points="530,453;555,453" d="M 530 453 L 555 453" class="a-default" data-animate="edge" style="--step:12" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="spark" data-edge-to="validation-store" data-edge-key="14" data-composition-points="710,453;735,453" d="M 710 453 L 735 453" class="a-emphasis" data-animate="edge" style="--step:12" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
 
         <!-- Components -->
-        <g id="node-official-sources" data-node-id="official-sources" data-node-label="Official + PIT Sources" tabindex="0" role="button" aria-label="Focus Official + PIT Sources, official releases + PIT context, Research and product plane" aria-pressed="false" data-node-kind="external" data-node-sublabel="official releases + PIT context" data-node-tag="SEPARATE PROVENANCE" data-node-context="Research and product plane">
-          <title>Official + PIT Sources · official releases + PIT context · Research and product plane · SEPARATE PROVENANCE</title>
-          <rect x="40" y="90" width="140" height="70" rx="6" class="c-mask"/>
-          <rect x="40" y="90" width="140" height="70" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(46 96) scale(0.6875)">
+        <g id="node-official-sources" data-node-id="official-sources" data-node-label="Official Sources" tabindex="0" role="button" aria-label="Focus Official Sources, economic schedule · numeric releases, Research and product plane" aria-pressed="false" data-node-kind="external" data-node-sublabel="economic schedule · numeric releases" data-node-tag="TARGET SOURCE" data-node-context="Research and product plane">
+          <title>Official Sources · economic schedule · numeric releases · Research and product plane · TARGET SOURCE</title>
+          <rect x="20" y="55" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="20" y="55" width="155" height="66" rx="6" class="c-external" data-animate="node" style="--step:0" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(26 61) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="110" y="123" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Official + PIT Sources</text>
-        <text data-detail="context" x="110" y="139" class="t-muted" font-size="7" text-anchor="middle">official releases + PIT context</text>
-        <text data-detail="fine" x="110" y="152" class="t-external" font-size="7" text-anchor="middle">SEPARATE PROVENANCE</text>
+          <text data-node-label="" data-detail-anchor="" x="97.5" y="86" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Official Sources</text>
+        <text data-detail="context" x="97.5" y="102" class="t-muted" font-size="6.8" text-anchor="middle">economic schedule · numeric releases</text>
+        <text data-detail="fine" x="97.5" y="113" class="t-external" font-size="7" text-anchor="middle">TARGET SOURCE</text>
         </g>
 
-        <g id="node-event-facts" data-node-id="event-facts" data-node-label="Event Facts" tabindex="0" role="button" aria-label="Focus Event Facts, observations · consensus · surprise, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="observations · consensus · surprise" data-node-tag="P1 FOUNDATION" data-node-context="Research and product plane">
-          <title>Event Facts · observations · consensus · surprise · Research and product plane · P1 FOUNDATION</title>
-          <rect x="204" y="90" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="204" y="90" width="150" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(210 96) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="279" y="123" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Event Facts</text>
-        <text data-detail="context" x="279" y="139" class="t-muted" font-size="6.7" text-anchor="middle">observations · consensus · surprise</text>
-        <text data-detail="fine" x="279" y="152" class="t-backend" font-size="7" text-anchor="middle">P1 FOUNDATION</text>
-        </g>
-
-        <g id="node-session-planner" data-node-id="session-planner" data-node-label="Trading Session Planner" tabindex="0" role="button" aria-label="Focus Trading Session Planner, calendar · markers · S0 mapping, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="calendar · markers · S0 mapping" data-node-tag="P1 FOUNDATION" data-node-context="Research and product plane">
-          <title>Trading Session Planner · calendar · markers · S0 mapping · Research and product plane · P1 FOUNDATION</title>
-          <rect x="378" y="90" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="378" y="90" width="150" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(384 96) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="453" y="123" class="t-primary" font-size="10.2" font-weight="600" text-anchor="middle">Trading Session Planner</text>
-        <text data-detail="context" x="453" y="139" class="t-muted" font-size="7.6" text-anchor="middle">calendar · markers · S0 mapping</text>
-        <text data-detail="fine" x="453" y="152" class="t-backend" font-size="7" text-anchor="middle">P1 FOUNDATION</text>
-        </g>
-
-        <g id="node-sip-bars" data-node-id="sip-bars" data-node-label="Alpaca SIP Bars" tabindex="0" role="button" aria-label="Focus Alpaca SIP Bars, 1m research · 1d context, Research and product plane" aria-pressed="false" data-node-kind="external" data-node-sublabel="1m research · 1d context" data-node-tag="CURRENT" data-node-context="Research and product plane">
-          <title>Alpaca SIP Bars · 1m research · 1d context · Research and product plane · CURRENT</title>
-          <rect x="552" y="90" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="552" y="90" width="150" height="70" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(558 96) scale(0.6875)">
+        <g id="node-consensus-provider" data-node-id="consensus-provider" data-node-label="External Consensus" tabindex="0" role="button" aria-label="Focus External Consensus, provider snapshots, Research and product plane" aria-pressed="false" data-node-kind="external" data-node-sublabel="provider snapshots" data-node-tag="TARGET SOURCE" data-node-context="Research and product plane">
+          <title>External Consensus · provider snapshots · Research and product plane · TARGET SOURCE</title>
+          <rect x="20" y="145" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="20" y="145" width="155" height="66" rx="6" class="c-external" data-animate="node" style="--step:1" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(26 151) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="627" y="123" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Alpaca SIP Bars</text>
-        <text data-detail="context" x="627" y="139" class="t-muted" font-size="9" text-anchor="middle">1m research · 1d context</text>
-        <text data-detail="fine" x="627" y="152" class="t-external" font-size="7" text-anchor="middle">CURRENT</text>
+          <text data-node-label="" data-detail-anchor="" x="97.5" y="176" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">External Consensus</text>
+        <text data-detail="context" x="97.5" y="192" class="t-muted" font-size="9" text-anchor="middle">provider snapshots</text>
+        <text data-detail="fine" x="97.5" y="203" class="t-external" font-size="7" text-anchor="middle">TARGET SOURCE</text>
         </g>
 
-        <g id="node-quality" data-node-id="quality" data-node-label="Session-aware Quality" tabindex="0" role="button" aria-label="Focus Session-aware Quality, collection · coverage · eligibility, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="collection · coverage · eligibility" data-node-tag="EVOLVING" data-node-context="Research and product plane">
-          <title>Session-aware Quality · collection · coverage · eligibility · Research and product plane · EVOLVING</title>
-          <rect x="726" y="90" width="140" height="70" rx="6" class="c-mask"/>
-          <rect x="726" y="90" width="140" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(732 96) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="796" y="123" class="t-primary" font-size="10.4" font-weight="600" text-anchor="middle">Session-aware Quality</text>
-        <text data-detail="context" x="796" y="139" class="t-muted" font-size="6.2" text-anchor="middle">collection · coverage · eligibility</text>
-        <text data-detail="fine" x="796" y="152" class="t-backend" font-size="7" text-anchor="middle">EVOLVING</text>
-        </g>
-
-        <g id="node-research" data-node-id="research" data-node-label="Research &amp; Validation" tabindex="0" role="button" aria-label="Focus Research &amp; Validation, reactions · comparables · simulation, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reactions · comparables · simulation" data-node-tag="TARGET + LEGACY BASELINE" data-node-context="Research and product plane">
-          <title>Research &amp; Validation · reactions · comparables · simulation · Research and product plane · TARGET + LEGACY BASELINE</title>
-          <rect x="726" y="250" width="140" height="76" rx="6" class="c-mask"/>
-          <rect x="726" y="250" width="140" height="76" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(732 256) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="796" y="286" class="t-primary" font-size="10.4" font-weight="600" text-anchor="middle">Research &amp; Validation</text>
-        <text data-detail="context" x="796" y="302" class="t-muted" font-size="6.1" text-anchor="middle">reactions · comparables · simulation</text>
-        <text data-detail="fine" x="796" y="318" class="t-backend" font-size="7" text-anchor="middle">TARGET + LEGACY BASELINE</text>
-        </g>
-
-        <g id="node-postgres" data-node-id="postgres" data-node-label="PostgreSQL" tabindex="0" role="button" aria-label="Focus PostgreSQL, curated · provenance · journals, Research and product plane" aria-pressed="false" data-node-kind="database" data-node-sublabel="curated · provenance · journals" data-node-tag="DURABLE CURATED" data-node-context="Research and product plane">
-          <title>PostgreSQL · curated · provenance · journals · Research and product plane · DURABLE CURATED</title>
-          <rect x="552" y="250" width="150" height="76" rx="6" class="c-mask"/>
-          <rect x="552" y="250" width="150" height="76" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(558 256) scale(0.6875)">
+        <g id="node-event-facts" data-node-id="event-facts" data-node-label="Canonical Event Facts" tabindex="0" role="button" aria-label="Focus Canonical Event Facts, lifecycle · facts · PIT surprise, Research and product plane" aria-pressed="false" data-node-kind="database" data-node-sublabel="lifecycle · facts · PIT surprise" data-node-tag="SCHEMA FOUNDATION" data-node-context="Research and product plane">
+          <title>Canonical Event Facts · lifecycle · facts · PIT surprise · Research and product plane · SCHEMA FOUNDATION</title>
+          <rect x="195" y="100" width="155" height="72" rx="6" class="c-mask"/>
+          <rect x="195" y="100" width="155" height="72" rx="6" class="c-database" data-animate="node" style="--step:1" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(201 106) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="627" y="286" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PostgreSQL</text>
-        <text data-detail="context" x="627" y="302" class="t-muted" font-size="7.6" text-anchor="middle">curated · provenance · journals</text>
-        <text data-detail="fine" x="627" y="318" class="t-database" font-size="7" text-anchor="middle">DURABLE CURATED</text>
+          <text data-node-label="" data-detail-anchor="" x="272.5" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Canonical Event Facts</text>
+        <text data-detail="context" x="272.5" y="150" class="t-muted" font-size="7.6" text-anchor="middle">lifecycle · facts · PIT surprise</text>
+        <text data-detail="fine" x="272.5" y="164" class="t-database" font-size="7" text-anchor="middle">SCHEMA FOUNDATION</text>
         </g>
 
-        <g id="node-serving" data-node-id="serving" data-node-label="FastAPI + Web" tabindex="0" role="button" aria-label="Focus FastAPI + Web, events · quality · research · pipelines, Research and product plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="events · quality · research · pipelines" data-node-tag="CURRENT / EVOLVING" data-node-context="Research and product plane">
-          <title>FastAPI + Web · events · quality · research · pipelines · Research and product plane · CURRENT / EVOLVING</title>
-          <rect x="378" y="250" width="150" height="76" rx="6" class="c-mask"/>
-          <rect x="378" y="250" width="150" height="76" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(384 256) scale(0.6875)">
+        <g id="node-session-planner" data-node-id="session-planner" data-node-label="Trading Session Planner" tabindex="0" role="button" aria-label="Focus Trading Session Planner, primary marker · verified S0, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="primary marker · verified S0" data-node-tag="PURE LOGIC FOUNDATION" data-node-context="Research and product plane">
+          <title>Trading Session Planner · primary marker · verified S0 · Research and product plane · PURE LOGIC FOUNDATION</title>
+          <rect x="375" y="100" width="155" height="72" rx="6" class="c-mask"/>
+          <rect x="375" y="100" width="155" height="72" rx="6" class="c-backend" data-animate="node" style="--step:3" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(381 106) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="452.5" y="134" class="t-primary" font-size="10.6" font-weight="600" text-anchor="middle">Trading Session Planner</text>
+        <text data-detail="context" x="452.5" y="150" class="t-muted" font-size="8.7" text-anchor="middle">primary marker · verified S0</text>
+        <text data-detail="fine" x="452.5" y="164" class="t-backend" font-size="7" text-anchor="middle">PURE LOGIC FOUNDATION</text>
+        </g>
+
+        <g id="node-target-research" data-node-id="target-research" data-node-label="Canonical Research" tabindex="0" role="button" aria-label="Focus Canonical Research, v2 metrics · comparisons, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="v2 metrics · comparisons" data-node-tag="TARGET ONLY" data-node-context="Research and product plane">
+          <title>Canonical Research · v2 metrics · comparisons · Research and product plane · TARGET ONLY</title>
+          <rect x="555" y="100" width="155" height="72" rx="6" class="c-mask"/>
+          <rect x="555" y="100" width="155" height="72" rx="6" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(561 106) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="632.5" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Canonical Research</text>
+        <text data-detail="context" x="632.5" y="150" class="t-muted" font-size="9" text-anchor="middle">v2 metrics · comparisons</text>
+        <text data-detail="fine" x="632.5" y="164" class="t-backend" font-size="7" text-anchor="middle">TARGET ONLY</text>
+        </g>
+
+        <g id="node-target-paper" data-node-id="target-paper" data-node-label="Paper Experiments" tabindex="0" role="button" aria-label="Focus Paper Experiments, fills · positions · outcomes, Research and product plane" aria-pressed="false" data-node-kind="security" data-node-sublabel="fills · positions · outcomes" data-node-tag="TARGET ONLY" data-node-context="Research and product plane">
+          <title>Paper Experiments · fills · positions · outcomes · Research and product plane · TARGET ONLY</title>
+          <rect x="735" y="100" width="155" height="72" rx="6" class="c-mask"/>
+          <rect x="735" y="100" width="155" height="72" rx="6" class="c-security" data-animate="node" style="--step:11" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(741 106) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="812.5" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Paper Experiments</text>
+        <text data-detail="context" x="812.5" y="150" class="t-muted" font-size="8.7" text-anchor="middle">fills · positions · outcomes</text>
+        <text data-detail="fine" x="812.5" y="164" class="t-security" font-size="7" text-anchor="middle">TARGET ONLY</text>
+        </g>
+
+        <g id="node-provider-bars" data-node-id="provider-bars" data-node-label="Provider Research Bars" tabindex="0" role="button" aria-label="Focus Provider Research Bars, market_bars · SIP aggregate, Research and product plane" aria-pressed="false" data-node-kind="database" data-node-sublabel="market_bars · SIP aggregate" data-node-tag="CURRENT" data-node-context="Research and product plane">
+          <title>Provider Research Bars · market_bars · SIP aggregate · Research and product plane · CURRENT</title>
+          <rect x="195" y="245" width="155" height="68" rx="6" class="c-mask"/>
+          <rect x="195" y="245" width="155" height="68" rx="6" class="c-database" data-animate="node" style="--step:4" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(201 251) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="272.5" y="277" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Provider Research Bars</text>
+        <text data-detail="context" x="272.5" y="293" class="t-muted" font-size="9" text-anchor="middle">market_bars · SIP aggregate</text>
+        <text data-detail="fine" x="272.5" y="305" class="t-database" font-size="7" text-anchor="middle">CURRENT</text>
+        </g>
+
+        <g id="node-legacy-research" data-node-id="legacy-research" data-node-label="Legacy Research" tabindex="0" role="button" aria-label="Focus Legacy Research, current impacts · PRE/POST, Research and product plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="current impacts · PRE/POST" data-node-tag="CURRENT" data-node-context="Research and product plane">
+          <title>Legacy Research · current impacts · PRE/POST · Research and product plane · CURRENT</title>
+          <rect x="375" y="245" width="155" height="68" rx="6" class="c-mask"/>
+          <rect x="375" y="245" width="155" height="68" rx="6" class="c-backend" data-animate="node" style="--step:5" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(381 251) scale(0.6875)">
+            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="452.5" y="277" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Legacy Research</text>
+        <text data-detail="context" x="452.5" y="293" class="t-muted" font-size="9" text-anchor="middle">current impacts · PRE/POST</text>
+        <text data-detail="fine" x="452.5" y="305" class="t-backend" font-size="7" text-anchor="middle">CURRENT</text>
+        </g>
+
+        <g id="node-research-store" data-node-id="research-store" data-node-label="Research PostgreSQL" tabindex="0" role="button" aria-label="Focus Research PostgreSQL, provider bars · facts · results, Research and product plane" aria-pressed="false" data-node-kind="database" data-node-sublabel="provider bars · facts · results" data-node-tag="CURRENT + FOUNDATION" data-node-context="Research and product plane">
+          <title>Research PostgreSQL · provider bars · facts · results · Research and product plane · CURRENT + FOUNDATION</title>
+          <rect x="555" y="245" width="155" height="68" rx="6" class="c-mask"/>
+          <rect x="555" y="245" width="155" height="68" rx="6" class="c-database" data-animate="node" style="--step:7" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(561 251) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="632.5" y="277" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Research PostgreSQL</text>
+        <text data-detail="context" x="632.5" y="293" class="t-muted" font-size="7.9" text-anchor="middle">provider bars · facts · results</text>
+        <text data-detail="fine" x="632.5" y="305" class="t-database" font-size="7" text-anchor="middle">CURRENT + FOUNDATION</text>
+        </g>
+
+        <g id="node-serving" data-node-id="serving" data-node-label="FastAPI + Browser" tabindex="0" role="button" aria-label="Focus FastAPI + Browser, provider-only research reads, Research and product plane" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="provider-only research reads" data-node-tag="CURRENT" data-node-context="Research and product plane">
+          <title>FastAPI + Browser · provider-only research reads · Research and product plane · CURRENT</title>
+          <rect x="735" y="245" width="155" height="68" rx="6" class="c-mask"/>
+          <rect x="735" y="245" width="155" height="68" rx="6" class="c-frontend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(741 251) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="453" y="286" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI + Web</text>
-        <text data-detail="context" x="453" y="302" class="t-muted" font-size="6" text-anchor="middle">events · quality · research · pipelines</text>
-        <text data-detail="fine" x="453" y="318" class="t-frontend" font-size="7" text-anchor="middle">CURRENT / EVOLVING</text>
+          <text data-node-label="" data-detail-anchor="" x="812.5" y="277" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI + Browser</text>
+        <text data-detail="context" x="812.5" y="293" class="t-muted" font-size="8.7" text-anchor="middle">provider-only research reads</text>
+        <text data-detail="fine" x="812.5" y="305" class="t-frontend" font-size="7" text-anchor="middle">CURRENT</text>
         </g>
 
-        <g id="node-paper" data-node-id="paper" data-node-label="Paper Experiments" tabindex="0" role="button" aria-label="Focus Paper Experiments, experiment · orders · fills · outcomes, Research and product plane" aria-pressed="false" data-node-kind="security" data-node-sublabel="experiment · orders · fills · outcomes" data-node-tag="PAPER ONLY" data-node-context="Research and product plane">
-          <title>Paper Experiments · experiment · orders · fills · outcomes · Research and product plane · PAPER ONLY</title>
-          <rect x="204" y="250" width="150" height="76" rx="6" class="c-mask"/>
-          <rect x="204" y="250" width="150" height="76" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(210 256) scale(0.6875)">
+        <g id="node-current-paper" data-node-id="current-paper" data-node-label="Guarded Paper Intent" tabindex="0" role="button" aria-label="Focus Guarded Paper Intent, approve · journal · reconcile, Research and product plane" aria-pressed="false" data-node-kind="security" data-node-sublabel="approve · journal · reconcile" data-node-tag="CURRENT" data-node-context="Research and product plane">
+          <title>Guarded Paper Intent · approve · journal · reconcile · Research and product plane · CURRENT</title>
+          <rect x="735" y="340" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="735" y="340" width="155" height="66" rx="6" class="c-security" data-animate="node" style="--step:10" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(741 346) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="279" y="286" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Paper Experiments</text>
-        <text data-detail="context" x="279" y="302" class="t-muted" font-size="6.2" text-anchor="middle">experiment · orders · fills · outcomes</text>
-        <text data-detail="fine" x="279" y="318" class="t-security" font-size="7" text-anchor="middle">PAPER ONLY</text>
+          <text data-node-label="" data-detail-anchor="" x="812.5" y="371" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Guarded Paper Intent</text>
+        <text data-detail="context" x="812.5" y="387" class="t-muted" font-size="8.4" text-anchor="middle">approve · journal · reconcile</text>
+        <text data-detail="fine" x="812.5" y="398" class="t-security" font-size="7" text-anchor="middle">CURRENT</text>
         </g>
 
-        <g id="node-raw-archive" data-node-id="raw-archive" data-node-label="Raw SIP Archive" tabindex="0" role="button" aria-label="Focus Raw SIP Archive, immutable Parquet partitions, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="immutable Parquet partitions" data-node-tag="VALIDATION SOURCE" data-node-context="Independent raw SIP validation plane">
-          <title>Raw SIP Archive · immutable Parquet partitions · Independent raw SIP validation plane · VALIDATION SOURCE</title>
-          <rect x="204" y="430" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="204" y="430" width="150" height="70" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(210 436) scale(0.6875)">
+        <g id="node-raw-archive" data-node-id="raw-archive" data-node-label="Immutable Raw SIP" tabindex="0" role="button" aria-label="Focus Immutable Raw SIP, historical Parquet archive, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="historical Parquet archive" data-node-tag="CURRENT" data-node-context="Independent raw SIP validation plane">
+          <title>Immutable Raw SIP · historical Parquet archive · Independent raw SIP validation plane · CURRENT</title>
+          <rect x="195" y="420" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="195" y="420" width="155" height="66" rx="6" class="c-cloud" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(201 426) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="279" y="463" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Raw SIP Archive</text>
-        <text data-detail="context" x="279" y="479" class="t-muted" font-size="8.4" text-anchor="middle">immutable Parquet partitions</text>
-        <text data-detail="fine" x="279" y="492" class="t-cloud" font-size="7" text-anchor="middle">VALIDATION SOURCE</text>
+          <text data-node-label="" data-detail-anchor="" x="272.5" y="451" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Immutable Raw SIP</text>
+        <text data-detail="context" x="272.5" y="467" class="t-muted" font-size="9" text-anchor="middle">historical Parquet archive</text>
+        <text data-detail="fine" x="272.5" y="478" class="t-cloud" font-size="7" text-anchor="middle">CURRENT</text>
         </g>
 
-        <g id="node-kafka" data-node-id="kafka" data-node-label="Kafka" tabindex="0" role="button" aria-label="Focus Kafka, bounded transport and replay, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="bounded transport and replay" data-node-tag="NOT SOURCE OF TRUTH" data-node-context="Independent raw SIP validation plane">
-          <title>Kafka · bounded transport and replay · Independent raw SIP validation plane · NOT SOURCE OF TRUTH</title>
-          <rect x="378" y="430" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="378" y="430" width="150" height="70" rx="6" class="c-messagebus" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(384 436) scale(0.6875)">
+        <g id="node-kafka" data-node-id="kafka" data-node-label="Kafka Replay" tabindex="0" role="button" aria-label="Focus Kafka Replay, bounded transport, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="bounded transport" data-node-tag="CURRENT" data-node-context="Independent raw SIP validation plane">
+          <title>Kafka Replay · bounded transport · Independent raw SIP validation plane · CURRENT</title>
+          <rect x="375" y="420" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="375" y="420" width="155" height="66" rx="6" class="c-messagebus" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(381 426) scale(0.6875)">
             <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
             <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="453" y="463" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Kafka</text>
-        <text data-detail="context" x="453" y="479" class="t-muted" font-size="8.4" text-anchor="middle">bounded transport and replay</text>
-        <text data-detail="fine" x="453" y="492" class="t-messagebus" font-size="7" text-anchor="middle">NOT SOURCE OF TRUTH</text>
+          <text data-node-label="" data-detail-anchor="" x="452.5" y="451" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Kafka Replay</text>
+        <text data-detail="context" x="452.5" y="467" class="t-muted" font-size="9" text-anchor="middle">bounded transport</text>
+        <text data-detail="fine" x="452.5" y="478" class="t-messagebus" font-size="7" text-anchor="middle">CURRENT</text>
         </g>
 
-        <g id="node-spark" data-node-id="spark" data-node-label="Spark Validation" tabindex="0" role="button" aria-label="Focus Spark Validation, validate · dedupe · event-time 1m, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="validate · dedupe · event-time 1m" data-node-tag="ON-DEMAND" data-node-context="Independent raw SIP validation plane">
-          <title>Spark Validation · validate · dedupe · event-time 1m · Independent raw SIP validation plane · ON-DEMAND</title>
-          <rect x="552" y="430" width="150" height="70" rx="6" class="c-mask"/>
-          <rect x="552" y="430" width="150" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(558 436) scale(0.6875)">
+        <g id="node-spark" data-node-id="spark" data-node-label="Spark Validation" tabindex="0" role="button" aria-label="Focus Spark Validation, validate · dedupe · reconstruct, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="backend" data-node-sublabel="validate · dedupe · reconstruct" data-node-tag="CURRENT" data-node-context="Independent raw SIP validation plane">
+          <title>Spark Validation · validate · dedupe · reconstruct · Independent raw SIP validation plane · CURRENT</title>
+          <rect x="555" y="420" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="555" y="420" width="155" height="66" rx="6" class="c-backend" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(561 426) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="627" y="463" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Spark Validation</text>
-        <text data-detail="context" x="627" y="479" class="t-muted" font-size="7.1" text-anchor="middle">validate · dedupe · event-time 1m</text>
-        <text data-detail="fine" x="627" y="492" class="t-backend" font-size="7" text-anchor="middle">ON-DEMAND</text>
+          <text data-node-label="" data-detail-anchor="" x="632.5" y="451" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Spark Validation</text>
+        <text data-detail="context" x="632.5" y="467" class="t-muted" font-size="7.9" text-anchor="middle">validate · dedupe · reconstruct</text>
+        <text data-detail="fine" x="632.5" y="478" class="t-backend" font-size="7" text-anchor="middle">CURRENT</text>
+        </g>
+
+        <g id="node-validation-store" data-node-id="validation-store" data-node-label="Validation Bars" tabindex="0" role="button" aria-label="Focus Validation Bars, raw-derived · isolated · run lineage, Independent raw SIP validation plane" aria-pressed="false" data-node-kind="database" data-node-sublabel="raw-derived · isolated · run lineage" data-node-tag="SCHEMA FOUNDATION" data-node-context="Independent raw SIP validation plane">
+          <title>Validation Bars · raw-derived · isolated · run lineage · Independent raw SIP validation plane · SCHEMA FOUNDATION</title>
+          <rect x="735" y="420" width="155" height="66" rx="6" class="c-mask"/>
+          <rect x="735" y="420" width="155" height="66" rx="6" class="c-database" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(741 426) scale(0.6875)">
+            <ellipse cx="8" cy="4" rx="5" ry="2"/>
+            <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="812.5" y="451" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Validation Bars</text>
+        <text data-detail="context" x="812.5" y="467" class="t-muted" font-size="6.8" text-anchor="middle">raw-derived · isolated · run lineage</text>
+        <text data-detail="fine" x="812.5" y="478" class="t-database" font-size="7" text-anchor="middle">SCHEMA FOUNDATION</text>
         </g>
 
         <!-- Connection labels -->
-        <g data-detail="context" data-edge-from="official-sources" data-edge-to="event-facts" data-edge-label="official actual + PIT consensus" data-edge-key="0" data-edge-id="sources-events">
-          <rect x="112.60000000000001" y="166" width="158.79999999999998" height="14" rx="3" class="c-mask"/>
-          <text x="192" y="176" class="t-backend" font-size="8" text-anchor="middle">official actual + PIT consensus</text>
-        </g>
-        <g data-detail="context" data-edge-from="event-facts" data-edge-to="session-planner" data-edge-label="release + markers" data-edge-key="1" data-edge-id="events-sessions">
-          <rect x="320.2" y="166" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="366" y="176" class="t-muted" font-size="8" text-anchor="middle">release + markers</text>
-        </g>
-        <g data-detail="context" data-edge-from="session-planner" data-edge-to="quality" data-edge-label="expected session intervals" data-edge-key="2" data-edge-id="sessions-quality">
-          <rect x="556.6" y="195" width="134.8" height="14" rx="3" class="c-mask"/>
-          <text x="624" y="205" class="t-muted" font-size="8" text-anchor="middle">expected session intervals</text>
-        </g>
-        <g data-detail="context" data-edge-from="sip-bars" data-edge-to="quality" data-edge-label="observed 1m / 1d bars" data-edge-key="3" data-edge-id="bars-quality">
-          <rect x="658.6" y="166" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="714" y="176" class="t-backend" font-size="8" text-anchor="middle">observed 1m / 1d bars</text>
-        </g>
 
-        <g data-detail="context" data-edge-from="research" data-edge-to="postgres" data-edge-label="derived + quality evidence" data-edge-key="5" data-edge-id="research-store">
-          <rect x="646.6" y="226" width="134.8" height="14" rx="3" class="c-mask"/>
-          <text x="714" y="236" class="t-backend" font-size="8" text-anchor="middle">derived + quality evidence</text>
-        </g>
-        <g data-detail="context" data-edge-from="postgres" data-edge-to="serving" data-edge-label="read-only resources" data-edge-key="6" data-edge-id="store-serving">
-          <rect x="489.4" y="226" width="101.2" height="14" rx="3" class="c-mask"/>
-          <text x="540" y="236" class="t-muted" font-size="8" text-anchor="middle">read-only resources</text>
-        </g>
-        <g data-detail="context" data-edge-from="serving" data-edge-to="paper" data-edge-label="explicit approval" data-edge-key="7" data-edge-id="serving-paper">
-          <rect x="320.2" y="226" width="91.6" height="14" rx="3" class="c-mask"/>
-          <text x="366" y="236" class="t-security" font-size="8" text-anchor="middle">explicit approval</text>
-        </g>
-        <g data-detail="context" data-edge-from="paper" data-edge-to="postgres" data-edge-label="journal · fills · outcomes" data-edge-key="8" data-edge-id="paper-store">
-          <rect x="385.6" y="375" width="134.8" height="14" rx="3" class="c-mask"/>
-          <text x="453" y="385" class="t-security" font-size="8" text-anchor="middle">journal · fills · outcomes</text>
-        </g>
-        <g data-detail="context" data-edge-from="raw-archive" data-edge-to="kafka" data-edge-label="deterministic replay" data-edge-key="9" data-edge-id="archive-kafka">
-          <rect x="313" y="506" width="106" height="14" rx="3" class="c-mask"/>
-          <text x="366" y="516" class="t-muted" font-size="8" text-anchor="middle">deterministic replay</text>
-        </g>
-        <g data-detail="context" data-edge-from="kafka" data-edge-to="spark" data-edge-label="versioned raw envelopes" data-edge-key="10" data-edge-id="kafka-spark">
-          <rect x="479.8" y="506" width="120.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="540" y="516" class="t-muted" font-size="8" text-anchor="middle">versioned raw envelopes</text>
-        </g>
-        <g data-detail="context" data-edge-from="spark" data-edge-to="postgres" data-edge-label="validated 1m + run evidence" data-edge-key="11" data-edge-id="spark-store">
-          <rect x="557.2" y="385" width="139.6" height="14" rx="3" class="c-mask"/>
-          <text x="627" y="395" class="t-messagebus" font-size="8" text-anchor="middle">validated 1m + run evidence</text>
-        </g>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
         <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Research and product plane">
-          <rect data-graph-role="structural-frame-label-mask" x="20" y="70" width="150.4" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="24" y="83" class="t-cloud" font-size="9" font-weight="600">Research and product plane</text>
+          <rect data-graph-role="structural-frame-label-mask" x="6" y="35" width="150.4" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="10" y="48" class="t-cloud" font-size="9" font-weight="600">Research and product plane</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="Independent raw SIP validation plane">
-          <rect data-graph-role="structural-frame-label-mask" x="184" y="410" width="204.4" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="188" y="423" class="t-cloud" font-size="9" font-weight="600">Independent raw SIP validation plane</text>
+          <rect data-graph-role="structural-frame-label-mask" x="181" y="400" width="204.4" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="185" y="413" class="t-cloud" font-size="9" font-weight="600">Independent raw SIP validation plane</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="40" y="552" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="572" data-legend-width="83">
-            <rect x="40" y="563" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
-            <text x="62" y="572" class="t-muted" font-size="10" font-weight="500">Frontend</text>
+          <text x="40" y="538" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Frontend" data-legend-x="40" data-legend-baseline="558" data-legend-width="83">
+            <rect x="40" y="549" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="558" class="t-muted" font-size="10" font-weight="500">Frontend</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="145" data-legend-baseline="572" data-legend-width="78">
-            <rect x="145" y="563" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
-            <text x="167" y="572" class="t-muted" font-size="10" font-weight="500">Backend</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Backend" data-legend-x="145" data-legend-baseline="558" data-legend-width="78">
+            <rect x="145" y="549" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="167" y="558" class="t-muted" font-size="10" font-weight="500">Backend</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Database" data-legend-x="245" data-legend-baseline="572" data-legend-width="83">
-            <rect x="245" y="563" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
-            <text x="267" y="572" class="t-muted" font-size="10" font-weight="500">Database</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Database" data-legend-x="245" data-legend-baseline="558" data-legend-width="83">
+            <rect x="245" y="549" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="267" y="558" class="t-muted" font-size="10" font-weight="500">Database</text>
           </g>
-          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="572" data-legend-width="68">
-            <rect x="350" y="563" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
-            <text x="372" y="572" class="t-muted" font-size="10" font-weight="500">Cloud</text>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="558" data-legend-width="68">
+            <rect x="350" y="549" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="372" y="558" class="t-muted" font-size="10" font-weight="500">Cloud</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Security" data-legend-x="440" data-legend-baseline="572" data-legend-width="83">
-            <rect x="440" y="563" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
-            <text x="462" y="572" class="t-muted" font-size="10" font-weight="500">Security</text>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Security" data-legend-x="440" data-legend-baseline="558" data-legend-width="83">
+            <rect x="440" y="549" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+            <text x="462" y="558" class="t-muted" font-size="10" font-weight="500">Security</text>
           </g>
-          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Message bus" data-legend-x="545" data-legend-baseline="572" data-legend-width="98">
-            <rect x="545" y="563" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
-            <text x="567" y="572" class="t-muted" font-size="10" font-weight="500">Message bus</text>
+          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="Message bus" data-legend-x="545" data-legend-baseline="558" data-legend-width="98">
+            <rect x="545" y="549" width="16" height="10" rx="2.5" class="c-messagebus" stroke-width="1"/>
+            <text x="567" y="558" class="t-muted" font-size="10" font-weight="500">Message bus</text>
           </g>
-          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="External" data-legend-x="665" data-legend-baseline="572" data-legend-width="83">
-            <rect x="665" y="563" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
-            <text x="687" y="572" class="t-muted" font-size="10" font-weight="500">External</text>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="External" data-legend-x="665" data-legend-baseline="558" data-legend-width="83">
+            <rect x="665" y="549" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="687" y="558" class="t-muted" font-size="10" font-weight="500">External</text>
           </g>
         </g>
       </svg>

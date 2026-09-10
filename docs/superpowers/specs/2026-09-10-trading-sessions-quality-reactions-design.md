@@ -6,7 +6,7 @@ Provide a pure, marker-driven session planner and shared semantic registries wit
 
 ## Planner contract
 
-`plan_event_sessions(*, event_id, markers, sessions, market_code, planner_version)` accepts timezone-aware instants, normalizes to UTC, validates local session dates and chooses S0 as the first regular session able to absorb the primary marker. Premarket and regular markers use same-day S0; post-market and closed-day markers use the next session. FOMC `STATEMENT` is primary and `PRESS_CONFERENCE` secondary. Marker IDs and kinds are unique.
+`plan_event_session(*, event_id, markers, sessions, market_code, planner_version)` accepts timezone-aware instants, normalizes to UTC, validates local session dates and chooses S0 as the first regular session able to absorb the primary marker. Premarket and regular markers use same-day S0; post-market and closed-day markers use the next session. FOMC `STATEMENT` is primary and `PRESS_CONFERENCE` secondary. Marker IDs and kinds are unique.
 
 ## Quality and reaction contracts
 

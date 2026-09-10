@@ -1,66 +1,124 @@
 {
   "date": "2026-09-10",
   "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
-  "scope": "P0 canonical contracts plus additive P1 event/session foundation",
-  "pre_change_python": {
-    "tests": 220,
-    "skipped": 12,
-    "result": "PASS",
-    "seconds": 13.083
-  },
+  "reviewed_pr_head": "b8c9b127f74181278dbdb6098926936188136b66",
+  "corrective_intermediate_sha": "e3e447b5fcf02a505f53faa8ce1bc87a80259cbf",
+  "branch": "architecture-contract-2026-09-10",
+  "scope": "PR #36 corrective foundation packages A-H; no target feature expansion",
   "tdd": {
-    "initial_red_failures": 12,
-    "timezone_red_failures": 2,
-    "lineage_and_immutability_red_failures": 2,
-    "targeted_green_tests": 15,
-    "result": "PASS"
+    "red": [
+      "quality and reaction contract tests rejected the coarse shared taxonomy and incomplete reaction vocabulary",
+      "session tests rejected the same-day post-market S0, caller-controlled timezone, mixed calendar generations, and ambiguous marker identity",
+      "migration shape and PostgreSQL behavior tests rejected polling-dependent revision identity, mutable facts, unsafe surprise lineage, and missing lifecycle constraints",
+      "bar-origin tests rejected the shared market_bars sink for provider aggregates and raw-derived reconstruction",
+      "the final lifecycle test initially failed because SCHEDULED still accepted released_at"
+    ],
+    "targeted_green_tests": 51,
+    "targeted_green_result": "PASS"
   },
-  "post_change_python": {
-    "tests": 235,
-    "skipped": 12,
-    "result": "PASS",
-    "seconds": 12.539
-  },
-  "post_change_node": {
-    "tests": 6,
+  "full_python": {
+    "tests": 270,
+    "passed": 242,
+    "skipped": 28,
     "failed": 0,
     "result": "PASS",
-    "seconds": 0.069553958
+    "seconds": 15.438,
+    "execution_note": "A sandboxed rerun failed before test execution because Py4J could not bind a loopback socket; the required unsandboxed rerun passed."
   },
-  "postgresql_migrations": {
-    "image": "postgres:17.6-alpine",
-    "range": "001..009",
+  "node_ui": {
+    "tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 0.107157416
+  },
+  "postgresql": {
+    "version": "17.6",
+    "image_family": "postgres:17-alpine",
+    "database": "isolated disposable pr36-corrective-postgres",
+    "migration_range": "001..009",
     "full_range_apply_count": 2,
-    "migration_009_additional_apply_count": 2,
-    "foundation_tables": 5,
-    "exchange_timezone_columns": 1,
-    "append_only_mutation_check": "PASS",
-    "cross_event_surprise_lineage_check": "PASS",
-    "result": "PASS"
+    "behavior_tests": 19,
+    "failed": 0,
+    "result": "PASS",
+    "seconds": 6.624,
+    "verified": [
+      "upcoming lifecycle and scheduled/released consistency",
+      "append-only fact mutation rejection",
+      "official revision idempotency and conflict policy",
+      "later revision preservation",
+      "initial-actual and latest-strictly-pre-release consensus selection",
+      "cross-event lineage, unit, stale consensus, and arithmetic rejection",
+      "calendar, timezone, and marker constraints",
+      "provider and raw-derived bar physical isolation and replay recovery"
+    ]
+  },
+  "market_bar_audit": {
+    "historical_query_result": [
+      {
+        "condition_policy": "provider_aggregated_v1",
+        "spark_batch_id": -1,
+        "count": 308512
+      }
+    ],
+    "conclusion": "The old shared identity allowed a code/schema collision, but the checked historical database contained only provider-aggregated rows. Historical overwrite is not asserted, and use of a separate historical raw database is unknown."
   },
   "archify": {
     "diagram_type": "architecture",
-    "spec_sha256": "54b625b2e67cbcd587469145ad5d74def5f732d1c53435d57569de86c1eb5f3e",
-    "artifact_sha256": "1c93714ff888ab36f8434ea05c77108ca8a2305f0162bfd54a4952e15c07e2da",
+    "spec_sha256": "75101dbbabd29c4eb3d09caaad220729650f0dc2f208bc16de8264bdf3440ac9",
+    "artifact_sha256": "3dec9506df6074cd02ffc83b261b6d60782a23b401498f1f08da7c8b67d64dad",
+    "artifact_bytes": 730234,
     "showcase_checks": "9/9",
     "errors": 0,
     "warnings": 0,
     "browser_viewports": [
-      "1440x900",
-      "1600x1000",
-      "1920x1080",
-      "2048x1320"
+      "1440x900 light",
+      "1440x900 dark",
+      "1600x1000 light",
+      "1920x1080 light",
+      "2048x1320 light",
+      "2048x1320 dark"
     ],
     "visual_review": "PASS",
-    "correction_rounds": 1
+    "semantic_source_grounding_review": "PASS",
+    "correction_rounds": 2
   },
+  "semantic_completion": [
+    {"id": 1, "requirement": "Upcoming events are representable before release", "satisfied": "YES"},
+    {"id": 2, "requirement": "Post-release consensus is excluded from canonical event-time surprise", "satisfied": "YES"},
+    {"id": 3, "requirement": "Revised actuals cannot masquerade as the initial surprise actual", "satisfied": "YES"},
+    {"id": 4, "requirement": "Polling cannot duplicate the same official revision", "satisfied": "YES"},
+    {"id": 5, "requirement": "Incompatible units cannot be combined into a surprise", "satisfied": "YES"},
+    {"id": 6, "requirement": "Caller-controlled timezone cannot move S0", "satisfied": "YES"},
+    {"id": 7, "requirement": "Post-market S0 cannot point to an already-closed session", "satisfied": "YES"},
+    {"id": 8, "requirement": "One plan cannot mix calendar generations", "satisfied": "YES"},
+    {"id": 9, "requirement": "FOMC primary reaction cannot be double-counted through RELEASE plus STATEMENT", "satisfied": "YES"},
+    {"id": 10, "requirement": "Provider research bars and raw-derived validation bars cannot overwrite each other", "satisfied": "YES"},
+    {"id": 11, "requirement": "Research serving cannot consume validation bars through its current query path", "satisfied": "YES"},
+    {"id": 12, "requirement": "Metric maturity and provider availability are distinct", "satisfied": "YES"},
+    {"id": 13, "requirement": "Legacy metrics remain preserved and are not reinterpreted", "satisfied": "YES"},
+    {"id": 14, "requirement": "Official observations and external consensus are visibly separate", "satisfied": "YES"},
+    {"id": 15, "requirement": "The diagram cites migration 009 and src/trading_sessions.py", "satisfied": "YES"},
+    {"id": 16, "requirement": "Current-vs-target distinguishes current, foundation, and target", "satisfied": "YES"},
+    {"id": 17, "requirement": "Non-executable plans are marked as planning outlines", "satisfied": "YES"},
+    {"id": 18, "requirement": "PPT claims remain backed by dated evidence and truth-type labels", "satisfied": "YES"}
+  ],
+  "static_checks": {
+    "compileall": "PASS",
+    "git_diff_check": "PASS",
+    "json_receipts_parsed": 41,
+    "markdown_files_checked": 97,
+    "missing_local_markdown_targets": 0,
+    "private_key_and_aws_access_key_pattern_scan": "PASS"
+  },
+  "architecture_merge_blockers": [],
   "not_proven": [
-    "official release observation ingestion or backfill",
-    "consensus ingestion or surprise population",
-    "operational exchange-calendar adapter",
-    "target reaction calculations",
-    "comparable-event search or strategy rerun",
-    "automated research-to-order execution",
-    "public or production deployment"
+    "production official-observation or external-consensus adapters/backfills",
+    "operational exchange-calendar ingestion",
+    "canonical session-aware reaction recomputation",
+    "macro-regime or comparable-event engine",
+    "strategy simulator or automated research-to-order execution",
+    "full Paper experiment/fill/outcome lifecycle",
+    "managed public or production deployment"
   ]
 }
