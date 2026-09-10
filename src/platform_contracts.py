@@ -303,6 +303,10 @@ def resolve_reaction_window(
         ReactionMetric.POST_60M,
     }
     if metric in post_metrics:
+        if release_phase is ReleasePhase.MARKET_CLOSED:
+            return ReactionWindow(
+                None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
+            )
         definition = PRICE_REACTION_METRIC_DEFINITIONS[metric]
         start_at = marker_at + timedelta(minutes=definition.start_offset_minutes or 0)
         end_at = marker_at + timedelta(minutes=definition.end_offset_minutes or 0)

@@ -6,6 +6,32 @@ from src.trading_sessions import ReleasePhase
 
 
 class PlatformContractsTest(unittest.TestCase):
+    def test_T51_closed_market_post_metrics_are_not_applicable(self) -> None:
+        post_metrics = (
+            contracts.ReactionMetric.POST_1M,
+            contracts.ReactionMetric.POST_5M,
+            contracts.ReactionMetric.POST_15M,
+            contracts.ReactionMetric.POST_30M,
+            contracts.ReactionMetric.POST_60M,
+        )
+
+        for metric in post_metrics:
+            with self.subTest(metric=metric):
+                window = contracts.resolve_reaction_window(
+                    metric,
+                    marker_at=datetime(2026, 8, 15, 14, 0, tzinfo=UTC),
+                    release_phase=ReleasePhase.MARKET_CLOSED,
+                    s0_open=datetime(2026, 8, 17, 13, 30, tzinfo=UTC),
+                    s0_close=datetime(2026, 8, 17, 20, 0, tzinfo=UTC),
+                )
+
+                self.assertEqual(
+                    window.analysis_eligibility,
+                    contracts.AnalysisEligibility.NOT_APPLICABLE,
+                )
+                self.assertIsNone(window.start_at)
+                self.assertIsNone(window.end_at)
+
     def test_T39_late_regular_post_metric_cannot_cross_session_close(self) -> None:
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.POST_30M,
