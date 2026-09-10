@@ -1,6 +1,6 @@
 # PR #36 counterexample matrix — 2026-09-10
 
-Verified source revision: `1d297a2ddbf03ae128d4fe0135462ae4c000170a`
+Verified source revision: `3bd765f4b1ea8a2c03952cf1e521177d707166c2`
 
 Database verification: PostgreSQL 17.6, fresh migrations `001..009`, then a second apply of `009`
 

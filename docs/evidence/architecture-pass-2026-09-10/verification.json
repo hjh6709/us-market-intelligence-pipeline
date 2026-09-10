@@ -2,7 +2,7 @@
   "date": "2026-09-10",
   "baseline_sha": "63633a50c85c88e507be458067ecf6706220f813",
   "corrective_starting_sha": "9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8",
-  "verified_foundation_source_sha": "1d297a2ddbf03ae128d4fe0135462ae4c000170a",
+  "verified_foundation_source_sha": "3bd765f4b1ea8a2c03952cf1e521177d707166c2",
   "branch": "architecture-contract-2026-09-10",
   "scope": "PR #36 canonical foundation corrections only; no target feature expansion",
   "counterexample_matrix": {

@@ -1,6 +1,6 @@
 # PR #36 corrective foundation evidence — 2026-09-10
 
-This directory records the bounded corrective review of PR #36. The review started from remote `main` at `63633a50c85c88e507be458067ecf6706220f813`; the final narrow merge-blocker pass started from PR head `9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8` and verifies foundation source revision `1d297a2ddbf03ae128d4fe0135462ae4c000170a`.
+This directory records the bounded corrective review of PR #36. The review started from remote `main` at `63633a50c85c88e507be458067ecf6706220f813`; the final narrow merge-blocker pass started from PR head `9c3bcac5b0683c5b1901485711a6d7b4a32d7fb8` and verifies foundation source revision `3bd765f4b1ea8a2c03952cf1e521177d707166c2`.
 
 The evidence proves the corrected event/session foundation semantics, not the target product features described in the architecture contracts. In particular:
 
