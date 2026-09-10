@@ -54,7 +54,7 @@ jobs:
         run: uv sync --frozen --extra airflow
 
       - name: Compile Python sources
-        run: .venv/bin/python -m compileall -q src dags tests
+        run: .venv/bin/python -m compileall -q src dags scripts tests
 
       - name: Run unit tests
         run: .venv/bin/python -m unittest discover -s tests -v
@@ -80,7 +80,9 @@ jobs:
           RUN_POSTGRES_INTEGRATION: "1"
         run: >-
           .venv/bin/python -m unittest
-          tests/integration/test_postgres_market_bars.py -v
+          tests.integration.test_event_session_foundation_postgres
+          tests.integration.test_postgres_market_bars
+          tests.integration.test_validation_lineage_postgres -v
 
       - name: Run isolated paper recovery tests (no external API)
         env:

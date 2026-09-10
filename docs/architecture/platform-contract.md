@@ -38,13 +38,13 @@ Interactive target diagram: [target-platform.html](../diagrams/target-platform.h
 1. Canonical event type is exactly `CPI | EMPLOYMENT | PCE | FOMC`; official observations and consensus must satisfy the exact event/code/unit ontology in [data-contracts.md](data-contracts.md).
 2. Lifecycle and marker corrections are append-only consecutive revisions. Current means the highest valid revision; old facts are never updated.
 3. Release observation identity is `(event, observation_code, revision_number)`. Polling time is excluded; conflicting revision type, value, unit, publication time, source, source revision, or payload hash is rejected.
-4. Consensus selection takes an explicit provider and chooses that provider's latest snapshot strictly before the current primary marker. Canonical surprise uses an initial official observation, exact unit/arithmetic, and keeps standardized surprise null.
-5. `S0` is the first regular trading session able to absorb the current primary marker. Post-market and closed-day releases use the next session; FOMC statement and press conference keep distinct marker identities.
+4. Consensus selection takes an explicit provider and chooses that provider's latest snapshot strictly before the current primary marker. Canonical surprise history is immutable; its current projection additionally requires the exact current marker and currently selected provider snapshot. It uses an initial official observation, exact unit/arithmetic, and keeps standardized surprise null.
+5. `S0` is the first regular trading session able to absorb the current primary marker. Post-market and closed-day releases use the next verified session; S+N counts the same calendar snapshot. Parent-timezone local dates are enforced in Python and PostgreSQL, and FOMC statement and press conference keep distinct marker identities.
 6. Run outcome, work-item outcome, session/interval type, coverage, analysis eligibility, reason code, and per-metric maturity are distinct semantics.
-7. Reaction metrics declare category, marker, endpoints, prices, clipping, tolerance, maturity, applicability and version. Legacy `PRE_60M`/`POST_*` outputs remain legacy baselines.
+7. Price reaction metrics declare typed category, marker, endpoints, prices, clipping, tolerance, maturity, applicability and version. Activity metrics declare exact typed calculations without fake price fields. Legacy `PRE_60M`/`POST_*` outputs remain legacy baselines.
 8. Provider-aggregated research bars live in `market_bars`; raw-derived validation bars live in `validation_reconstructed_bars`. Immutable `validation_runs` freezes run/process/checkpoint lineage. Research serving reads provider bars only.
 9. Raw provider payloads and raw trade archives are immutable; Kafka is transport, not source of truth.
-10. PostgreSQL curated writes use deterministic business keys. This is not a blanket exactly-once guarantee.
+10. PostgreSQL canonical immutable-record boundaries serialize same-identity decisions: identical content converges on one fact and different content raises a domain conflict. Legacy curated writes use deterministic business keys. This is not a blanket exactly-once guarantee.
 11. Research hypotheses, simulations and Paper experiments have different identifiers and lifecycles.
 12. Paper submission requires explicit user approval, a Paper-only endpoint and reconciliation. Research signals cannot call it.
 

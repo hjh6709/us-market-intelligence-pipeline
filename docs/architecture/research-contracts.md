@@ -13,13 +13,13 @@ The canonical market is `US_EQUITIES` in `America/New_York`. `S0` is the first s
 | `POST_MARKET` | next trading session |
 | `MARKET_CLOSED` | next trading session |
 
-Early close is a session-day property. Market interval is only `REGULAR`, `EXTENDED`, or `CLOSED`. A marker correction is a new revision; the planner uses the latest revision and preserves marker identity in downstream reaction identity.
+Early close is a session-day property. Market interval is only `REGULAR`, `EXTENDED`, or `CLOSED`. A marker correction is a new revision; the planner uses the latest revision and preserves marker identity in downstream reaction identity. `CalendarSnapshot` owns market, timezone and source metadata; `TradingSession` owns only snapshot identity and temporal session fields. `resolve_session_offset` counts rows from that same verified snapshot, so S+1/S+3/S+7 skip weekends and holidays without weekday guessing.
 
 ## Reaction metric contract v2
 
 Every v2 reaction identity includes `(economic_event_marker_id, symbol, reaction_metric, metric_contract_version)`. Therefore an FOMC statement and press conference can each have `POST_5M` without inventing secondary-marker metric names.
 
-All definitions use `event_session_reaction_v2`, endpoint tolerance 60 seconds, and `NO_CROSS_SESSION_FILL`. `CLOSE`/`OPEN` below are the required price fields.
+All definitions use `event_session_reaction_v2`. Price reactions use typed category, endpoint, price-field and `NO_CROSS_SESSION_FILL` vocabularies. Endpoint tolerance and pre-open-reference staleness are separate policies. Activity metrics have typed calculation definitions rather than fake price endpoints.
 
 | Metric | Exact start -> end | Applicability / maturity |
 | --- | --- | --- |
@@ -37,12 +37,12 @@ All definitions use `event_session_reaction_v2`, endpoint tolerance 60 seconds, 
 | `S0_CLOSE_TO_S+1_CLOSE` | S0 regular close `CLOSE` -> S+1 regular close `CLOSE` | matures at S+1 close |
 | `S0_CLOSE_TO_S+3_CLOSE` | S0 regular close `CLOSE` -> S+3 regular close `CLOSE` | matures at S+3 close |
 | `S0_CLOSE_TO_S+7_CLOSE` | S0 regular close `CLOSE` -> S+7 regular close `CLOSE` | matures at S+7 close |
-| `EVENT_VOLUME_RATIO` | event-window `VOLUME` / reference-window `VOLUME` | reference window required |
-| `OPEN_60M_VOLUME_RATIO` | S0 opening-60m `VOLUME` / reference opening-60m `VOLUME` | reference window required |
-| `EVENT_REALIZED_VOL` | event-window returns -> realized volatility | minimum return count required |
-| `EVENT_VOLATILITY_RATIO` | event realized volatility / reference realized volatility | reference window required |
+| `EVENT_VOLUME_RATIO` | `event_window_volume / reference_window_volume` | reference window required |
+| `OPEN_60M_VOLUME_RATIO` | `opening_60m_volume / reference_opening_60m_volume` | reference window required |
+| `EVENT_REALIZED_VOL` | `sqrt(sum(log_return^2))`, annualization `NONE` | minimum return count required |
+| `EVENT_VOLATILITY_RATIO` | `event_realized_vol / reference_realized_vol` | reference window required |
 
-For an 08:30 ET release, the POST endpoints are exactly 08:29→08:30, 08:29→08:34, 08:29→08:44, 08:29→08:59, and 08:29→09:29. For a 09:30 open, `OPEN_30M` ends at 09:59 and `OPEN_60M` at 10:29. Missing endpoints are not filled across sessions.
+For an 08:30 ET release, the POST endpoints are exactly 08:29→08:30, 08:29→08:34, 08:29→08:44, 08:29→08:59, and 08:29→09:29. For a 09:30 open, `OPEN_30M` ends at 09:59 and `OPEN_60M` at 10:29. A regular-session POST endpoint after that session's close is `NOT_APPLICABLE`; missing endpoints are never filled from the next session. The pure resolver derives offsets and price fields from the typed price definition registry.
 
 Pre-event drift is context, not reaction. Legacy `PRE_60M`, `POST_5M`, `POST_30M`, and `POST_60M` retain their recorded v1 definitions.
 
@@ -61,11 +61,12 @@ FAILED + ELIGIBLE
 DATA_NOT_AVAILABLE + COMPLETE
 DATA_NOT_AVAILABLE + ELIGIBLE
 SKIPPED + ELIGIBLE
+NO_OBSERVATIONS + ELIGIBLE
 NOT_YET_MATURE without eligible_at
 ELIGIBLE while eligible_at is later than assessed_at
 ```
 
-Reason code and detail are either both absent or both present. Closed-day and sparse-extended-hours outcomes remain explicit; provider safety lag is availability, not coverage. Metric maturity is per metric, so `POST_5M` may be eligible while S+7 remains `NOT_YET_MATURE`.
+Reason code and detail are either both absent or both present, and every state outside the exact normal tuple requires them. Closed-day and sparse-extended-hours outcomes remain explicit; provider safety lag is availability, not coverage. Metric maturity is per metric, so `POST_5M` may be eligible while S+7 remains `NOT_YET_MATURE`.
 
 ## Target-only research layers
 

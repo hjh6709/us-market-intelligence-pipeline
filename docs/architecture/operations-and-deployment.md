@@ -30,6 +30,8 @@ Existing event-oriented raw archives remain immutable and readable; the 7.36M ar
 
 Migration 009 and the current Spark PostgreSQL sink implement an immutable `validation_runs` parent containing run ID, workload ID, processor version, checkpoint namespace, and optional source-manifest identity. Reconstructed bars are append-only: identical replay is idempotent and conflicting content under the same run/bar identity raises a determinism conflict. Streaming checkpoints are isolated by validation run and processor version. This is a local foundation; managed object storage and always-on workers remain target-only.
 
+The migration serializes validation-run and reconstructed-bar decisions with transaction-scoped advisory locks. Concurrent identical requests return one durable fact; concurrent different bar content raises `VALIDATION_BAR_DETERMINISM_CONFLICT` rather than exposing a timing-dependent unique-key failure.
+
 ## Market-data validation
 
 Current provider collection verifies requested interval/symbol and pagination termination. Stricter provider conflict handling remains target-only. Validation evidence is never updated to hide a raw-reconstruction conflict. Corporate-action policy for multi-session persistence is governed by [research-contracts.md](research-contracts.md).

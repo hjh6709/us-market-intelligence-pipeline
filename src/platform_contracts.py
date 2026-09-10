@@ -55,6 +55,13 @@ class AnalysisEligibility(StrEnum):
     NOT_APPLICABLE = "NOT_APPLICABLE"
 
 
+class ReleasePhase(StrEnum):
+    MARKET_CLOSED = "MARKET_CLOSED"
+    PRE_MARKET = "PRE_MARKET"
+    REGULAR_SESSION = "REGULAR_SESSION"
+    POST_MARKET = "POST_MARKET"
+
+
 class ReasonCode(StrEnum):
     PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
     PROVIDER_SAFETY_LAG = "PROVIDER_SAFETY_LAG"
@@ -94,17 +101,82 @@ class ContextMetric(StrEnum):
     PRE_EVENT_DRIFT_60M = "PRE_EVENT_DRIFT_60M"
 
 
+class MetricCategory(StrEnum):
+    ANNOUNCEMENT = "ANNOUNCEMENT"
+    SESSION_OPEN = "SESSION_OPEN"
+    SESSION = "SESSION"
+    PERSISTENCE = "PERSISTENCE"
+    ACTIVITY = "ACTIVITY"
+
+
+class EndpointType(StrEnum):
+    SELECTED_MARKER = "SELECTED_MARKER"
+    MARKER_MINUS_1M_BAR_CLOSE = "MARKER_MINUS_1M_BAR_CLOSE"
+    MARKER_MINUTE_BAR_CLOSE = "MARKER_MINUTE_BAR_CLOSE"
+    MARKER_PLUS_4M_BAR_CLOSE = "MARKER_PLUS_4M_BAR_CLOSE"
+    MARKER_PLUS_14M_BAR_CLOSE = "MARKER_PLUS_14M_BAR_CLOSE"
+    MARKER_PLUS_29M_BAR_CLOSE = "MARKER_PLUS_29M_BAR_CLOSE"
+    MARKER_PLUS_59M_BAR_CLOSE = "MARKER_PLUS_59M_BAR_CLOSE"
+    LAST_VALID_PRE_OPEN_REFERENCE = "LAST_VALID_PRE_OPEN_REFERENCE"
+    S0_OPEN = "S0_OPEN"
+    FIRST_S0_REGULAR_BAR = "FIRST_S0_REGULAR_BAR"
+    FIRST_S0_REGULAR_BAR_OPEN = "FIRST_S0_REGULAR_BAR_OPEN"
+    S0_OPEN_PLUS_29M_BAR_CLOSE = "S0_OPEN_PLUS_29M_BAR_CLOSE"
+    S0_OPEN_PLUS_59M_BAR_CLOSE = "S0_OPEN_PLUS_59M_BAR_CLOSE"
+    S0_REGULAR_OPEN = "S0_REGULAR_OPEN"
+    S0_REGULAR_CLOSE = "S0_REGULAR_CLOSE"
+    S0_CLOSE = "S0_CLOSE"
+    S_PLUS_1_REGULAR_CLOSE = "S_PLUS_1_REGULAR_CLOSE"
+    S_PLUS_3_REGULAR_CLOSE = "S_PLUS_3_REGULAR_CLOSE"
+    S_PLUS_7_REGULAR_CLOSE = "S_PLUS_7_REGULAR_CLOSE"
+
+
+class PriceField(StrEnum):
+    OPEN = "OPEN"
+    CLOSE = "CLOSE"
+
+
+class ClippingPolicy(StrEnum):
+    NO_CROSS_SESSION_FILL = "NO_CROSS_SESSION_FILL"
+
+
+class CalculationKind(StrEnum):
+    RATIO = "RATIO"
+    REALIZED_VOLATILITY = "REALIZED_VOLATILITY"
+
+
+class Annualization(StrEnum):
+    NONE = "NONE"
+
+
 @dataclass(frozen=True)
 class ReactionMetricDefinition:
     metric: ReactionMetric
-    category: str
-    anchor_marker: str
-    start_endpoint: str
-    end_endpoint: str
-    start_price: str
-    end_price: str
-    session_clipping: str
+    category: MetricCategory
+    anchor_marker: EndpointType
+    start_endpoint: EndpointType
+    end_endpoint: EndpointType
+    start_price: PriceField
+    end_price: PriceField
+    clipping_policy: ClippingPolicy
     endpoint_tolerance_seconds: int
+    pre_open_reference_max_age_seconds: int | None
+    start_offset_minutes: int | None
+    end_offset_minutes: int | None
+    maturity_rule: str
+    applicability_rule: str
+    contract_version: str = REACTION_METRIC_VERSION
+
+
+@dataclass(frozen=True)
+class ActivityMetricDefinition:
+    metric: ReactionMetric
+    category: MetricCategory
+    calculation_kind: CalculationKind
+    numerator: str
+    denominator: str | None
+    formula: str
+    annualization: Annualization
     maturity_rule: str
     applicability_rule: str
     contract_version: str = REACTION_METRIC_VERSION
@@ -112,13 +184,16 @@ class ReactionMetricDefinition:
 
 def _definition(
     metric: ReactionMetric,
-    category: str,
-    anchor: str,
-    start: str,
-    end: str,
-    start_price: str = "CLOSE",
-    end_price: str = "CLOSE",
-    clipping: str = "NO_CROSS_SESSION_FILL",
+    category: MetricCategory,
+    anchor: EndpointType,
+    start: EndpointType,
+    end: EndpointType,
+    start_price: PriceField = PriceField.CLOSE,
+    end_price: PriceField = PriceField.CLOSE,
+    *,
+    start_offset: int | None = None,
+    end_offset: int | None = None,
+    pre_open_max_age: int | None = None,
     tolerance: int = 60,
     maturity: str = "END_ENDPOINT_AVAILABLE",
     applicability: str = "REQUIRES_BOTH_ENDPOINTS",
@@ -131,35 +206,46 @@ def _definition(
         end_endpoint=end,
         start_price=start_price,
         end_price=end_price,
-        session_clipping=clipping,
+        clipping_policy=ClippingPolicy.NO_CROSS_SESSION_FILL,
         endpoint_tolerance_seconds=tolerance,
+        pre_open_reference_max_age_seconds=pre_open_max_age,
+        start_offset_minutes=start_offset,
+        end_offset_minutes=end_offset,
         maturity_rule=maturity,
         applicability_rule=applicability,
     )
 
 
-REACTION_METRIC_DEFINITIONS = {
+PRICE_REACTION_METRIC_DEFINITIONS = {
     metric: definition
     for metric, definition in (
-        (ReactionMetric.POST_1M, _definition(ReactionMetric.POST_1M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_MINUTE_BAR_CLOSE")),
-        (ReactionMetric.POST_5M, _definition(ReactionMetric.POST_5M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_4M_BAR_CLOSE")),
-        (ReactionMetric.POST_15M, _definition(ReactionMetric.POST_15M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_14M_BAR_CLOSE")),
-        (ReactionMetric.POST_30M, _definition(ReactionMetric.POST_30M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_29M_BAR_CLOSE")),
-        (ReactionMetric.POST_60M, _definition(ReactionMetric.POST_60M, "ANNOUNCEMENT", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "MARKER_PLUS_59M_BAR_CLOSE")),
-        (ReactionMetric.RELEASE_TO_OPEN, _definition(ReactionMetric.RELEASE_TO_OPEN, "SESSION_OPEN", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "LAST_VALID_PRE_OPEN_REFERENCE", applicability="PRE_MARKET_WITH_VALID_PRE_OPEN_REFERENCE")),
-        (ReactionMetric.OPEN_GAP, _definition(ReactionMetric.OPEN_GAP, "SESSION_OPEN", "S0_OPEN", "LAST_VALID_PRE_OPEN_REFERENCE", "FIRST_S0_REGULAR_BAR", end_price="OPEN", applicability="VALID_PRE_OPEN_REFERENCE_REQUIRED")),
-        (ReactionMetric.OPEN_30M, _definition(ReactionMetric.OPEN_30M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR_OPEN", "S0_OPEN_PLUS_29M_BAR_CLOSE", start_price="OPEN")),
-        (ReactionMetric.OPEN_60M, _definition(ReactionMetric.OPEN_60M, "SESSION_OPEN", "S0_OPEN", "FIRST_S0_REGULAR_BAR_OPEN", "S0_OPEN_PLUS_59M_BAR_CLOSE", start_price="OPEN")),
-        (ReactionMetric.EVENT_TO_CLOSE, _definition(ReactionMetric.EVENT_TO_CLOSE, "SESSION", "SELECTED_MARKER", "MARKER_MINUS_1M_BAR_CLOSE", "S0_REGULAR_CLOSE", applicability="PRE_MARKET_OR_REGULAR_SESSION_ONLY")),
-        (ReactionMetric.SESSION_RETURN_S0, _definition(ReactionMetric.SESSION_RETURN_S0, "SESSION", "S0_OPEN", "S0_REGULAR_OPEN", "S0_REGULAR_CLOSE", start_price="OPEN")),
-        (ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, "PERSISTENCE", "S0_CLOSE", "S0_REGULAR_CLOSE", "S_PLUS_1_REGULAR_CLOSE", maturity="S_PLUS_1_CLOSE_AVAILABLE")),
-        (ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, "PERSISTENCE", "S0_CLOSE", "S0_REGULAR_CLOSE", "S_PLUS_3_REGULAR_CLOSE", maturity="S_PLUS_3_CLOSE_AVAILABLE")),
-        (ReactionMetric.S0_CLOSE_TO_S_PLUS_7_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_7_CLOSE, "PERSISTENCE", "S0_CLOSE", "S0_REGULAR_CLOSE", "S_PLUS_7_REGULAR_CLOSE", maturity="S_PLUS_7_CLOSE_AVAILABLE")),
-        (ReactionMetric.EVENT_VOLUME_RATIO, _definition(ReactionMetric.EVENT_VOLUME_RATIO, "ACTIVITY", "PRIMARY", "EVENT_WINDOW_VOLUME", "REFERENCE_WINDOW_VOLUME", start_price="VOLUME", end_price="VOLUME", applicability="REFERENCE_WINDOW_REQUIRED")),
-        (ReactionMetric.OPEN_60M_VOLUME_RATIO, _definition(ReactionMetric.OPEN_60M_VOLUME_RATIO, "ACTIVITY", "S0_OPEN", "S0_OPEN_60M_VOLUME", "REFERENCE_OPEN_60M_VOLUME", start_price="VOLUME", end_price="VOLUME", applicability="REFERENCE_WINDOW_REQUIRED")),
-        (ReactionMetric.EVENT_REALIZED_VOL, _definition(ReactionMetric.EVENT_REALIZED_VOL, "ACTIVITY", "PRIMARY", "EVENT_WINDOW_RETURNS", "EVENT_WINDOW_RETURNS", start_price="RETURNS", end_price="REALIZED_VOL", applicability="MINIMUM_RETURN_COUNT_REQUIRED")),
-        (ReactionMetric.EVENT_VOLATILITY_RATIO, _definition(ReactionMetric.EVENT_VOLATILITY_RATIO, "ACTIVITY", "PRIMARY", "EVENT_REALIZED_VOL", "REFERENCE_REALIZED_VOL", start_price="REALIZED_VOL", end_price="REALIZED_VOL", applicability="REFERENCE_WINDOW_REQUIRED")),
+        (ReactionMetric.POST_1M, _definition(ReactionMetric.POST_1M, MetricCategory.ANNOUNCEMENT, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.MARKER_MINUTE_BAR_CLOSE, start_offset=-1, end_offset=0)),
+        (ReactionMetric.POST_5M, _definition(ReactionMetric.POST_5M, MetricCategory.ANNOUNCEMENT, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.MARKER_PLUS_4M_BAR_CLOSE, start_offset=-1, end_offset=4)),
+        (ReactionMetric.POST_15M, _definition(ReactionMetric.POST_15M, MetricCategory.ANNOUNCEMENT, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.MARKER_PLUS_14M_BAR_CLOSE, start_offset=-1, end_offset=14)),
+        (ReactionMetric.POST_30M, _definition(ReactionMetric.POST_30M, MetricCategory.ANNOUNCEMENT, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.MARKER_PLUS_29M_BAR_CLOSE, start_offset=-1, end_offset=29)),
+        (ReactionMetric.POST_60M, _definition(ReactionMetric.POST_60M, MetricCategory.ANNOUNCEMENT, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.MARKER_PLUS_59M_BAR_CLOSE, start_offset=-1, end_offset=59)),
+        (ReactionMetric.RELEASE_TO_OPEN, _definition(ReactionMetric.RELEASE_TO_OPEN, MetricCategory.SESSION_OPEN, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.LAST_VALID_PRE_OPEN_REFERENCE, start_offset=-1, pre_open_max_age=300, applicability="PRE_MARKET_WITH_VALID_PRE_OPEN_REFERENCE")),
+        (ReactionMetric.OPEN_GAP, _definition(ReactionMetric.OPEN_GAP, MetricCategory.SESSION_OPEN, EndpointType.S0_OPEN, EndpointType.LAST_VALID_PRE_OPEN_REFERENCE, EndpointType.FIRST_S0_REGULAR_BAR, end_price=PriceField.OPEN, pre_open_max_age=300, applicability="VALID_PRE_OPEN_REFERENCE_REQUIRED")),
+        (ReactionMetric.OPEN_30M, _definition(ReactionMetric.OPEN_30M, MetricCategory.SESSION_OPEN, EndpointType.S0_OPEN, EndpointType.FIRST_S0_REGULAR_BAR_OPEN, EndpointType.S0_OPEN_PLUS_29M_BAR_CLOSE, start_price=PriceField.OPEN, start_offset=0, end_offset=29)),
+        (ReactionMetric.OPEN_60M, _definition(ReactionMetric.OPEN_60M, MetricCategory.SESSION_OPEN, EndpointType.S0_OPEN, EndpointType.FIRST_S0_REGULAR_BAR_OPEN, EndpointType.S0_OPEN_PLUS_59M_BAR_CLOSE, start_price=PriceField.OPEN, start_offset=0, end_offset=59)),
+        (ReactionMetric.EVENT_TO_CLOSE, _definition(ReactionMetric.EVENT_TO_CLOSE, MetricCategory.SESSION, EndpointType.SELECTED_MARKER, EndpointType.MARKER_MINUS_1M_BAR_CLOSE, EndpointType.S0_REGULAR_CLOSE, start_offset=-1, applicability="PRE_MARKET_OR_REGULAR_SESSION_ONLY")),
+        (ReactionMetric.SESSION_RETURN_S0, _definition(ReactionMetric.SESSION_RETURN_S0, MetricCategory.SESSION, EndpointType.S0_OPEN, EndpointType.S0_REGULAR_OPEN, EndpointType.S0_REGULAR_CLOSE, start_price=PriceField.OPEN)),
+        (ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_1_CLOSE, MetricCategory.PERSISTENCE, EndpointType.S0_CLOSE, EndpointType.S0_REGULAR_CLOSE, EndpointType.S_PLUS_1_REGULAR_CLOSE, maturity="S_PLUS_1_CLOSE_AVAILABLE")),
+        (ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_3_CLOSE, MetricCategory.PERSISTENCE, EndpointType.S0_CLOSE, EndpointType.S0_REGULAR_CLOSE, EndpointType.S_PLUS_3_REGULAR_CLOSE, maturity="S_PLUS_3_CLOSE_AVAILABLE")),
+        (ReactionMetric.S0_CLOSE_TO_S_PLUS_7_CLOSE, _definition(ReactionMetric.S0_CLOSE_TO_S_PLUS_7_CLOSE, MetricCategory.PERSISTENCE, EndpointType.S0_CLOSE, EndpointType.S0_REGULAR_CLOSE, EndpointType.S_PLUS_7_REGULAR_CLOSE, maturity="S_PLUS_7_CLOSE_AVAILABLE")),
     )
+}
+
+ACTIVITY_METRIC_DEFINITIONS = {
+    ReactionMetric.EVENT_VOLUME_RATIO: ActivityMetricDefinition(ReactionMetric.EVENT_VOLUME_RATIO, MetricCategory.ACTIVITY, CalculationKind.RATIO, "event_window_volume", "reference_window_volume", "event_window_volume / reference_window_volume", Annualization.NONE, "END_ENDPOINT_AVAILABLE", "REFERENCE_WINDOW_REQUIRED"),
+    ReactionMetric.OPEN_60M_VOLUME_RATIO: ActivityMetricDefinition(ReactionMetric.OPEN_60M_VOLUME_RATIO, MetricCategory.ACTIVITY, CalculationKind.RATIO, "opening_60m_volume", "reference_opening_60m_volume", "opening_60m_volume / reference_opening_60m_volume", Annualization.NONE, "END_ENDPOINT_AVAILABLE", "REFERENCE_WINDOW_REQUIRED"),
+    ReactionMetric.EVENT_REALIZED_VOL: ActivityMetricDefinition(ReactionMetric.EVENT_REALIZED_VOL, MetricCategory.ACTIVITY, CalculationKind.REALIZED_VOLATILITY, "event_window_log_returns", None, "sqrt(sum(log_return^2))", Annualization.NONE, "END_ENDPOINT_AVAILABLE", "MINIMUM_RETURN_COUNT_REQUIRED"),
+    ReactionMetric.EVENT_VOLATILITY_RATIO: ActivityMetricDefinition(ReactionMetric.EVENT_VOLATILITY_RATIO, MetricCategory.ACTIVITY, CalculationKind.RATIO, "event_realized_vol", "reference_realized_vol", "event_realized_vol / reference_realized_vol", Annualization.NONE, "END_ENDPOINT_AVAILABLE", "REFERENCE_WINDOW_REQUIRED"),
+}
+
+REACTION_METRIC_DEFINITIONS = {
+    **PRICE_REACTION_METRIC_DEFINITIONS,
+    **ACTIVITY_METRIC_DEFINITIONS,
 }
 
 
@@ -181,8 +267,8 @@ class ReactionIdentity:
 class ReactionWindow:
     start_at: datetime | None
     end_at: datetime | None
-    start_price: str | None
-    end_price: str | None
+    start_price: PriceField | None
+    end_price: PriceField | None
     analysis_eligibility: AnalysisEligibility
 
 
@@ -190,12 +276,14 @@ def resolve_reaction_window(
     metric: ReactionMetric,
     *,
     marker_at: datetime,
-    release_phase: str,
+    release_phase: ReleasePhase,
     s0_open: datetime,
     s0_close: datetime,
     pre_open_reference_at: datetime | None = None,
 ) -> ReactionWindow:
     """Resolve exact one-minute endpoint semantics without reading market data."""
+    if not isinstance(release_phase, ReleasePhase):
+        raise ValueError("release_phase must be a ReleasePhase")
     instants = (marker_at, s0_open, s0_close)
     if any(item.tzinfo is None or item.utcoffset() is None for item in instants):
         raise ValueError("reaction window instants must be timezone-aware")
@@ -207,58 +295,74 @@ def resolve_reaction_window(
     ):
         raise ValueError("pre-open reference must be timezone-aware")
 
-    post_minutes = {
-        ReactionMetric.POST_1M: 0,
-        ReactionMetric.POST_5M: 4,
-        ReactionMetric.POST_15M: 14,
-        ReactionMetric.POST_30M: 29,
-        ReactionMetric.POST_60M: 59,
+    post_metrics = {
+        ReactionMetric.POST_1M,
+        ReactionMetric.POST_5M,
+        ReactionMetric.POST_15M,
+        ReactionMetric.POST_30M,
+        ReactionMetric.POST_60M,
     }
-    if metric in post_minutes:
+    if metric in post_metrics:
+        definition = PRICE_REACTION_METRIC_DEFINITIONS[metric]
+        start_at = marker_at + timedelta(minutes=definition.start_offset_minutes or 0)
+        end_at = marker_at + timedelta(minutes=definition.end_offset_minutes or 0)
+        if end_at > s0_close:
+            return ReactionWindow(
+                None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
+            )
         return ReactionWindow(
-            marker_at - timedelta(minutes=1),
-            marker_at + timedelta(minutes=post_minutes[metric]),
-            "CLOSE",
-            "CLOSE",
+            start_at,
+            end_at,
+            definition.start_price,
+            definition.end_price,
             AnalysisEligibility.ELIGIBLE,
         )
     if metric is ReactionMetric.EVENT_TO_CLOSE:
-        if release_phase in {"POST_MARKET", "MARKET_CLOSED"}:
+        if release_phase in {ReleasePhase.POST_MARKET, ReleasePhase.MARKET_CLOSED}:
             return ReactionWindow(
                 None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
             )
         return ReactionWindow(
             marker_at - timedelta(minutes=1),
             s0_close,
-            "CLOSE",
-            "CLOSE",
+            PriceField.CLOSE,
+            PriceField.CLOSE,
             AnalysisEligibility.ELIGIBLE,
         )
     if metric in {ReactionMetric.RELEASE_TO_OPEN, ReactionMetric.OPEN_GAP}:
-        if release_phase != "PRE_MARKET" or pre_open_reference_at is None:
+        if release_phase is not ReleasePhase.PRE_MARKET or pre_open_reference_at is None:
             return ReactionWindow(
                 None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
             )
         if not marker_at <= pre_open_reference_at < s0_open:
             raise ValueError("pre-open reference must be between marker and S0 open")
+        max_age = PRICE_REACTION_METRIC_DEFINITIONS[
+            metric
+        ].pre_open_reference_max_age_seconds
+        if max_age is not None and s0_open - pre_open_reference_at > timedelta(
+            seconds=max_age
+        ):
+            raise ValueError("pre-open reference exceeds maximum age")
         if metric is ReactionMetric.RELEASE_TO_OPEN:
+            definition = PRICE_REACTION_METRIC_DEFINITIONS[metric]
             return ReactionWindow(
                 marker_at - timedelta(minutes=1),
                 pre_open_reference_at,
-                "CLOSE",
-                "CLOSE",
+                definition.start_price,
+                definition.end_price,
                 AnalysisEligibility.ELIGIBLE,
             )
+        definition = PRICE_REACTION_METRIC_DEFINITIONS[metric]
         return ReactionWindow(
             pre_open_reference_at,
             s0_open,
-            "CLOSE",
-            "OPEN",
+            definition.start_price,
+            definition.end_price,
             AnalysisEligibility.ELIGIBLE,
         )
     if metric in {ReactionMetric.OPEN_30M, ReactionMetric.OPEN_60M}:
-        offset = 29 if metric is ReactionMetric.OPEN_30M else 59
-        end_at = s0_open + timedelta(minutes=offset)
+        definition = PRICE_REACTION_METRIC_DEFINITIONS[metric]
+        end_at = s0_open + timedelta(minutes=definition.end_offset_minutes or 0)
         if end_at > s0_close:
             return ReactionWindow(
                 None, None, None, None, AnalysisEligibility.NOT_APPLICABLE
@@ -266,8 +370,8 @@ def resolve_reaction_window(
         return ReactionWindow(
             s0_open,
             end_at,
-            "OPEN",
-            "CLOSE",
+            definition.start_price,
+            definition.end_price,
             AnalysisEligibility.ELIGIBLE,
         )
     raise ValueError(f"exact instant resolution is not defined for {metric.value}")
@@ -309,6 +413,19 @@ class QualityAssessment:
             and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
         ):
             raise ValueError("skipped work item cannot be eligible")
+        if (
+            self.coverage_status is CoverageStatus.NO_OBSERVATIONS
+            and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
+        ):
+            raise ValueError("no observations cannot be eligible")
+        normal_state = (
+            self.work_item_outcome is WorkItemOutcome.SUCCEEDED
+            and self.market_interval_type is MarketIntervalType.REGULAR
+            and self.coverage_status is CoverageStatus.COMPLETE
+            and self.analysis_eligibility is AnalysisEligibility.ELIGIBLE
+        )
+        if not normal_state and self.reason_code is None:
+            raise ValueError("abnormal quality state requires a reason")
         if (
             self.analysis_eligibility is AnalysisEligibility.NOT_YET_MATURE
             and self.eligible_at is None

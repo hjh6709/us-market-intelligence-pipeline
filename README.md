@@ -253,13 +253,13 @@ RUN_POSTGRES_INTEGRATION=1 \
 | `economic_observation_registry` | 정확한 event·observation·unit ontology | observation code |
 | `economic_release_observations` | 공식 값의 append-only revision foundation | event·observation code·revision |
 | `economic_consensus_snapshots` | provider-local point-in-time consensus foundation | event·observation code·provider·snapshot time |
-| `economic_surprises` | actual/consensus 입력을 참조하는 파생 foundation | actual observation·consensus·algorithm version |
+| `economic_surprises` / `current_canonical_surprises` | marker·actual·consensus lineage를 보존하는 immutable history / 현재 marker와 provider별 최신 pre-release consensus에 다시 맞는 projection | marker·actual observation·consensus·algorithm version |
 | `calendar_snapshots` / `trading_sessions` | immutable market-calendar generation과 session foundation | snapshot / snapshot·session date |
 | `economic_event_markers` | append-only marker revisions와 current primary foundation | event·kind·revision |
 | `validation_runs` | immutable raw-validation execution lineage | validation run ID |
 | `validation_reconstructed_bars` | raw-derived append-only validation bars | run·symbol·start·timeframe·source·feed |
 
-Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 production adapter, backfill, v2 reaction 계산, UI 연결은 아직 구현하지 않았습니다. `validation_runs`와 `validation_reconstructed_bars`는 현재 raw-SIP Spark sink가 사용하지만 연구용 `market_bars` 및 serving과 물리적으로 분리됩니다. 자세한 현재/target 구분은 [current-vs-target](docs/engineering/current-vs-target.md)을 따릅니다.
+Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 production adapter, backfill, v2 reaction 계산, UI 연결은 아직 구현하지 않았습니다. Foundation write functions는 같은 logical identity를 transaction 단위로 직렬화해 동일 내용은 같은 fact로 수렴하고 다른 내용은 domain conflict로 거부합니다. `validation_runs`와 `validation_reconstructed_bars`는 현재 raw-SIP Spark sink가 사용하지만 연구용 `market_bars` 및 serving과 물리적으로 분리됩니다. 자세한 현재/target 구분은 [current-vs-target](docs/engineering/current-vs-target.md)을 따릅니다.
 
 ## 다음 단계
 

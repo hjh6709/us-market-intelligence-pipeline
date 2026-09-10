@@ -22,6 +22,29 @@ CREATE TABLE IF NOT EXISTS canonical_economic_events (
         UNIQUE (economic_event_id, event_type)
 );
 
+CREATE OR REPLACE FUNCTION enforce_canonical_event_identity_immutability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.economic_event_id IS DISTINCT FROM OLD.economic_event_id
+       OR NEW.event_type IS DISTINCT FROM OLD.event_type
+       OR NEW.reference_period IS DISTINCT FROM OLD.reference_period
+       OR NEW.official_source IS DISTINCT FROM OLD.official_source
+    THEN
+        RAISE EXCEPTION 'canonical event identity is immutable'
+            USING ERRCODE = '55000';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS canonical_economic_events_identity_immutable
+    ON canonical_economic_events;
+CREATE TRIGGER canonical_economic_events_identity_immutable
+    BEFORE UPDATE ON canonical_economic_events
+    FOR EACH ROW EXECUTE FUNCTION enforce_canonical_event_identity_immutability();
+
 CREATE TABLE IF NOT EXISTS economic_event_lifecycle_versions (
     event_lifecycle_version_id BIGSERIAL PRIMARY KEY,
     economic_event_id TEXT NOT NULL REFERENCES canonical_economic_events(economic_event_id),
@@ -254,11 +277,29 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     existing economic_release_observations%ROWTYPE;
+    source_existing economic_release_observations%ROWTYPE;
     event_kind TEXT;
     result_id BIGINT;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        'economic-observation:' || p_economic_event_id || ':' || p_observation_code,
+        0
+    ));
     SELECT event_type INTO STRICT event_kind
       FROM canonical_economic_events WHERE economic_event_id = p_economic_event_id;
+    IF p_source_revision_id IS NOT NULL THEN
+        SELECT * INTO source_existing
+          FROM economic_release_observations
+         WHERE economic_event_id = p_economic_event_id
+           AND observation_code = p_observation_code
+           AND source = p_source
+           AND source_revision_id = p_source_revision_id;
+        IF FOUND AND source_existing.revision_number <> p_revision_number THEN
+            RAISE EXCEPTION 'CONFLICTING_SOURCE_FACT: source revision % names revisions % and %',
+                p_source_revision_id, source_existing.revision_number, p_revision_number
+                USING ERRCODE = '23505';
+        END IF;
+    END IF;
     SELECT * INTO existing
       FROM economic_release_observations
      WHERE economic_event_id = p_economic_event_id
@@ -359,6 +400,11 @@ DECLARE
     event_kind TEXT;
     result_id BIGINT;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        'economic-consensus:' || p_economic_event_id || ':'
+        || p_observation_code || ':' || p_provider,
+        0
+    ));
     SELECT event_type INTO STRICT event_kind
       FROM canonical_economic_events WHERE economic_event_id = p_economic_event_id;
     SELECT * INTO existing
@@ -438,6 +484,10 @@ DECLARE
     prior_role TEXT;
     event_marker_count INTEGER;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        'economic-event-marker:' || NEW.economic_event_id,
+        0
+    ));
     SELECT marker_revision, marker_role INTO prior_revision, prior_role
       FROM economic_event_markers
      WHERE economic_event_id = NEW.economic_event_id
@@ -513,6 +563,7 @@ CREATE TABLE IF NOT EXISTS economic_surprises (
     economic_event_id TEXT NOT NULL REFERENCES canonical_economic_events(economic_event_id),
     observation_code TEXT NOT NULL,
     unit TEXT NOT NULL,
+    economic_event_marker_id TEXT NOT NULL,
     actual_observation_id BIGINT NOT NULL,
     consensus_snapshot_id BIGINT NOT NULL,
     surprise_value NUMERIC NOT NULL,
@@ -528,9 +579,43 @@ CREATE TABLE IF NOT EXISTS economic_surprises (
         FOREIGN KEY (consensus_snapshot_id, economic_event_id, observation_code, unit)
         REFERENCES economic_consensus_snapshots
             (consensus_snapshot_id, economic_event_id, observation_code, unit),
+    CONSTRAINT economic_surprises_marker_identity_fk
+        FOREIGN KEY (economic_event_marker_id, economic_event_id)
+        REFERENCES economic_event_markers
+            (economic_event_marker_id, economic_event_id),
     CONSTRAINT economic_surprises_input_version_identity
-        UNIQUE (actual_observation_id, consensus_snapshot_id, algorithm_version)
+        UNIQUE (
+            economic_event_marker_id, actual_observation_id,
+            consensus_snapshot_id, algorithm_version
+        )
 );
+
+ALTER TABLE economic_surprises
+    ADD COLUMN IF NOT EXISTS economic_event_marker_id TEXT;
+
+ALTER TABLE economic_surprises
+    DROP CONSTRAINT IF EXISTS economic_surprises_input_version_identity;
+ALTER TABLE economic_surprises
+    ADD CONSTRAINT economic_surprises_input_version_identity UNIQUE (
+        economic_event_marker_id, actual_observation_id,
+        consensus_snapshot_id, algorithm_version
+    );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conname = 'economic_surprises_marker_identity_fk'
+           AND conrelid = 'economic_surprises'::regclass
+    ) THEN
+        ALTER TABLE economic_surprises
+            ADD CONSTRAINT economic_surprises_marker_identity_fk
+            FOREIGN KEY (economic_event_marker_id, economic_event_id)
+            REFERENCES economic_event_markers
+                (economic_event_marker_id, economic_event_id);
+    END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION enforce_canonical_surprise()
 RETURNS TRIGGER
@@ -548,6 +633,13 @@ BEGIN
      WHERE consensus_snapshot_id = NEW.consensus_snapshot_id;
     SELECT * INTO STRICT current_marker FROM current_economic_event_markers
      WHERE economic_event_id = NEW.economic_event_id AND marker_role = 'PRIMARY';
+
+    IF NEW.economic_event_marker_id IS NULL THEN
+        NEW.economic_event_marker_id := current_marker.economic_event_marker_id;
+    ELSIF NEW.economic_event_marker_id <> current_marker.economic_event_marker_id THEN
+        RAISE EXCEPTION 'canonical surprise requires current primary marker'
+            USING ERRCODE = '23514';
+    END IF;
 
     IF actual.revision_number <> 0 OR actual.revision_type <> 'INITIAL' THEN
         RAISE EXCEPTION 'canonical surprise requires initial official observation'
@@ -572,6 +664,10 @@ BEGIN
         RAISE EXCEPTION 'stored surprise must equal actual minus consensus'
             USING ERRCODE = '23514';
     END IF;
+    IF NEW.algorithm_version <> 'canonical_event_surprise_v1' THEN
+        RAISE EXCEPTION 'unsupported canonical surprise algorithm version'
+            USING ERRCODE = '23514';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -585,6 +681,29 @@ DROP TRIGGER IF EXISTS economic_surprises_immutable ON economic_surprises;
 CREATE TRIGGER economic_surprises_immutable
     BEFORE UPDATE OR DELETE ON economic_surprises
     FOR EACH ROW EXECUTE FUNCTION reject_immutable_fact_mutation();
+
+CREATE OR REPLACE VIEW current_canonical_surprises AS
+SELECT surprise.*
+  FROM economic_surprises AS surprise
+  JOIN economic_release_observations AS actual
+    ON actual.release_observation_id = surprise.actual_observation_id
+  JOIN economic_consensus_snapshots AS consensus
+    ON consensus.consensus_snapshot_id = surprise.consensus_snapshot_id
+  JOIN current_economic_event_markers AS marker
+    ON marker.economic_event_marker_id = surprise.economic_event_marker_id
+   AND marker.economic_event_id = surprise.economic_event_id
+   AND marker.marker_role = 'PRIMARY'
+ WHERE actual.revision_number = 0
+   AND actual.revision_type = 'INITIAL'
+   AND actual.published_at >= marker.marker_at
+   AND surprise.consensus_snapshot_id = select_canonical_prerelease_consensus(
+       surprise.economic_event_id, surprise.observation_code, consensus.provider
+   )
+   AND actual.unit = consensus.unit
+   AND actual.unit = surprise.unit
+   AND surprise.surprise_value = actual.value - consensus.value
+   AND surprise.standardized_surprise IS NULL
+   AND surprise.algorithm_version = 'canonical_event_surprise_v1';
 
 CREATE TABLE IF NOT EXISTS calendar_snapshots (
     calendar_snapshot_id TEXT PRIMARY KEY,
@@ -613,6 +732,31 @@ CREATE TABLE IF NOT EXISTS trading_sessions (
     PRIMARY KEY (calendar_snapshot_id, session_date),
     CONSTRAINT trading_sessions_interval_valid CHECK (closes_at > opens_at)
 );
+
+CREATE OR REPLACE FUNCTION enforce_trading_session_local_date()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    parent_timezone TEXT;
+BEGIN
+    SELECT exchange_timezone INTO STRICT parent_timezone
+      FROM calendar_snapshots
+     WHERE calendar_snapshot_id = NEW.calendar_snapshot_id;
+    IF (NEW.opens_at AT TIME ZONE parent_timezone)::DATE <> NEW.session_date
+       OR (NEW.closes_at AT TIME ZONE parent_timezone)::DATE <> NEW.session_date
+    THEN
+        RAISE EXCEPTION 'session local dates must match session_date'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trading_sessions_local_date_valid ON trading_sessions;
+CREATE TRIGGER trading_sessions_local_date_valid
+    BEFORE INSERT ON trading_sessions
+    FOR EACH ROW EXECUTE FUNCTION enforce_trading_session_local_date();
 
 DROP TRIGGER IF EXISTS trading_sessions_immutable ON trading_sessions;
 CREATE TRIGGER trading_sessions_immutable
@@ -646,6 +790,10 @@ AS $$
 DECLARE
     existing validation_runs%ROWTYPE;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        'validation-run:' || p_validation_run_id,
+        0
+    ));
     SELECT * INTO existing FROM validation_runs
      WHERE validation_run_id = p_validation_run_id;
     IF FOUND THEN
@@ -727,6 +875,13 @@ DECLARE
     existing validation_reconstructed_bars%ROWTYPE;
     result_id BIGINT;
 BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+        format(
+            'validation-bar:%s|%s|%s|%s|%s|%s',
+            p_validation_run_id, p_symbol, p_bar_start, p_timeframe, p_source, p_feed
+        ),
+        0
+    ));
     SELECT * INTO existing FROM validation_reconstructed_bars
      WHERE validation_run_id = p_validation_run_id
        AND symbol = p_symbol

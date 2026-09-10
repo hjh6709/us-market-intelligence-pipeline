@@ -22,5 +22,5 @@ The pure planner normalizes aware instants to UTC, trusts only the market calend
 - Canonical event-time surprise cannot use a revised actual or post-release consensus and must match exact arithmetic and unit.
 - Provider research serving cannot consume or overwrite raw-derived validation bars.
 - No canonical event, observation, consensus, surprise, calendar, target reaction or validation-bar backfill is performed by this change.
-- Existing databases that applied the earlier unmerged draft of migration 009 require an empty-foundation reset; no populated in-place draft upgrade is claimed.
+- Migration 009 remains safe to reapply over its unmerged foundation draft. Existing surprise history is not rewritten; rows without marker lineage cannot appear in the new current-canonical projection.
 - Production adapters and any future backfill require independent design, TDD and dated evidence.

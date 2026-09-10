@@ -10,6 +10,71 @@ def aware(value: str) -> datetime:
 
 
 class TradingSessionPlannerTest(unittest.TestCase):
+    def calendar_snapshot(
+        self,
+        *,
+        market_code: str = "US_EQUITIES",
+        timezone_name: str = "America/New_York",
+        calendar_source: str = "fixture:NYSE",
+        calendar_snapshot_id: str = "calendar:v1",
+    ) -> subject.CalendarSnapshot:
+        return subject.CalendarSnapshot(
+            calendar_snapshot_id,
+            market_code,
+            timezone_name,
+            calendar_source,
+            aware("2026-08-01T00:00:00Z"),
+            "a" * 64,
+        )
+
+    def test_T49_session_offset_counts_verified_sessions_after_friday(self) -> None:
+        snapshot = subject.CalendarSnapshot(
+            "calendar:v1",
+            "US_EQUITIES",
+            "America/New_York",
+            "XNYS_FIXTURE",
+            aware("2026-08-01T00:00:00Z"),
+            "a" * 64,
+        )
+        sessions = (
+            subject.TradingSession("calendar:v1", date(2026, 8, 14), aware("2026-08-14T13:30:00Z"), aware("2026-08-14T20:00:00Z"), SessionDayType.REGULAR),
+            subject.TradingSession("calendar:v1", date(2026, 8, 17), aware("2026-08-17T13:30:00Z"), aware("2026-08-17T20:00:00Z"), SessionDayType.REGULAR),
+        )
+
+        resolved = subject.resolve_session_offset(snapshot, sessions, date(2026, 8, 14), 1)
+
+        self.assertEqual(resolved.session_date, date(2026, 8, 17))
+
+    def test_T50_session_offset_seven_uses_verified_calendar_not_date_math(self) -> None:
+        snapshot = subject.CalendarSnapshot(
+            "calendar:v1",
+            "US_EQUITIES",
+            "America/New_York",
+            "XNYS_FIXTURE",
+            aware("2026-08-01T00:00:00Z"),
+            "a" * 64,
+        )
+        dates = (
+            date(2026, 8, 14), date(2026, 8, 17), date(2026, 8, 18),
+            date(2026, 8, 19), date(2026, 8, 20), date(2026, 8, 21),
+            date(2026, 8, 24), date(2026, 8, 25),
+        )
+        sessions = tuple(
+            subject.TradingSession(
+                "calendar:v1",
+                item,
+                datetime(item.year, item.month, item.day, 13, 30, tzinfo=timezone.utc),
+                datetime(item.year, item.month, item.day, 20, 0, tzinfo=timezone.utc),
+                SessionDayType.REGULAR,
+            )
+            for item in dates
+        )
+
+        resolved = subject.resolve_session_offset(snapshot, sessions, dates[0], 7)
+
+        self.assertEqual(resolved.session_date, date(2026, 8, 25))
+        self.assertNotEqual(resolved.session_date, dates[0] + timedelta(days=7))
+
     def session(
         self,
         session_date: date,
@@ -17,21 +82,14 @@ class TradingSessionPlannerTest(unittest.TestCase):
         closes: str,
         *,
         day_type: SessionDayType = SessionDayType.REGULAR,
-        market_code: str = "US_EQUITIES",
-        timezone_name: str = "America/New_York",
-        calendar_source: str = "fixture:NYSE",
-        calendar_snapshot_id: str = "sha256:calendar-2026",
+        calendar_snapshot_id: str = "calendar:v1",
     ) -> subject.TradingSession:
         return subject.TradingSession(
-            market_code=market_code,
-            listing_venue="XNYS",
+            calendar_snapshot_id=calendar_snapshot_id,
             session_date=session_date,
             opens_at=aware(opens),
             closes_at=aware(closes),
             day_type=day_type,
-            calendar_source=calendar_source,
-            calendar_snapshot_id=calendar_snapshot_id,
-            exchange_timezone=timezone_name,
         )
 
     def marker(
@@ -51,8 +109,9 @@ class TradingSessionPlannerTest(unittest.TestCase):
             self.session(date(2026, 8, 14), "2026-08-14T13:30:00Z", "2026-08-14T20:00:00Z"),
         )
 
-    def plan(self, at: str, *, sessions=None) -> subject.EventSessionPlan:
+    def plan(self, at: str, *, sessions=None, snapshot=None) -> subject.EventSessionPlan:
         return subject.plan_event_session(
+            calendar_snapshot=snapshot or self.calendar_snapshot(),
             markers=(
                 self.marker("event:release", subject.MarkerKind.RELEASE, subject.MarkerRole.PRIMARY, at),
             ),
@@ -129,6 +188,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         )
 
         plan = subject.plan_event_session(
+            calendar_snapshot=self.calendar_snapshot(),
             markers=(marker,),
             sessions=self.normal_sessions(),
             planner_version="verified_session_planner_v2",
@@ -138,32 +198,23 @@ class TradingSessionPlannerTest(unittest.TestCase):
 
     def test_T19_rejects_unsupported_market_code(self) -> None:
         with self.assertRaisesRegex(ValueError, "supported market code"):
-            self.session(
-                date(2026, 8, 12),
-                "2026-08-12T13:30:00Z",
-                "2026-08-12T20:00:00Z",
+            self.calendar_snapshot(
                 market_code="XNYS",
             )
 
     def test_T20_rejects_wrong_market_timezone(self) -> None:
         with self.assertRaisesRegex(ValueError, "trusted timezone"):
-            self.session(
-                date(2026, 8, 12),
-                "2026-08-12T13:30:00Z",
-                "2026-08-12T20:00:00Z",
+            self.calendar_snapshot(
                 timezone_name="UTC",
             )
 
-    def test_rejects_mixed_calendar_source(self) -> None:
-        sessions = list(self.normal_sessions())
-        sessions[2] = self.session(
-            date(2026, 8, 13),
-            "2026-08-13T13:30:00Z",
-            "2026-08-13T20:00:00Z",
-            calendar_source="fixture:OTHER",
-        )
-        with self.assertRaisesRegex(ValueError, "calendar source"):
-            self.plan("2026-08-12T12:30:00Z", sessions=tuple(sessions))
+    def test_calendar_metadata_is_owned_only_by_snapshot(self) -> None:
+        session = self.normal_sessions()[0]
+
+        self.assertFalse(hasattr(session, "market_code"))
+        self.assertFalse(hasattr(session, "listing_venue"))
+        self.assertFalse(hasattr(session, "calendar_source"))
+        self.assertFalse(hasattr(session, "exchange_timezone"))
 
     def test_rejects_mixed_calendar_snapshot(self) -> None:
         sessions = list(self.normal_sessions())
@@ -178,10 +229,13 @@ class TradingSessionPlannerTest(unittest.TestCase):
 
     def test_rejects_local_open_close_date_mismatch(self) -> None:
         with self.assertRaisesRegex(ValueError, "local date"):
-            self.session(
-                date(2026, 8, 12),
-                "2026-08-13T13:30:00Z",
-                "2026-08-13T20:00:00Z",
+            self.plan(
+                "2026-08-12T12:30:00Z",
+                sessions=(
+                    self.session(date(2026, 8, 11), "2026-08-11T13:30:00Z", "2026-08-11T20:00:00Z"),
+                    self.session(date(2026, 8, 12), "2026-08-13T13:30:00Z", "2026-08-13T20:00:00Z"),
+                    self.session(date(2026, 8, 13), "2026-08-13T13:30:00Z", "2026-08-13T20:00:00Z"),
+                ),
             )
 
     def test_rejects_duplicate_marker_identity(self) -> None:
@@ -189,6 +243,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         duplicate = self.marker("event:release", subject.MarkerKind.PRESS_CONFERENCE, subject.MarkerRole.SECONDARY, "2026-08-12T13:00:00Z")
         with self.assertRaisesRegex(ValueError, "marker identity"):
             subject.plan_event_session(
+                calendar_snapshot=self.calendar_snapshot(),
                 markers=(marker, duplicate),
                 sessions=self.normal_sessions(),
                 planner_version="verified_session_planner_v2",
@@ -201,6 +256,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         )
 
         plan = subject.plan_event_session(
+            calendar_snapshot=self.calendar_snapshot(),
             markers=markers,
             sessions=self.normal_sessions(),
             planner_version="verified_session_planner_v2",
@@ -227,6 +283,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         )
 
         plan = subject.plan_event_session(
+            calendar_snapshot=self.calendar_snapshot(),
             markers=(old, corrected),
             sessions=self.normal_sessions(),
             planner_version="verified_session_planner_v2",
@@ -242,6 +299,7 @@ class TradingSessionPlannerTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "exactly one primary"):
             subject.plan_event_session(
+                calendar_snapshot=self.calendar_snapshot(),
                 markers=markers,
                 sessions=self.normal_sessions(),
                 planner_version="verified_session_planner_v2",

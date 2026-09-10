@@ -51,13 +51,15 @@ select_canonical_prerelease_consensus(event, observation_code, provider)
 
 It selects only that provider's latest `snapshot_at` strictly before the **current primary marker**. It never blends providers or creates a composite. The same consensus identity/content is idempotent even if polling metadata changes; different content conflicts. `first_observed_at < snapshot_at` is invalid.
 
-Canonical surprise accepts the initial official observation and the selected provider snapshot for the same event/code/unit. The initial observation must not be published before the current primary marker, and stored arithmetic must equal `actual - consensus`. Revised actuals, cross-event inputs, noncanonical snapshots, incompatible units, and wrong arithmetic are rejected. Because no normalization contract exists, `standardized_surprise` must be `NULL`.
+Canonical surprise accepts the initial official observation and the selected provider snapshot for the same event/code/unit, and records the exact current primary marker used at derivation time. The initial observation must not be published before that marker, and stored arithmetic must equal `actual - consensus`. Revised actuals, cross-event inputs, noncanonical snapshots, incompatible units, and wrong arithmetic are rejected. Because no normalization contract exists, `standardized_surprise` must be `NULL`.
+
+`economic_surprises` is immutable historical derived-fact storage. `current_canonical_surprises` is the dynamic current projection: it returns a historical row only while its marker is still the current primary marker and its provider-specific consensus is still the latest snapshot strictly before that marker. Marker corrections and later eligible consensus backfills therefore do not delete history; they make stale derivations disappear from the current projection.
 
 ## Marker revisions and trading sessions
 
-`economic_event_markers` is an append-only revision chain per event and marker kind. Corrections insert a new consecutive revision; old rows remain. `current_economic_event_markers` selects the highest revision of each kind. The current primary cannot be demoted, and an event cannot have two current primary kinds. Consensus selection and the pure session planner consume current markers only.
+Canonical event identity fields (`economic_event_id`, `event_type`, `reference_period`, `official_source`) are immutable; `official_source_url` remains a replaceable locator. `economic_event_markers` is an append-only revision chain per event and marker kind. Corrections insert a new consecutive revision; old rows remain. `current_economic_event_markers` selects the highest revision of each kind. The current primary cannot be demoted, and event-level transaction serialization prevents two concurrent primary kinds from both committing. Consensus selection and the pure session planner consume current markers only.
 
-`calendar_snapshots` is an immutable parent with `calendar_snapshot_id`, `market_code`, `exchange_timezone`, `calendar_source`, `generated_at`, and `payload_sha256`. The v1 market/timezone pair is exactly `US_EQUITIES` / `America/New_York`. Corrections create a new snapshot rather than updating an old one. `trading_sessions` references the parent and stores day-level `REGULAR` or `EARLY_CLOSE`; closed dates have no session row.
+`calendar_snapshots` is an immutable parent with `calendar_snapshot_id`, `market_code`, `exchange_timezone`, `calendar_source`, `generated_at`, and `payload_sha256`. The v1 market/timezone pair is exactly `US_EQUITIES` / `America/New_York`. Corrections create a new snapshot rather than updating an old one. `trading_sessions` references the parent and stores only session date, open, close and day type (`REGULAR` or `EARLY_CLOSE`); closed dates have no session row. PostgreSQL and the pure planner both require the open and close to resolve to `session_date` in the parent snapshot timezone.
 
 ## Market-bar provenance and validation lineage
 
@@ -71,6 +73,8 @@ same run + same bar identity + different content -> determinism conflict
 ```
 
 Spark batch ID is execution metadata and does not authorize mutation of existing evidence.
+
+Observation, consensus, validation-run and reconstructed-bar record boundaries take transaction-scoped advisory locks before read-then-insert decisions. Concurrent identical facts return the same stored identity; concurrent different content reaches the same explicit source/run/determinism conflict taxonomy instead of leaking a raw unique-constraint race.
 
 ## Quality scopes
 

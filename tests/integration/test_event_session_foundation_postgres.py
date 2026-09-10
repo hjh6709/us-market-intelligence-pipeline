@@ -1,6 +1,8 @@
 import hashlib
 import os
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import psycopg
@@ -41,6 +43,52 @@ class EventSessionFoundationPostgresTest(unittest.TestCase):
 
     def connection(self):
         return psycopg.connect(DATABASE_URL, autocommit=True)
+
+    def install_slow_insert_trigger(
+        self, table: str, *, trigger_name: str = "aaa_test_slow_insert"
+    ) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                """
+                CREATE OR REPLACE FUNCTION test_slow_concurrent_insert()
+                RETURNS TRIGGER LANGUAGE plpgsql AS $$
+                BEGIN
+                    PERFORM pg_sleep(0.2);
+                    RETURN NEW;
+                END;
+                $$
+                """
+            )
+            connection.execute(
+                f"DROP TRIGGER IF EXISTS {trigger_name} ON {table}"
+            )
+            connection.execute(
+                f"CREATE TRIGGER {trigger_name} BEFORE INSERT ON {table} "
+                "FOR EACH ROW EXECUTE FUNCTION test_slow_concurrent_insert()"
+            )
+
+    def drop_slow_insert_trigger(
+        self, table: str, *, trigger_name: str = "aaa_test_slow_insert"
+    ) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                f"DROP TRIGGER IF EXISTS {trigger_name} ON {table}"
+            )
+
+    def run_concurrently(self, actions):
+        barrier = threading.Barrier(len(actions))
+
+        def run(action):
+            with psycopg.connect(DATABASE_URL) as connection:
+                barrier.wait()
+                try:
+                    return action(connection)
+                except Exception as exc:  # return both domain and raw DB outcomes
+                    connection.rollback()
+                    return exc
+
+        with ThreadPoolExecutor(max_workers=len(actions)) as executor:
+            return list(executor.map(run, actions))
 
     def insert_event(self, connection, event_id="event:cpi", event_type="CPI") -> None:
         connection.execute(
@@ -264,7 +312,9 @@ class EventSessionFoundationPostgresTest(unittest.TestCase):
         with self.connection() as connection:
             self.insert_event(connection)
             self.record_observation(connection, source_revision_id="native:7")
-            with self.assertRaises(psycopg.errors.UniqueViolation):
+            with self.assertRaisesRegex(
+                psycopg.errors.UniqueViolation, "CONFLICTING_SOURCE_FACT"
+            ):
                 self.record_observation(
                     connection,
                     revision=1,
@@ -506,6 +556,176 @@ class EventSessionFoundationPostgresTest(unittest.TestCase):
                 connection.execute(
                     "UPDATE trading_sessions SET closes_at='2026-08-12 19:00:00+00' "
                     "WHERE calendar_snapshot_id='calendar:v1'"
+                )
+
+    def test_T35_marker_correction_removes_stale_surprise_from_current_projection(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+            self.insert_marker(connection)
+            actual = self.record_observation(connection)
+            consensus = self.record_consensus(connection)
+            surprise = self.insert_surprise(connection, actual, consensus)
+            self.insert_marker(
+                connection,
+                marker_id="event:cpi:release:v2",
+                revision=2,
+                marker_at="2026-08-12 12:28:00+00",
+            )
+            historical = connection.execute(
+                "SELECT economic_surprise_id FROM economic_surprises"
+            ).fetchall()
+            current = connection.execute(
+                "SELECT economic_surprise_id FROM current_canonical_surprises"
+            ).fetchall()
+        self.assertEqual(historical, [(surprise,)])
+        self.assertEqual(current, [])
+
+    def test_T36_later_eligible_consensus_makes_old_surprise_noncurrent(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+            self.insert_marker(connection)
+            actual = self.record_observation(connection)
+            consensus = self.record_consensus(connection)
+            surprise = self.insert_surprise(connection, actual, consensus)
+            self.record_consensus(
+                connection,
+                snapshot_at="2026-08-12 12:29:30+00",
+                first_observed_at="2026-08-12 12:29:31+00",
+                payload="consensus-later",
+            )
+            historical = connection.execute(
+                "SELECT economic_surprise_id FROM economic_surprises"
+            ).fetchall()
+            current = connection.execute(
+                "SELECT economic_surprise_id FROM current_canonical_surprises"
+            ).fetchall()
+        self.assertEqual(historical, [(surprise,)])
+        self.assertEqual(current, [])
+
+    def test_T37_canonical_event_identity_fields_are_immutable(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+            with self.assertRaisesRegex(
+                psycopg.errors.ObjectNotInPrerequisiteState,
+                "canonical event identity is immutable",
+            ):
+                connection.execute(
+                    "UPDATE canonical_economic_events SET event_type='FOMC' "
+                    "WHERE economic_event_id='event:cpi'"
+                )
+
+    def test_T38_session_timestamp_local_date_must_match_session_date(self) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO calendar_snapshots (
+                    calendar_snapshot_id, market_code, exchange_timezone,
+                    calendar_source, generated_at, payload_sha256
+                ) VALUES ('calendar:v1', 'US_EQUITIES', 'America/New_York',
+                          'XNYS_FIXTURE', '2026-08-01 00:00:00+00', %s)
+                """,
+                (digest("calendar-v1"),),
+            )
+            with self.assertRaisesRegex(
+                psycopg.errors.CheckViolation, "session local dates must match"
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO trading_sessions (
+                        calendar_snapshot_id, session_date, opens_at, closes_at,
+                        session_day_type
+                    ) VALUES ('calendar:v1', '2026-08-12',
+                              '2026-08-13 13:30:00+00',
+                              '2026-08-13 20:00:00+00', 'REGULAR')
+                    """
+                )
+
+    def test_T43_concurrent_primary_marker_insert_has_one_domain_winner(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+        self.install_slow_insert_trigger(
+            "economic_event_markers", trigger_name="zzz_test_slow_insert"
+        )
+        try:
+            results = self.run_concurrently(
+                (
+                    lambda connection: self.insert_marker(
+                        connection, marker_id="event:cpi:release:v1"
+                    ),
+                    lambda connection: self.insert_marker(
+                        connection,
+                        marker_id="event:cpi:statement:v1",
+                        kind="STATEMENT",
+                    ),
+                )
+            )
+        finally:
+            self.drop_slow_insert_trigger(
+                "economic_event_markers", trigger_name="zzz_test_slow_insert"
+            )
+
+        errors = [result for result in results if isinstance(result, Exception)]
+        self.assertEqual(len(errors), 1)
+        self.assertRegex(
+            str(errors[0]), "event already has a different current primary marker"
+        )
+        with self.connection() as connection:
+            count = connection.execute(
+                "SELECT count(*) FROM economic_event_markers"
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_T44_concurrent_identical_observations_return_same_id(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+        self.install_slow_insert_trigger("economic_release_observations")
+        try:
+            results = self.run_concurrently(
+                (self.record_observation, self.record_observation)
+            )
+        finally:
+            self.drop_slow_insert_trigger("economic_release_observations")
+
+        self.assertFalse([result for result in results if isinstance(result, Exception)])
+        self.assertEqual(results[0], results[1])
+        with self.connection() as connection:
+            count = connection.execute(
+                "SELECT count(*) FROM economic_release_observations"
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_T45_concurrent_identical_consensus_returns_same_id(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+        self.install_slow_insert_trigger("economic_consensus_snapshots")
+        try:
+            results = self.run_concurrently(
+                (self.record_consensus, self.record_consensus)
+            )
+        finally:
+            self.drop_slow_insert_trigger("economic_consensus_snapshots")
+
+        self.assertFalse([result for result in results if isinstance(result, Exception)])
+        self.assertEqual(results[0], results[1])
+        with self.connection() as connection:
+            count = connection.execute(
+                "SELECT count(*) FROM economic_consensus_snapshots"
+            ).fetchone()[0]
+        self.assertEqual(count, 1)
+
+    def test_T48_source_revision_conflict_uses_domain_error(self) -> None:
+        with self.connection() as connection:
+            self.insert_event(connection)
+            self.record_observation(connection, source_revision_id="native:7")
+            with self.assertRaisesRegex(
+                psycopg.errors.UniqueViolation, "CONFLICTING_SOURCE_FACT"
+            ):
+                self.record_observation(
+                    connection,
+                    revision=1,
+                    revision_type="REVISION",
+                    source_revision_id="native:7",
+                    payload="revision",
                 )
 
 

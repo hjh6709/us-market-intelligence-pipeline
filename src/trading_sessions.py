@@ -6,17 +6,10 @@ from enum import StrEnum
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-from .platform_contracts import SessionDayType
+from .platform_contracts import ReleasePhase, SessionDayType
 
 
 TRUSTED_MARKET_TIMEZONES = {"US_EQUITIES": "America/New_York"}
-
-
-class ReleasePhase(StrEnum):
-    MARKET_CLOSED = "MARKET_CLOSED"
-    PRE_MARKET = "PRE_MARKET"
-    REGULAR_SESSION = "REGULAR_SESSION"
-    POST_MARKET = "POST_MARKET"
 
 
 class MarkerKind(StrEnum):
@@ -37,16 +30,40 @@ def _normalize_aware(value: datetime, name: str) -> datetime:
 
 
 @dataclass(frozen=True)
-class TradingSession:
+class CalendarSnapshot:
+    calendar_snapshot_id: str
     market_code: str
-    listing_venue: str
+    exchange_timezone: str
+    calendar_source: str
+    generated_at: datetime
+    payload_sha256: str
+
+    def __post_init__(self) -> None:
+        if not self.calendar_snapshot_id.strip() or not self.calendar_source.strip():
+            raise ValueError("calendar snapshot requires identity and source")
+        if self.market_code not in TRUSTED_MARKET_TIMEZONES:
+            raise ValueError("calendar snapshot requires a supported market code")
+        trusted_timezone = TRUSTED_MARKET_TIMEZONES[self.market_code]
+        if self.exchange_timezone != trusted_timezone:
+            raise ValueError(
+                f"{self.market_code} trusted timezone is {trusted_timezone}"
+            )
+        object.__setattr__(
+            self, "generated_at", _normalize_aware(self.generated_at, "generated_at")
+        )
+        if len(self.payload_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in self.payload_sha256
+        ):
+            raise ValueError("calendar snapshot requires a lowercase SHA-256 payload hash")
+
+
+@dataclass(frozen=True)
+class TradingSession:
+    calendar_snapshot_id: str
     session_date: date
     opens_at: datetime
     closes_at: datetime
     day_type: SessionDayType
-    calendar_source: str
-    calendar_snapshot_id: str
-    exchange_timezone: str = "America/New_York"
 
     def __post_init__(self) -> None:
         opens_at = _normalize_aware(self.opens_at, "opens_at")
@@ -55,22 +72,10 @@ class TradingSession:
         object.__setattr__(self, "closes_at", closes_at)
         if opens_at >= closes_at:
             raise ValueError("session open must be before close")
-        if self.market_code not in TRUSTED_MARKET_TIMEZONES:
-            raise ValueError("session requires a supported market code")
-        trusted_timezone = TRUSTED_MARKET_TIMEZONES[self.market_code]
-        if self.exchange_timezone != trusted_timezone:
-            raise ValueError(
-                f"{self.market_code} trusted timezone is {trusted_timezone}"
-            )
-        if not self.listing_venue or not self.calendar_source or not self.calendar_snapshot_id:
-            raise ValueError("session requires venue and calendar lineage")
+        if not self.calendar_snapshot_id.strip():
+            raise ValueError("session requires calendar snapshot lineage")
         if self.day_type is SessionDayType.CLOSED:
             raise ValueError("closed dates are represented by absence of a session row")
-        market_timezone = ZoneInfo(trusted_timezone)
-        if opens_at.astimezone(market_timezone).date() != self.session_date:
-            raise ValueError("session open local date must equal session_date")
-        if closes_at.astimezone(market_timezone).date() != self.session_date:
-            raise ValueError("session close local date must equal session_date")
 
 
 @dataclass(frozen=True)
@@ -105,22 +110,29 @@ class EventSessionPlan:
     calendar_snapshot_id: str
 
 
-def _validated_sessions(sessions: Iterable[TradingSession]) -> tuple[TradingSession, ...]:
+def _validated_sessions(
+    calendar_snapshot: CalendarSnapshot,
+    sessions: Iterable[TradingSession],
+    *,
+    minimum_count: int,
+) -> tuple[TradingSession, ...]:
     ordered = tuple(sessions)
-    if len(ordered) < 3:
-        raise ValueError("at least three verified sessions are required")
+    if len(ordered) < minimum_count:
+        raise ValueError(f"at least {minimum_count} verified sessions are required")
     if tuple(sorted(ordered, key=lambda item: item.session_date)) != ordered:
         raise ValueError("sessions must be ordered by session_date")
     if len({item.session_date for item in ordered}) != len(ordered):
         raise ValueError("sessions must have unique session dates")
-    if len({item.market_code for item in ordered}) != 1:
-        raise ValueError("sessions must belong to one market")
-    if len({item.exchange_timezone for item in ordered}) != 1:
-        raise ValueError("sessions must use one trusted timezone")
-    if len({item.calendar_source for item in ordered}) != 1:
-        raise ValueError("sessions must use one calendar source")
-    if len({item.calendar_snapshot_id for item in ordered}) != 1:
+    if {item.calendar_snapshot_id for item in ordered} != {
+        calendar_snapshot.calendar_snapshot_id
+    }:
         raise ValueError("sessions must use one calendar snapshot")
+    market_timezone = ZoneInfo(calendar_snapshot.exchange_timezone)
+    for session in ordered:
+        if session.opens_at.astimezone(market_timezone).date() != session.session_date:
+            raise ValueError("session open local date must equal session_date")
+        if session.closes_at.astimezone(market_timezone).date() != session.session_date:
+            raise ValueError("session close local date must equal session_date")
     for previous, current in zip(ordered, ordered[1:]):
         if previous.closes_at >= current.opens_at:
             raise ValueError("verified sessions must not overlap")
@@ -155,6 +167,7 @@ def _validated_markers(markers: Iterable[EventMarker]) -> tuple[EventMarker, ...
 
 def plan_event_session(
     *,
+    calendar_snapshot: CalendarSnapshot,
     markers: Iterable[EventMarker],
     sessions: Iterable[TradingSession],
     planner_version: str,
@@ -168,12 +181,14 @@ def plan_event_session(
 
     if not planner_version.strip():
         raise ValueError("planner_version is required")
-    ordered_sessions = _validated_sessions(sessions)
+    ordered_sessions = _validated_sessions(
+        calendar_snapshot, sessions, minimum_count=3
+    )
     ordered_markers = _validated_markers(markers)
     canonical_marker = next(
         item for item in ordered_markers if item.role is MarkerRole.PRIMARY
     )
-    market_timezone = ZoneInfo(ordered_sessions[0].exchange_timezone)
+    market_timezone = ZoneInfo(calendar_snapshot.exchange_timezone)
     release_calendar_date = canonical_marker.at.astimezone(market_timezone).date()
     release_day_index = next(
         (
@@ -223,6 +238,30 @@ def plan_event_session(
         s_plus_1=ordered_sessions[s0_index + 1],
         markers=ordered_markers,
         planner_version=planner_version,
-        market_code=ordered_sessions[0].market_code,
-        calendar_snapshot_id=ordered_sessions[0].calendar_snapshot_id,
+        market_code=calendar_snapshot.market_code,
+        calendar_snapshot_id=calendar_snapshot.calendar_snapshot_id,
     )
+
+
+def resolve_session_offset(
+    calendar_snapshot: CalendarSnapshot,
+    sessions: Iterable[TradingSession],
+    s0_session_date: date,
+    offset: int,
+) -> TradingSession:
+    """Resolve S+N by counting rows from one verified calendar snapshot."""
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise ValueError("session offset must be a non-negative integer")
+    ordered = _validated_sessions(calendar_snapshot, sessions, minimum_count=1)
+    try:
+        s0_index = next(
+            index
+            for index, session in enumerate(ordered)
+            if session.session_date == s0_session_date
+        )
+    except StopIteration as exc:
+        raise ValueError("S0 is not present in the verified calendar snapshot") from exc
+    target_index = s0_index + offset
+    if target_index >= len(ordered):
+        raise ValueError("verified calendar snapshot does not cover session offset")
+    return ordered[target_index]

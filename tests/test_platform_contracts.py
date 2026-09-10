@@ -2,14 +2,79 @@ import unittest
 from datetime import UTC, datetime
 
 import src.platform_contracts as contracts
+from src.trading_sessions import ReleasePhase
 
 
 class PlatformContractsTest(unittest.TestCase):
+    def test_T39_late_regular_post_metric_cannot_cross_session_close(self) -> None:
+        window = contracts.resolve_reaction_window(
+            contracts.ReactionMetric.POST_30M,
+            marker_at=datetime(2026, 8, 12, 19, 50, tzinfo=UTC),
+            release_phase=ReleasePhase.REGULAR_SESSION,
+            s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
+            s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(
+            window.analysis_eligibility,
+            contracts.AnalysisEligibility.NOT_APPLICABLE,
+        )
+        self.assertIsNone(window.end_at)
+
+    def test_T40_arbitrary_release_phase_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "release_phase"):
+            contracts.resolve_reaction_window(
+                contracts.ReactionMetric.EVENT_TO_CLOSE,
+                marker_at=datetime(2026, 8, 12, 19, 50, tzinfo=UTC),
+                release_phase="POSTMARKET",
+                s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
+                s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
+            )
+
+    def test_T41_no_observations_cannot_be_eligible(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no observations.*eligible"):
+            contracts.QualityAssessment(
+                contracts.WorkItemOutcome.SUCCEEDED,
+                contracts.MarketIntervalType.REGULAR,
+                contracts.CoverageStatus.NO_OBSERVATIONS,
+                contracts.AnalysisEligibility.ELIGIBLE,
+            )
+
+    def test_T42_abnormal_quality_state_requires_reason(self) -> None:
+        with self.assertRaisesRegex(ValueError, "abnormal.*reason"):
+            contracts.QualityAssessment(
+                contracts.WorkItemOutcome.FAILED,
+                contracts.MarketIntervalType.REGULAR,
+                contracts.CoverageStatus.PARTIAL,
+                contracts.AnalysisEligibility.INSUFFICIENT_DATA,
+            )
+
+    def test_reaction_contract_uses_typed_price_and_activity_definitions(self) -> None:
+        post = contracts.PRICE_REACTION_METRIC_DEFINITIONS[
+            contracts.ReactionMetric.POST_5M
+        ]
+        release_to_open = contracts.PRICE_REACTION_METRIC_DEFINITIONS[
+            contracts.ReactionMetric.RELEASE_TO_OPEN
+        ]
+        realized = contracts.ACTIVITY_METRIC_DEFINITIONS[
+            contracts.ReactionMetric.EVENT_REALIZED_VOL
+        ]
+
+        self.assertIsInstance(post.category, contracts.MetricCategory)
+        self.assertIsInstance(post.start_endpoint, contracts.EndpointType)
+        self.assertIs(post.start_price, contracts.PriceField.CLOSE)
+        self.assertIs(post.clipping_policy, contracts.ClippingPolicy.NO_CROSS_SESSION_FILL)
+        self.assertIsNone(post.pre_open_reference_max_age_seconds)
+        self.assertGreater(release_to_open.pre_open_reference_max_age_seconds, 0)
+        self.assertEqual(realized.formula, "sqrt(sum(log_return^2))")
+        self.assertIs(realized.annualization, contracts.Annualization.NONE)
+        self.assertFalse(hasattr(realized, "start_price"))
+
     def test_T23_post_market_event_to_close_is_not_applicable(self) -> None:
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.EVENT_TO_CLOSE,
             marker_at=datetime(2026, 8, 12, 20, 30, tzinfo=UTC),
-            release_phase="POST_MARKET",
+            release_phase=ReleasePhase.POST_MARKET,
             s0_open=datetime(2026, 8, 13, 13, 30, tzinfo=UTC),
             s0_close=datetime(2026, 8, 13, 20, 0, tzinfo=UTC),
         )
@@ -25,7 +90,7 @@ class PlatformContractsTest(unittest.TestCase):
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.POST_5M,
             marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
-            release_phase="PRE_MARKET",
+            release_phase=ReleasePhase.PRE_MARKET,
             s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
             s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
         )
@@ -39,7 +104,7 @@ class PlatformContractsTest(unittest.TestCase):
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.RELEASE_TO_OPEN,
             marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
-            release_phase="PRE_MARKET",
+            release_phase=ReleasePhase.PRE_MARKET,
             s0_open=datetime(2026, 8, 12, 13, 30, tzinfo=UTC),
             s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
             pre_open_reference_at=reference,
@@ -55,7 +120,7 @@ class PlatformContractsTest(unittest.TestCase):
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.OPEN_GAP,
             marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
-            release_phase="PRE_MARKET",
+            release_phase=ReleasePhase.PRE_MARKET,
             s0_open=open_at,
             s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
             pre_open_reference_at=reference,
@@ -69,7 +134,7 @@ class PlatformContractsTest(unittest.TestCase):
         window = contracts.resolve_reaction_window(
             contracts.ReactionMetric.OPEN_30M,
             marker_at=datetime(2026, 8, 12, 12, 30, tzinfo=UTC),
-            release_phase="PRE_MARKET",
+            release_phase=ReleasePhase.PRE_MARKET,
             s0_open=open_at,
             s0_close=datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
         )
@@ -248,19 +313,27 @@ class PlatformContractsTest(unittest.TestCase):
         self.assertEqual(contracts.REACTION_METRIC_VERSION, "event_session_reaction_v2")
         self.assertEqual({metric.value for metric in contracts.ReactionMetric}, expected)
         self.assertEqual(set(contracts.REACTION_METRIC_DEFINITIONS), set(contracts.ReactionMetric))
-        for definition in contracts.REACTION_METRIC_DEFINITIONS.values():
+        for definition in contracts.PRICE_REACTION_METRIC_DEFINITIONS.values():
             with self.subTest(metric=definition.metric):
                 self.assertEqual(definition.contract_version, contracts.REACTION_METRIC_VERSION)
-                self.assertTrue(definition.category)
-                self.assertTrue(definition.anchor_marker)
-                self.assertTrue(definition.start_endpoint)
-                self.assertTrue(definition.end_endpoint)
-                self.assertTrue(definition.start_price)
-                self.assertTrue(definition.end_price)
-                self.assertTrue(definition.session_clipping)
+                self.assertIsInstance(definition.category, contracts.MetricCategory)
+                self.assertIsInstance(definition.anchor_marker, contracts.EndpointType)
+                self.assertIsInstance(definition.start_endpoint, contracts.EndpointType)
+                self.assertIsInstance(definition.end_endpoint, contracts.EndpointType)
+                self.assertIsInstance(definition.start_price, contracts.PriceField)
+                self.assertIsInstance(definition.end_price, contracts.PriceField)
+                self.assertIsInstance(definition.clipping_policy, contracts.ClippingPolicy)
                 self.assertGreaterEqual(definition.endpoint_tolerance_seconds, 0)
                 self.assertTrue(definition.maturity_rule)
                 self.assertTrue(definition.applicability_rule)
+        for definition in contracts.ACTIVITY_METRIC_DEFINITIONS.values():
+            with self.subTest(metric=definition.metric):
+                self.assertEqual(definition.contract_version, contracts.REACTION_METRIC_VERSION)
+                self.assertIs(definition.category, contracts.MetricCategory.ACTIVITY)
+                self.assertIsInstance(definition.calculation_kind, contracts.CalculationKind)
+                self.assertTrue(definition.formula)
+                self.assertIsInstance(definition.annualization, contracts.Annualization)
+                self.assertFalse(hasattr(definition, "start_price"))
 
     def test_pre_event_drift_is_context_not_reaction(self) -> None:
         self.assertNotIn("PRE_EVENT_DRIFT_60M", {item.value for item in contracts.ReactionMetric})
