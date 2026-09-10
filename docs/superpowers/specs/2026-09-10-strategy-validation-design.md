@@ -1,3 +1,5 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Strategy validation design
 
 ## Scope

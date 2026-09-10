@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from src.spark_market_processor import (
     KAFKA_CONNECTOR_PACKAGE,
+    PROCESSOR_VERSION,
     _load_setting,
     checkpoint_paths,
     parse_args,
@@ -37,6 +38,7 @@ class SparkMarketProcessorTest(unittest.TestCase):
         self.assertEqual(args.starting_offsets, "latest")
         self.assertEqual(args.watermark, "2 minutes")
         self.assertEqual(args.bar_sink, "postgres")
+        self.assertEqual(args.validation_run_id, "local-validation")
         self.assertEqual(
             args.database_url,
             "postgresql://market:market@localhost:55432/market",
@@ -55,11 +57,39 @@ class SparkMarketProcessorTest(unittest.TestCase):
 
     def test_separates_stateful_query_checkpoints(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            bars, invalid = checkpoint_paths(Path(temp_dir))
+            bars, invalid = checkpoint_paths(
+                Path(temp_dir),
+                validation_run_id="run-1",
+                processor_version=PROCESSOR_VERSION,
+            )
 
         self.assertEqual(bars.name, "bars")
         self.assertEqual(invalid.name, "invalid-metrics")
         self.assertNotEqual(bars, invalid)
+        self.assertEqual(bars.parent.name, "run-1")
+        self.assertEqual(bars.parent.parent.name, PROCESSOR_VERSION)
+
+    def test_checkpoint_namespace_isolated_by_run_and_processor(self) -> None:
+        root = Path(".spark-checkpoints")
+
+        run_one = checkpoint_paths(
+            root,
+            validation_run_id="run-1",
+            processor_version="processor-v1",
+        )
+        run_two = checkpoint_paths(
+            root,
+            validation_run_id="run-2",
+            processor_version="processor-v1",
+        )
+        version_two = checkpoint_paths(
+            root,
+            validation_run_id="run-1",
+            processor_version="processor-v2",
+        )
+
+        self.assertNotEqual(run_one, run_two)
+        self.assertNotEqual(run_one, version_two)
 
     def test_summarizes_invalid_reasons_per_micro_batch(self) -> None:
         frame = self.spark.createDataFrame(

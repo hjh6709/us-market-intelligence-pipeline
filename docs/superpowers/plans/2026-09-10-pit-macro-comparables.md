@@ -1,6 +1,10 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Point-in-time macro and comparables implementation plan
 
 **Goal:** produce leakage-safe features, regimes and comparable sets after event/session foundations are populated. This plan is not selected for the 2026-09-10 implementation slice.
+
+Migration numbers and interfaces below are placeholders, not approved execution instructions.
 
 ### Task 1: Persist versioned research inputs
 
@@ -18,7 +22,7 @@ Interface: `macro_feature_sets`, `macro_feature_values`, `macro_regime_assignmen
 
 Files: `src/macro_features.py`, `tests/test_macro_features.py`, `docs/research/methodology.md`, `docs/configuration/README.md`.
 
-Interface: `build_feature_vector(*, event_id, cutoff, observations, feature_version) -> FeatureVector` and `classify_regime(vector, regime_version) -> RegimeAssignment`.
+Interface sketch: PIT selection uses source vintage/publication time, not `first_observed_at` alone; the current release cannot enter its own PRE_EVENT features.
 
 1. Add failing tests with a later-revision trap, unavailable inputs, stable ordering and repeat-run hash.
 2. Run `.venv/bin/python -m unittest tests.test_macro_features -v` and retain RED output.
@@ -30,7 +34,7 @@ Interface: `build_feature_vector(*, event_id, cutoff, observations, feature_vers
 
 Files: `src/comparable_events.py`, `tests/test_comparable_events.py`, `src/repositories/comparable_repository.py`, `tests/test_comparable_repository.py`.
 
-Interface: `select_comparables(*, subject, candidates, metric, top_k, run_id) -> ComparableSet`, with deterministic `(distance, event_id)` tie ordering and typed `INSUFFICIENT_UNIVERSE`.
+Interface sketch: deterministic L0–L6 filtering with explicit relaxations and sample statuses. Top-k distance is not canonical v1.
 
 1. Add failing tests for filter versions, deterministic ties, insufficient candidates and exact member persistence.
 2. Run `.venv/bin/python -m unittest tests.test_comparable_events tests.test_comparable_repository -v` and retain RED output.

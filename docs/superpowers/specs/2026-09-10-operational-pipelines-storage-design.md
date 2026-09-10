@@ -1,8 +1,10 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Operational pipelines and storage design
 
 ## Scope
 
-Move from historical/manual DAGs to durable source-specific operational pipelines without converting Kafka into storage or mixing raw validation with provider-bar research.
+Move from historical/manual DAGs to exactly three primary operational DAGs: `event_catalog_refresh_pipeline`, `market_intelligence_incremental_pipeline`, and `paper_execution_reconciliation_pipeline`. Kafka remains bounded transport; provider research and raw validation storage remain distinct.
 
 ## Target interfaces
 

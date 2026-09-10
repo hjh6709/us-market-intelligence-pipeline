@@ -1,12 +1,15 @@
-"""Pure event-to-session planning over verified exchange-calendar records."""
+"""Pure event-to-session planning over one verified calendar generation."""
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Iterable
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
-from .platform_contracts import MarketStatus
+from .platform_contracts import SessionDayType
+
+
+TRUSTED_MARKET_TIMEZONES = {"US_EQUITIES": "America/New_York"}
 
 
 class ReleasePhase(StrEnum):
@@ -22,60 +25,81 @@ class MarkerKind(StrEnum):
     PRESS_CONFERENCE = "PRESS_CONFERENCE"
 
 
-def _require_aware_utc(value: datetime, name: str) -> None:
+class MarkerRole(StrEnum):
+    PRIMARY = "PRIMARY"
+    SECONDARY = "SECONDARY"
+
+
+def _normalize_aware(value: datetime, name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError(f"{name} must be timezone-aware UTC")
-    if value.utcoffset() != timedelta(0):
-        raise ValueError(f"{name} must be timezone-aware UTC")
+        raise ValueError(f"{name} must be timezone-aware")
+    return value.astimezone(UTC)
 
 
 @dataclass(frozen=True)
 class TradingSession:
-    exchange: str
+    market_code: str
+    listing_venue: str
     session_date: date
     opens_at: datetime
     closes_at: datetime
-    is_early_close: bool
+    day_type: SessionDayType
     calendar_source: str
-    calendar_version: str
+    calendar_snapshot_id: str
     exchange_timezone: str = "America/New_York"
 
     def __post_init__(self) -> None:
-        _require_aware_utc(self.opens_at, "opens_at")
-        _require_aware_utc(self.closes_at, "closes_at")
-        if self.opens_at >= self.closes_at:
+        opens_at = _normalize_aware(self.opens_at, "opens_at")
+        closes_at = _normalize_aware(self.closes_at, "closes_at")
+        object.__setattr__(self, "opens_at", opens_at)
+        object.__setattr__(self, "closes_at", closes_at)
+        if opens_at >= closes_at:
             raise ValueError("session open must be before close")
-        if (
-            not self.exchange
-            or not self.calendar_source
-            or not self.calendar_version
-            or not self.exchange_timezone
-        ):
-            raise ValueError("session requires exchange and calendar lineage")
-        try:
-            ZoneInfo(self.exchange_timezone)
-        except ZoneInfoNotFoundError as exc:
-            raise ValueError("session requires a valid exchange timezone") from exc
+        if self.market_code not in TRUSTED_MARKET_TIMEZONES:
+            raise ValueError("session requires a supported market code")
+        trusted_timezone = TRUSTED_MARKET_TIMEZONES[self.market_code]
+        if self.exchange_timezone != trusted_timezone:
+            raise ValueError(
+                f"{self.market_code} trusted timezone is {trusted_timezone}"
+            )
+        if not self.listing_venue or not self.calendar_source or not self.calendar_snapshot_id:
+            raise ValueError("session requires venue and calendar lineage")
+        if self.day_type is SessionDayType.CLOSED:
+            raise ValueError("closed dates are represented by absence of a session row")
+        market_timezone = ZoneInfo(trusted_timezone)
+        if opens_at.astimezone(market_timezone).date() != self.session_date:
+            raise ValueError("session open local date must equal session_date")
+        if closes_at.astimezone(market_timezone).date() != self.session_date:
+            raise ValueError("session close local date must equal session_date")
 
 
 @dataclass(frozen=True)
 class EventMarker:
+    marker_id: str
     kind: MarkerKind
+    role: MarkerRole
     at: datetime
 
     def __post_init__(self) -> None:
-        _require_aware_utc(self.at, "marker timestamp")
+        if not self.marker_id.strip():
+            raise ValueError("marker identity must not be empty")
+        object.__setattr__(self, "at", _normalize_aware(self.at, "marker timestamp"))
 
 
 @dataclass(frozen=True)
 class EventSessionPlan:
-    released_at: datetime
-    market_status: MarketStatus
+    canonical_marker: EventMarker
+    release_calendar_date: date
+    release_day_session: TradingSession | None
+    release_day_type: SessionDayType
     release_phase: ReleasePhase
     s_minus_1: TradingSession
     s0: TradingSession
     s_plus_1: TradingSession
     markers: tuple[EventMarker, ...]
+    planner_version: str
+    market_code: str
+    calendar_snapshot_id: str
 
 
 def _validated_sessions(sessions: Iterable[TradingSession]) -> tuple[TradingSession, ...]:
@@ -86,75 +110,104 @@ def _validated_sessions(sessions: Iterable[TradingSession]) -> tuple[TradingSess
         raise ValueError("sessions must be ordered by session_date")
     if len({item.session_date for item in ordered}) != len(ordered):
         raise ValueError("sessions must have unique session dates")
-    if len({item.exchange for item in ordered}) != 1:
-        raise ValueError("sessions must belong to one exchange")
+    if len({item.market_code for item in ordered}) != 1:
+        raise ValueError("sessions must belong to one market")
     if len({item.exchange_timezone for item in ordered}) != 1:
-        raise ValueError("sessions must use one exchange timezone")
+        raise ValueError("sessions must use one trusted timezone")
+    if len({item.calendar_source for item in ordered}) != 1:
+        raise ValueError("sessions must use one calendar source")
+    if len({item.calendar_snapshot_id for item in ordered}) != 1:
+        raise ValueError("sessions must use one calendar snapshot")
     for previous, current in zip(ordered, ordered[1:]):
         if previous.closes_at >= current.opens_at:
             raise ValueError("verified sessions must not overlap")
     return ordered
 
 
+def _validated_markers(markers: Iterable[EventMarker]) -> tuple[EventMarker, ...]:
+    ordered = tuple(sorted(markers, key=lambda item: (item.at, item.kind.value)))
+    if not ordered:
+        raise ValueError("at least one event marker is required")
+    if len({item.marker_id for item in ordered}) != len(ordered):
+        raise ValueError("marker identity must be unique")
+    if len({item.kind for item in ordered}) != len(ordered):
+        raise ValueError("marker kind must be unique per event")
+    primary = [item for item in ordered if item.role is MarkerRole.PRIMARY]
+    if len(primary) != 1:
+        raise ValueError("event requires exactly one primary marker")
+    return ordered
+
+
 def plan_event_session(
     *,
-    released_at: datetime,
+    markers: Iterable[EventMarker],
     sessions: Iterable[TradingSession],
-    markers: Iterable[EventMarker] = (),
+    planner_version: str,
 ) -> EventSessionPlan:
-    """Map a release to adjacent verified sessions without guessing holidays."""
+    """Map a primary event marker to verified S-1/S0/S+1 sessions.
 
-    _require_aware_utc(released_at, "released_at")
-    ordered = _validated_sessions(sessions)
-    release_session_date = released_at.astimezone(
-        ZoneInfo(ordered[0].exchange_timezone)
-    ).date()
+    S0 is the first regular trading session able to absorb the information:
+    the same session for premarket/regular releases, and the next session for
+    post-market or market-closed releases.
+    """
 
+    if not planner_version.strip():
+        raise ValueError("planner_version is required")
+    ordered_sessions = _validated_sessions(sessions)
+    ordered_markers = _validated_markers(markers)
+    canonical_marker = next(
+        item for item in ordered_markers if item.role is MarkerRole.PRIMARY
+    )
+    market_timezone = ZoneInfo(ordered_sessions[0].exchange_timezone)
+    release_calendar_date = canonical_marker.at.astimezone(market_timezone).date()
     release_day_index = next(
         (
             index
-            for index, session in enumerate(ordered)
-            if session.session_date == release_session_date
+            for index, session in enumerate(ordered_sessions)
+            if session.session_date == release_calendar_date
         ),
         None,
     )
+
     if release_day_index is None:
         s0_index = next(
             (
                 index
-                for index, session in enumerate(ordered)
-                if session.session_date > release_session_date
+                for index, session in enumerate(ordered_sessions)
+                if session.session_date > release_calendar_date
             ),
             None,
         )
+        release_day_session = None
+        release_day_type = SessionDayType.CLOSED
         phase = ReleasePhase.MARKET_CLOSED
-        market_status = MarketStatus.CLOSED
     else:
-        s0_index = release_day_index
-        s0_candidate = ordered[s0_index]
-        market_status = (
-            MarketStatus.EARLY_CLOSE
-            if s0_candidate.is_early_close
-            else MarketStatus.OPEN
-        )
-        if released_at < s0_candidate.opens_at:
+        release_day_session = ordered_sessions[release_day_index]
+        release_day_type = release_day_session.day_type
+        if canonical_marker.at < release_day_session.opens_at:
             phase = ReleasePhase.PRE_MARKET
-        elif released_at < s0_candidate.closes_at:
+            s0_index = release_day_index
+        elif canonical_marker.at < release_day_session.closes_at:
             phase = ReleasePhase.REGULAR_SESSION
+            s0_index = release_day_index
         else:
             phase = ReleasePhase.POST_MARKET
+            s0_index = release_day_index + 1
 
-    if s0_index is None or s0_index == 0 or s0_index + 1 >= len(ordered):
+    if s0_index is None or s0_index == 0 or s0_index + 1 >= len(ordered_sessions):
         raise ValueError("verified sessions do not cover S-1, S0 and S+1")
 
-    all_markers = (EventMarker(MarkerKind.RELEASE, released_at), *tuple(markers))
-    ordered_markers = tuple(sorted(all_markers, key=lambda item: item.at))
     return EventSessionPlan(
-        released_at=released_at,
-        market_status=market_status,
+        canonical_marker=canonical_marker,
+        release_calendar_date=release_calendar_date,
+        release_day_session=release_day_session,
+        release_day_type=release_day_type,
         release_phase=phase,
-        s_minus_1=ordered[s0_index - 1],
-        s0=ordered[s0_index],
-        s_plus_1=ordered[s0_index + 1],
+        s_minus_1=ordered_sessions[s0_index - 1],
+        s0=ordered_sessions[s0_index],
+        s_plus_1=ordered_sessions[s0_index + 1],
         markers=ordered_markers,
+        planner_version=planner_version,
+        market_code=ordered_sessions[0].market_code,
+        calendar_snapshot_id=ordered_sessions[0].calendar_snapshot_id,
     )

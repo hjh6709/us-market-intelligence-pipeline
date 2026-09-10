@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 from src.historical_bars import (
     AlpacaHistoricalBarsClient,
     HistoricalBarError,
+    UPSERT_PROVIDER_RESEARCH_BAR_SQL,
     fetch_all_bars,
     normalize_bar,
 )
@@ -50,6 +51,13 @@ def raw_bar(timestamp: str, close: float = 101.0) -> dict:
 
 
 class HistoricalBarsTest(unittest.TestCase):
+    def test_provider_aggregate_sql_targets_research_storage_only(self) -> None:
+        self.assertIn("INSERT INTO market_bars", UPSERT_PROVIDER_RESEARCH_BAR_SQL)
+        self.assertNotIn(
+            "INSERT INTO validation_reconstructed_bars",
+            UPSERT_PROVIDER_RESEARCH_BAR_SQL,
+        )
+
     def test_fetches_all_sip_pages_with_explicit_contract(self) -> None:
         opener = RecordingOpener(
             [

@@ -10,7 +10,7 @@ from typing import Sequence
 from pyspark.sql import functions as F
 from pyspark import StorageLevel
 
-from src.postgres import upsert_market_bars
+from src.postgres import upsert_validation_bars
 from src.preprocess import (
     aggregate_minute_bars,
     apply_minute_bar_condition_policy,
@@ -18,7 +18,7 @@ from src.preprocess import (
     split_valid_invalid,
     validate_market_trades,
 )
-from src.spark_market_processor import _load_setting, create_market_spark
+from src.spark_market_processor import PROCESSOR_VERSION, _load_setting, create_market_spark
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -83,7 +83,14 @@ def run(args: argparse.Namespace) -> dict[str, int | str]:
             "source", F.lit("alpaca_replay")
         )
         output_count = bars.count()
-        stored_count = upsert_market_bars(bars, 0, database_url=args.database_url)
+        stored_count = upsert_validation_bars(
+            bars,
+            0,
+            database_url=args.database_url,
+            validation_run_id=args.trace_id,
+            processor_version=PROCESSOR_VERSION,
+            checkpoint_namespace=f"bounded-batch:{args.topic}",
+        )
         return {
             "step": "spark_summary",
             "topic": args.topic,

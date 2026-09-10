@@ -1,6 +1,8 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Serving, deployment and product implementation plan
 
-**Goal:** deploy the validated read product and isolate authenticated operations and Paper experiment controls. This plan is not selected for the 2026-09-10 implementation slice; local FastAPI/browser serving remains the only implemented claim.
+**Goal:** deploy the validated read product and isolate authenticated operations and Paper experiment controls. Migration numbers and interfaces below are placeholders; local FastAPI/browser serving remains the only implemented claim.
 
 ### Task 1: Serve canonical research resources
 

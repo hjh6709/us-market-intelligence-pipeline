@@ -1,38 +1,66 @@
 # Canonical data contracts
 
-Status: target contract; implemented foundations are listed explicitly in [current-vs-target.md](../engineering/current-vs-target.md).
+Status: target contract. Migration 009 supplies an empty schema foundation; no normalized production adapters or backfill are implemented. Current legacy serving remains unchanged.
 
-## Event identity and observations
+## Event lifecycle and compatibility
 
-`economic_events` identifies a release by stable event ID, event type, reference period, scheduled/released time and official source. It is not the value history.
+`canonical_economic_events` is the stable target identity. It can optionally link to a historical `economic_events` row, but it does not inherit the legacy row's lifecycle or scalar value semantics.
 
-`economic_release_observations` is append-only. Its business key is `(economic_event_id, metric_name, revision_number, observed_at)`. Required provenance is `value`, `unit`, `source`, `source_url`, `released_at`, `observed_at`, `ingested_at`, and `payload_sha256`. A correction inserts a new revision; it never mutates an earlier value.
+`economic_event_lifecycle_versions` is append-only and records `scheduled_at`, nullable `released_at`, `event_status`, source publication time, first system observation time and payload hash. States are `SCHEDULED`, `RELEASED`, `RESCHEDULED`, `CANCELED`, and `CORRECTED`. This permits an upcoming event before release and preserves schedule changes as new versions.
 
-`economic_consensus_snapshots` stores the estimate available at a specific `observed_at`, including provider, contributor count when available, unit and payload hash. One “latest” consensus may be selected only by an explicit point-in-time cutoff.
+The following legacy `economic_events` fields remain compatibility-only during Phase A: `value_source`, `quality_status`, `forecast`, `actual`, and `surprise`. Existing ingestion still writes historical catalog rows and must not be described as the normalized lifecycle adapter. In particular, `value_source='fred'` is not normalized actual provenance.
 
-`economic_surprises` is derived, not ingested: `actual - consensus` plus optional standardized value. It references the exact actual observation and consensus snapshot, records algorithm/version and run ID, and is unique for that input/version tuple.
+## Observation registry and official revisions
+
+`economic_observation_registry` owns canonical identity and unit. Display labels from an official provider must map explicitly to a registered `observation_code`; display text is never a business key. The initial registry covers CPI headline/core MoM/YoY, payrolls, unemployment, hourly earnings, PCE headline/core MoM/YoY and Federal Reserve target/rate-change facts.
+
+`economic_release_observations` contains numeric official facts only. Statements, implementation notes, SEP files and other text/document artifacts belong to a future `event_documents` domain, not this table.
+
+Official revision identity is `(economic_event_id, observation_code, revision_number)`. `revision_number` is the platform's internal sequence: zero is `INITIAL`; positive numbers are `REVISION` or `CORRECTION`. `source_revision_id` is optional because official providers do not always publish one. The write boundary has two outcomes:
+
+```text
+same identity + same source/value/unit/payload hash -> return existing ID
+same identity + conflicting fact                    -> CONFLICTING_SOURCE_FACT
+```
+
+Timestamp vocabulary is explicit:
+
+- `published_at`: when the official source made the revision available;
+- `first_observed_at`: when this platform first saw it;
+- `ingested_at`: PostgreSQL persistence time.
+
+Polling time is not part of the business identity and cannot duplicate an economic fact.
+
+## External consensus and canonical surprise
+
+`economic_consensus_snapshots` is an external-provider domain. `snapshot_at` is the source-time availability used for event-time PIT selection; `provider_updated_at` records a provider correction when supplied; `first_observed_at` and `ingested_at` remain system times. Post-release snapshots may be retained for audit.
+
+`select_canonical_prerelease_consensus(event, observation_code)` chooses the latest snapshot whose `snapshot_at` is strictly before the event's primary marker. Canonical `economic_surprises` accepts only:
+
+```text
+initial official observation
+- latest valid pre-release external consensus
+= stored surprise_value
+```
+
+Both inputs must reference the same event, `observation_code`, and canonical unit. Revised actuals, post-release consensus, non-latest eligible snapshots, incompatible units, and incorrect arithmetic are rejected. Any later revised-surprise research requires a different semantic name and version.
 
 ## Trading sessions and markers
 
-`trading_sessions` stores exchange, session date, open/close UTC, calendar source/version and early-close flag. The planner consumes verified rows; it does not infer holidays from weekdays.
+`trading_sessions` stores `market_code`, local `session_date`, UTC open/close instants, `session_day_type`, trusted timezone, calendar source, content-addressed calendar snapshot identity and generation time. For v1, `US_EQUITIES` is bound to `America/New_York`; listing venue is not the market timezone authority.
 
-An event maps to `MARKET_CLOSED`, `PRE_MARKET`, `REGULAR_SESSION`, or `POST_MARKET`. `S0` is the release-date session when open; otherwise it is the next verified session. `S-1` and `S+1` are adjacent verified sessions. Markers include `RELEASE`; FOMC may add `STATEMENT` and `PRESS_CONFERENCE` with their own timestamps.
+One session plan consumes a single market, timezone, calendar source and snapshot. Open and close must map back to `session_date` in the trusted local timezone. Plans are ordered, unique and non-overlapping and record `planner_version`.
 
-## Market data
+`economic_event_markers` has durable marker IDs and exactly one primary marker per event. For ordinary releases, `RELEASE` is primary. For FOMC, `STATEMENT` is primary and `PRESS_CONFERENCE` is secondary; a synthetic duplicate `RELEASE` marker is not added.
 
-Alpaca SIP 1-minute bars are the canonical research input. Daily bars provide context. Derived 3m/5m bars retain source-count and partial-window status; they do not fabricate missing minutes. The raw SIP archive is immutable validation input and stays independent from provider-bar research lineage.
+## Market-bar provenance
 
-## Quality axes
+`market_bars` contains provider-aggregated canonical research bars used by legacy research and serving. `validation_reconstructed_bars` contains raw-derived validation bars keyed by validation run, processor version and bar identity. The stores are physically separate, so one origin cannot overwrite the other.
 
-| Axis | Meaning | Canonical examples |
-| --- | --- | --- |
-| collection | Did the provider request and persistence contract finish? | `SUCCEEDED`, `FAILED` |
-| market | Was a verified session expected? | `OPEN`, `EARLY_CLOSE`, `CLOSED` |
-| coverage | How much expected market data was observed? | `COMPLETE`, `PARTIAL`, `EMPTY`, `NOT_APPLICABLE` |
-| eligibility | May this input enter a named analysis? | `ELIGIBLE`, `INELIGIBLE`, `NOT_EVALUATED` |
+`market_bar_origin_comparison` is a comparison-only view that exposes `PROVIDER_AGGREGATE` and `RAW_RECONSTRUCTED`. Research queries do not use this union. `condition_policy` is a trade-policy field, not a hidden origin discriminator, and provider rows retain historical `spark_batch_id=-1` only as legacy storage compatibility.
 
-Eligibility is versioned by analysis contract. No single `COMPLETE` flag may stand in for all four axes.
+## Quality, provenance and lifecycle
 
-## Lineage and lifecycle
+Run outcome, work-item outcome, market interval, coverage and analysis eligibility are separate scopes. Each record uses `reason_code` plus `reason_detail`; metric maturity may add `eligible_at`. The canonical vocabulary is defined in `src/platform_contracts.py`.
 
-Curated tables carry provider/source, feed where relevant, source observation time, ingestion time, algorithm/version and run ID. Raw payloads use an immutable URI plus SHA-256 rather than being copied into presentation evidence. Curated records may be upserted only by deterministic business key; append-only facts are never updated. Retention or deletion policy must be recorded before any destructive lifecycle automation is enabled.
+Raw payload claims require a durable URI and SHA-256 when a payload is retained. A hash alone proves content identity but not that an immutable payload archive exists. Destructive lifecycle automation remains disabled until retention policy is approved.

@@ -1,3 +1,5 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Point-in-time macro and comparable-events design
 
 ## Scope
@@ -6,7 +8,9 @@ Build leakage-safe macro features and reproducible comparable-event sets after e
 
 ## Target interfaces
 
-Feature computation accepts a cutoff and only observations with `observed_at <= cutoff`. A regime references a named feature set/version. Comparable selection declares universe, filters, normalized features, distance metric, top-k and run ID, then stores candidates and distances.
+Feature computation uses source-time/vintage eligibility at a cutoff; system ingestion time alone is insufficient. The current event's new value cannot enter its PRE_EVENT regime. A regime references explicit inflation, labor, policy-rate direction, 2s10s curve and volatility dimensions plus selection/feature/regime versions.
+
+Comparable v1 uses deterministic filters from event type through observation code, surprise direction/bucket, selected regime dimensions, session relation and overlap policy. It persists requested/effective criteria, explicit relaxation, member rationale and sample statistics. It never uses top-k distance to force a sample.
 
 ## Failure rules and tests
 

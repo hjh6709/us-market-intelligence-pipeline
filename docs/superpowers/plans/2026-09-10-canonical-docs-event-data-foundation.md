@@ -6,6 +6,8 @@
 
 **Tech:** Markdown, PostgreSQL DDL, Python `unittest`.
 
+**Status:** executable corrective plan for PR #36.
+
 ### Task 1: Freeze baseline and precedence
 
 Files: `docs/engineering/baseline-audit-2026-09-10.md`, `docs/architecture/platform-contract.md`, `docs/README.md`.
@@ -20,14 +22,28 @@ Files: `docs/engineering/baseline-audit-2026-09-10.md`, `docs/architecture/platf
 
 Files: `docs/architecture/data-contracts.md`, `db/migrations/009_event_session_foundations.sql`, `tests/test_event_session_foundation_migration.py`.
 
-1. Write tests that require observation, consensus and surprise tables, immutable identities, source timestamps, SHA-256 checks, exact event/metric foreign keys and update/delete rejection.
-2. Run `.venv/bin/python -m unittest tests.test_event_session_foundation_migration -v` and confirm RED.
-3. Add idempotent DDL only; do not alter migration `002`.
-4. Re-run the targeted test and confirm GREEN.
-5. Apply migrations `001..009` twice to a disposable PostgreSQL database and inspect constraints; execute rejected mutation and cross-event surprise fixtures.
-6. Commit `feat(schema): add immutable event fact foundations`.
+Interface: `record_economic_release_observation(event_id, observation_code, revision_number, source_revision_id, revision_type, value, unit, published_at, first_observed_at, source, source_url, payload_sha256) -> bigint`.
 
-### Task 3: Verify and commit
+- [ ] Write shape and actual-PostgreSQL tests for upcoming lifecycle, canonical code/unit, deterministic revision identity, idempotent same fact, explicit conflict, later revision and append-only mutation.
+- [ ] RED: run `RUN_POSTGRES_INTEGRATION=1 DATABASE_URL=... python -m unittest tests.integration.test_event_session_foundation_postgres -v`; an unimplemented constraint must fail for the asserted reason.
+- [ ] Minimally correct migration 009 only; do not alter migrations 001–008 or populate the new tables.
+- [ ] Add PIT-surprise tests for strict latest pre-release consensus, initial actual, compatible units, exact arithmetic and cross-event/code rejection.
+- [ ] GREEN: rerun the exact integration command and `python -m unittest tests.test_event_session_foundation_migration -v`.
+- [ ] Apply migrations 001–009 twice to fresh PostgreSQL 17.
+- [ ] Commit boundary: `fix(schema): correct canonical event fact identities`.
+
+### Task 3: Isolate bar provenance
+
+Files: `src/postgres.py`, `src/historical_bars.py`, `src/spark_market_processor.py`, `tests/test_postgres.py`, `tests/test_historical_bars.py`, `tests/test_spark_market_processor.py`, `tests/integration/test_postgres_market_bars.py`.
+
+Interface: `upsert_validation_bars(connection, rows)`; `checkpoint_paths(root, validation_run_id, processor_version)`.
+
+- [ ] RED: assert provider and raw-derived sinks target distinct tables and same market identity survives in both.
+- [ ] Minimal implementation: keep provider aggregates in `market_bars`; add run/version/checkpoint lineage to `validation_reconstructed_bars`.
+- [ ] GREEN: run the exact affected unit/integration modules.
+- [ ] Commit boundary: `fix(storage): isolate raw-derived validation bars`.
+
+### Task 4: Verify and commit
 
 1. Run `.venv/bin/python -m unittest discover -s tests` and `node --test tests/research_ui.cjs`.
 2. Write additive evidence under `docs/evidence/architecture-pass-2026-09-10/`.

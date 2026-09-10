@@ -46,6 +46,8 @@ class PipelineServingTest(unittest.TestCase):
         edge_pairs = {(edge.source, edge.target) for edge in result.edges}
         self.assertIn(("alpaca_bars", "market_bars"), edge_pairs)
         self.assertIn(("archived_sip_trades", "kafka"), edge_pairs)
+        self.assertIn(("spark", "validation_reconstructed_bars"), edge_pairs)
+        self.assertNotIn(("spark", "market_bars"), edge_pairs)
         self.assertNotIn(("spark", "macro_event_impacts"), edge_pairs)
 
 

@@ -32,10 +32,10 @@ class KafkaSparkPostgresIntegrationTest(unittest.TestCase):
         topic = f"raw-market-postgres-test-{uuid.uuid4().hex[:10]}"
         admin = AdminClient({"bootstrap.servers": bootstrap})
         admin.create_topics([NewTopic(topic, 1, 1)])[topic].result(10)
-        migration = Path("db/migrations/001_market_bars.sql").read_text()
         with psycopg.connect(DATABASE_URL) as connection:
-            connection.execute(migration)
-            connection.execute("TRUNCATE market_bars")
+            for migration in sorted(Path("db/migrations").glob("*.sql")):
+                connection.execute(migration.read_text(encoding="utf-8"))
+            connection.execute("TRUNCATE validation_reconstructed_bars")
 
         spark = create_market_spark("kafka-spark-postgres-integration")
         query = None
@@ -121,7 +121,14 @@ class KafkaSparkPostgresIntegrationTest(unittest.TestCase):
     @staticmethod
     def start_query(bars, checkpoint: Path):
         return (
-            bars.writeStream.foreachBatch(postgres_bar_sink(DATABASE_URL))
+            bars.writeStream.foreachBatch(
+                postgres_bar_sink(
+                    DATABASE_URL,
+                    validation_run_id="integration:vertical-slice",
+                    processor_version="raw_sip_reconstruction_v1",
+                    checkpoint_namespace=str(checkpoint),
+                )
+            )
             .outputMode("append")
             .option("checkpointLocation", str(checkpoint))
             .trigger(processingTime="1 second")
@@ -134,7 +141,7 @@ class KafkaSparkPostgresIntegrationTest(unittest.TestCase):
             rows = connection.execute(
                 """
                 SELECT symbol, bar_start, open, high, low, close, volume, trade_count
-                FROM market_bars
+                FROM validation_reconstructed_bars
                 ORDER BY symbol, bar_start
                 """
             ).fetchall()

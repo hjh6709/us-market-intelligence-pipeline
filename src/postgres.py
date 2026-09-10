@@ -28,16 +28,21 @@ MARKET_BAR_COLUMNS = (
     "condition_policy",
 )
 
-UPSERT_MARKET_BAR_SQL = """
-INSERT INTO market_bars (
+UPSERT_VALIDATION_BAR_SQL = """
+INSERT INTO validation_reconstructed_bars (
+    validation_run_id, processor_version, checkpoint_namespace,
     symbol, bar_start, timeframe, open, high, low, close,
     volume, trade_count, vwap, source, feed, is_final,
     condition_policy, spark_batch_id
 ) VALUES (
+    %s, %s, %s,
     %s, %s, %s, %s, %s, %s, %s,
     %s, %s, %s, %s, %s, %s, %s, %s
 )
-ON CONFLICT (symbol, bar_start, timeframe, source, feed)
+ON CONFLICT (
+    validation_run_id, processor_version, symbol, bar_start,
+    timeframe, source, feed
+)
 DO UPDATE SET
     open = EXCLUDED.open,
     high = EXCLUDED.high,
@@ -53,8 +58,17 @@ DO UPDATE SET
 """
 
 
-def market_bar_rows(batch_df: DataFrame, spark_batch_id: int) -> list[tuple]:
-    """Convert one small finalized-bar micro-batch into DB parameter rows."""
+def validation_bar_rows(
+    batch_df: DataFrame,
+    spark_batch_id: int,
+    *,
+    validation_run_id: str,
+    processor_version: str,
+    checkpoint_namespace: str,
+) -> list[tuple]:
+    """Convert raw-derived finalized bars into validation-storage rows."""
+    if not validation_run_id or not processor_version or not checkpoint_namespace:
+        raise ValueError("validation bar lineage fields must not be empty")
     records = []
     selected = batch_df.select(
         F.col("symbol"),
@@ -72,6 +86,9 @@ def market_bar_rows(batch_df: DataFrame, spark_batch_id: int) -> list[tuple]:
         )
         records.append(
             (
+                validation_run_id,
+                processor_version,
+                checkpoint_namespace,
                 row.symbol,
                 bar_start,
                 row.timeframe,
@@ -92,24 +109,45 @@ def market_bar_rows(batch_df: DataFrame, spark_batch_id: int) -> list[tuple]:
     return records
 
 
-def upsert_market_bars(
+def upsert_validation_bars(
     batch_df: DataFrame,
     spark_batch_id: int,
     *,
+    validation_run_id: str,
+    processor_version: str,
+    checkpoint_namespace: str,
     database_url: str,
 ) -> int:
-    """Atomically upsert one Spark micro-batch and return its row count."""
-    rows = market_bar_rows(batch_df, spark_batch_id)
+    """Atomically upsert one raw-derived validation micro-batch."""
+    rows = validation_bar_rows(
+        batch_df,
+        spark_batch_id,
+        validation_run_id=validation_run_id,
+        processor_version=processor_version,
+        checkpoint_namespace=checkpoint_namespace,
+    )
     if not rows:
         return 0
 
     with psycopg.connect(database_url, connect_timeout=5) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SET TIME ZONE 'UTC'")
-            cursor.executemany(UPSERT_MARKET_BAR_SQL, rows)
+            cursor.executemany(UPSERT_VALIDATION_BAR_SQL, rows)
     return len(rows)
 
 
-def postgres_bar_sink(database_url: str) -> Callable[[DataFrame, int], int]:
-    """Bind a secret-bearing DSN once without logging it from the runner."""
-    return partial(upsert_market_bars, database_url=database_url)
+def postgres_bar_sink(
+    database_url: str,
+    *,
+    validation_run_id: str,
+    processor_version: str,
+    checkpoint_namespace: str,
+) -> Callable[[DataFrame, int], int]:
+    """Bind validation lineage and a secret-bearing DSN for Spark."""
+    return partial(
+        upsert_validation_bars,
+        database_url=database_url,
+        validation_run_id=validation_run_id,
+        processor_version=processor_version,
+        checkpoint_namespace=checkpoint_namespace,
+    )

@@ -1,6 +1,8 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Strategy validation implementation plan
 
-**Goal:** turn exploratory rules into registered hypotheses while separating historical simulations from forward Paper experiments. This plan is not selected for the 2026-09-10 implementation slice.
+**Goal:** turn exploratory rules into registered hypotheses while separating historical simulations from forward Paper experiments. Migration numbers and interfaces below are placeholders; this outline is not executable today.
 
 ### Task 1: Freeze hypothesis and simulation identities
 

@@ -22,14 +22,27 @@ from src.postgres import postgres_bar_sink
 
 
 KAFKA_CONNECTOR_PACKAGE = "org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0"
+PROCESSOR_VERSION = "raw_sip_reconstruction_v1"
 
 
 def _load_setting(name: str, default: str, env_path: Path = Path(".env")) -> str:
     return os.environ.get(name) or _read_env_file(env_path).get(name) or default
 
 
-def checkpoint_paths(root: Path) -> tuple[Path, Path]:
-    return root / "bars", root / "invalid-metrics"
+def checkpoint_paths(
+    root: Path,
+    *,
+    validation_run_id: str,
+    processor_version: str,
+) -> tuple[Path, Path]:
+    for value, name in (
+        (validation_run_id, "validation_run_id"),
+        (processor_version, "processor_version"),
+    ):
+        if not value or value in {".", ".."} or "/" in value or "\\" in value:
+            raise ValueError(f"{name} is not a safe checkpoint segment")
+    namespace = root / processor_version / validation_run_id
+    return namespace / "bars", namespace / "invalid-metrics"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -54,6 +67,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--trigger", default="5 seconds")
+    parser.add_argument(
+        "--validation-run-id",
+        default=_load_setting("VALIDATION_RUN_ID", "local-validation"),
+    )
     parser.add_argument(
         "--bar-sink",
         choices=("postgres", "console"),
@@ -129,7 +146,11 @@ def _show_invalid_batch(batch_df: DataFrame, batch_id: int) -> None:
 
 def run_processor(args: argparse.Namespace) -> None:
     spark = create_market_spark()
-    bars_checkpoint, invalid_checkpoint = checkpoint_paths(args.checkpoint_root)
+    bars_checkpoint, invalid_checkpoint = checkpoint_paths(
+        args.checkpoint_root,
+        validation_run_id=args.validation_run_id,
+        processor_version=PROCESSOR_VERSION,
+    )
     bars, invalid_rows = build_streams(
         spark,
         bootstrap_servers=args.bootstrap_servers,
@@ -148,7 +169,12 @@ def run_processor(args: argparse.Namespace) -> None:
         )
         if args.bar_sink == "postgres":
             bar_query = bar_writer.foreachBatch(
-                postgres_bar_sink(args.database_url)
+                postgres_bar_sink(
+                    args.database_url,
+                    validation_run_id=args.validation_run_id,
+                    processor_version=PROCESSOR_VERSION,
+                    checkpoint_namespace=str(bars_checkpoint),
+                )
             ).start()
         else:
             bar_query = bar_writer.format("console").option(

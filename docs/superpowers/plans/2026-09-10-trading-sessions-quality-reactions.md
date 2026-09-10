@@ -6,24 +6,26 @@
 
 **Tech:** Python dataclasses/enums, `zoneinfo`, `unittest`.
 
+**Status:** executable corrective plan for PR #36.
+
 ### Task 1: Contract tests first
 
 Files: `tests/test_trading_sessions.py`, `tests/test_platform_contracts.py`.
 
-1. Add failing gold tests for the shared CPI/employment pre-market timing contract, FOMC statement/press conference, Good Friday closure, early close and exchange-local mapping of UTC inputs.
-2. Add failing tests proving quality axes are distinct and target reaction names/version are stable.
-3. Run `.venv/bin/python -m unittest tests.test_trading_sessions tests.test_platform_contracts -v` and retain RED output.
-4. Commit the test intent with implementation in Task 2 after GREEN; do not leave a red-only branch commit.
+- [ ] Add failing tests for premarket/regular same-day S0, post-market/closed next-session S0, early close, DST, trusted timezone, one source/snapshot, local dates, overlap, unique marker ID/kind and FOMC roles.
+- [ ] Add failing tests for Good Friday, future S+7, provider safety lag, sparse premarket, complete v2 definitions and PRE drift exclusion.
+- [ ] RED: run `python -m unittest tests.test_trading_sessions tests.test_platform_contracts -v`; the old S0/coarse taxonomy/incomplete vocabulary must fail.
 
 ### Task 2: Minimal implementation
 
 Files: `src/trading_sessions.py`, `src/platform_contracts.py`.
 
-1. Add aware-UTC validation, ordered non-overlapping session validation and S-1/S0/S+1 selection.
-2. Emit `MARKET_CLOSED`, `PRE_MARKET`, `REGULAR_SESSION`, `POST_MARKET` and named markers.
-3. Add enums/constants only; do not modify current analytics jobs.
-4. Re-run targeted tests to GREEN, then run the entire suite.
-5. Commit `feat(calendar): add verified-session planning contracts`.
+Interface: `plan_event_sessions(*, event_id: str, markers: Sequence[EventMarker], sessions: Sequence[TradingSession], market_code: str, planner_version: str) -> EventSessionPlan`; `metric_maturity(...) -> QualityAssessment`.
+
+- [ ] Minimally implement pure marker/session validation and S-1/S0/S+1 selection; do not add a provider or persistence.
+- [ ] Add distinct status enums and the full immutable `event_session_reaction_v2` registry; do not compute or rename legacy rows.
+- [ ] GREEN: rerun the exact targeted command, then the entire suite.
+- [ ] Commit boundary: `fix(contracts): correct session quality and reaction semantics`.
 
 ### Task 3: Integration boundary
 

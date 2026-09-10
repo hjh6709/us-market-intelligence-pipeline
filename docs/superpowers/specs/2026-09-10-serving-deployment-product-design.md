@@ -1,3 +1,5 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Serving, deployment and product design
 
 ## Scope

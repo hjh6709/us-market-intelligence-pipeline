@@ -2,24 +2,22 @@
 
 ## Scope
 
-Replace contradictory architecture claims with a precedence-controlled current/target contract, then add compatible storage foundations for immutable release observations, consensus snapshots and derived surprise lineage.
+Correct the unpopulated migration 009 foundation without rewriting legacy rows. Legacy `economic_events` remains the Phase-A serving model. Canonical event identity, lifecycle versions, numeric official observations, external consensus snapshots, point-in-time surprise and raw-derived validation bars are additive and physically isolated.
 
-## Current and target
+## Canonical identities
 
-Current migration `002` stores event identity and value fields together. It remains readable for compatibility. Target tables are additive and reference `economic_events`; no historical evidence or current row is rewritten.
+- Lifecycle: `(economic_event_id, lifecycle_version)`, with nullable `released_at` until `RELEASED` or `CORRECTED`.
+- Official observation: `(economic_event_id, observation_code, revision_number)`; polling time is not identity.
+- Consensus: `(economic_event_id, observation_code, provider, snapshot_at)`.
+- Event-time surprise: initial official observation minus the latest compatible-unit consensus strictly before the primary marker.
+- Provider research bars remain in `market_bars`; raw-derived validation bars use `validation_reconstructed_bars` with run and processor lineage.
 
-## Interfaces and failure rules
+`published_at`, `provider_updated_at`, `first_observed_at`, and `ingested_at` preserve different facts. Observation codes and canonical units come from the registry; documents and statement text are outside this numeric domain.
 
-- observation identity: event, metric, revision, observation time;
-- consensus identity: event, metric, provider, observation time;
-- surprise identity: actual observation, consensus snapshot, algorithm version;
-- missing source URL, observed time, value lineage or invalid timestamps fail insertion;
-- payloads are referenced by SHA-256; secrets and raw payloads are not documentation artifacts.
+## Failure semantics
 
-## Verification
+Same official revision plus the same value/hash is idempotent. Conflicting content is `CONFLICTING_SOURCE_FACT`. Canonical surprise rejects cross-event/code lineage, revised actuals, post-release or stale pre-release consensus, unit mismatch and incorrect arithmetic. Canonical facts are append-only.
 
-Migration contract tests assert keys, foreign keys, time constraints, lineage and idempotent DDL. Documentation self-review scans superseded pages and ensures current/target labels are present.
+## Compatibility
 
-## Delivery status
-
-Selected P0/P1: canonical docs, additive migration, contract tests. Operational source ingestion and backfill are not selected.
+No legacy row is reinterpreted or dual-written. Normalized adapters, canonical serving and eventual deprecation are later phases recorded in `current-vs-target.md`.

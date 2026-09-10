@@ -1,6 +1,6 @@
 # Current system architecture
 
-Status: implemented baseline at `63633a50c85c88e507be458067ecf6706220f813`. This page does not describe the approved target; see [platform-contract.md](platform-contract.md).
+Status: implementation truth. Historical baseline: `63633a50c85c88e507be458067ecf6706220f813`; the corrective artifact revision is recorded in the dated verification receipt. This page does not describe the approved target; see [platform-contract.md](platform-contract.md).
 
 ## Product identity
 
@@ -11,10 +11,16 @@ Status: implemented baseline at `63633a50c85c88e507be458067ecf6706220f813`. This
 | Plane | Input | Processing | Durable output |
 | --- | --- | --- | --- |
 | Research | official releases, Alpaca SIP bars, FRED/ALFRED vintages | Airflow collection, point-in-time selection, derived bars, versioned analysis | events, bars, macro contexts, impacts, strategy observations |
-| Validation | archived SIP trades | Kafka replay, Spark event-time validation/dedup/aggregation | verified 1m bars and load/recovery evidence |
+| Validation | archived SIP trades | Kafka replay, Spark event-time validation/dedup/aggregation | raw-derived validation bars and load/recovery evidence |
 | Product | PostgreSQL results, durable telemetry, manual order intent | FastAPI services and browser UI | read views and isolated Alpaca Paper journal |
 
 Research provider bars and archived raw trades are intentionally separate. The 202×10 research dataset was not produced by replaying all raw trades through Kafka/Spark.
+
+## Corrective foundation now present
+
+Migration 009 adds empty normalized lifecycle/observation/consensus/surprise/session foundations. `src/trading_sessions.py` adds a pure verified-session planner and `src/platform_contracts.py` adds quality/maturity/reaction definitions. These foundations are executable and tested but are not populated by production adapters and do not replace current serving.
+
+Provider-aggregated research bars remain in `market_bars`. Raw-SIP Spark sinks now write `validation_reconstructed_bars` with validation-run, processor-version and checkpoint lineage. Current research serving queries `market_bars` only. Historical evidence predating this correction remains evidence of its recorded run, not proof that the new table was used then.
 
 ## Lineage
 

@@ -1,6 +1,8 @@
+STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+
 # Operational pipelines and storage implementation plan
 
-**Goal:** provide source-specific schedules, durable telemetry, freshness and immutable raw storage while retaining separate research and validation planes. This plan is not selected for the 2026-09-10 implementation slice.
+**Goal:** provide exactly three primary operational DAGs, durable telemetry, freshness and immutable raw storage while retaining separate research and validation planes. Migration numbers and interfaces below are placeholders.
 
 ### Task 1: Persist freshness, maturity and failure classes
 
@@ -14,9 +16,9 @@ Interface: `record_attempt(work_identity, attempt, counts, failure_class)` and `
 4. Run targeted tests, apply migrations `001..013` twice to disposable PostgreSQL, query a fixed fixture run and run the full suite.
 5. Commit `feat(ops): add freshness maturity and failure telemetry`.
 
-### Task 2: Add source-specific operational DAG families
+### Task 2: Add the three operational DAGs
 
-Files: `dags/event_catalog_pipeline.py`, `dags/release_observation_pipeline.py`, `dags/consensus_pipeline.py`, `dags/trading_calendar_pipeline.py`, `dags/reaction_pipeline.py`, `tests/test_operational_dag_contracts.py`, `docs/architecture/operations-and-deployment.md`.
+Files sketch: `dags/event_catalog_refresh_pipeline.py`, `dags/market_intelligence_incremental_pipeline.py`, `dags/paper_execution_reconciliation_pipeline.py`, `tests/test_operational_dag_contracts.py`, `docs/architecture/operations-and-deployment.md`.
 
 Interface: each DAG validates a typed config, registers one run, uses deterministic work identities, emits counts/checks and has declared retry safety. No DAG calls broker POST.
 
