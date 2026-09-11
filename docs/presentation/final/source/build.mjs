@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import pptxgen from 'pptxgenjs';
+import JSZip from 'jszip';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FINAL = path.resolve(HERE, '..');
@@ -92,12 +93,44 @@ const pptx = new pptxgen();
 pptx.layout = 'LAYOUT_WIDE'; // 13.333 x 7.5 in
 pptx.title = 'Economic Event Intelligence & Strategy Validation Platform';
 pptx.author = 'hjh6709';
+pptx.defineSlideMaster({
+  title: 'FINAL_DECK_MASTER',
+  background: { color: 'F7F5F1' },
+  objects: [],
+});
 for (let i = 0; i < slides.length; i++) {
-  const s = pptx.addSlide();
+  const s = pptx.addSlide('FINAL_DECK_MASTER');
   s.addImage({ path: path.join(SLIDES, `slide-${String(i + 1).padStart(2, '0')}.png`), x: 0, y: 0, w: 13.333, h: 7.5 });
   if (meta[i].notes) s.addNotes(meta[i].notes);
 }
-await pptx.writeFile({ fileName: path.join(OUT, `${NAME}.pptx`) });
+const pptxPath = path.join(OUT, `${NAME}.pptx`);
+await pptx.writeFile({ fileName: pptxPath });
+
+// PptxGenJS 4.0.1 can leave slideMaster content-type entries out of sync with
+// the parts emitted by an image-only deck. PowerPoint is tolerant, but strict
+// OOXML validators are not. Keep declarations aligned with emitted masters.
+const zip = await JSZip.loadAsync(fs.readFileSync(pptxPath));
+let contentTypes = await zip.file('[Content_Types].xml').async('string');
+const originalContentTypes = contentTypes;
+const masterNames = Object.keys(zip.files)
+  .filter(name => /^ppt\/slideMasters\/slideMaster\d+\.xml$/.test(name))
+  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+const emittedMasters = new Set(masterNames.map(name => `/${name}`));
+contentTypes = contentTypes.replace(
+  /<Override PartName="(\/ppt\/slideMasters\/slideMaster\d+\.xml)" ContentType="application\/vnd\.openxmlformats-officedocument\.presentationml\.slideMaster\+xml"\/>/g,
+  (entry, partName) => emittedMasters.has(partName) ? entry : '',
+);
+const missingMasterTypes = masterNames
+  .filter(name => !contentTypes.includes(`PartName="/${name}"`))
+  .map(name => `<Override PartName="/${name}" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>`)
+  .join('');
+if (missingMasterTypes) {
+  contentTypes = contentTypes.replace('</Types>', `${missingMasterTypes}</Types>`);
+}
+if (contentTypes !== originalContentTypes) {
+  zip.file('[Content_Types].xml', contentTypes);
+  fs.writeFileSync(pptxPath, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+}
 
 // 5. montage of the 10 main slides (5 x 2) + backup strip
 execFileSync('python3', [path.join(HERE, 'montage.py'), SLIDES, path.join(OUT, 'final-montage.png')], { stdio: 'inherit' });

@@ -3,5 +3,5 @@
   "private": true,
   "type": "module",
   "scripts": { "build": "node build.mjs", "capture": "node capture_ui.mjs assets" },
-  "dependencies": { "pptxgenjs": "^4.0.1", "puppeteer-core": "^24.0.0" }
+  "dependencies": { "jszip": "^3.10.1", "pptxgenjs": "^4.0.1", "puppeteer-core": "^24.0.0" }
 }
