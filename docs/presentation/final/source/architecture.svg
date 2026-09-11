@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1142 500" width="1142" height="500" font-family="Pretendard, 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif">
+  <!--
+    Presentation-specific redraw of CURRENT_ARCHITECTURE.mmd (semantic source).
+    Three planes, reduced node count. Colors: research navy, validation slate-violet,
+    product orange. Storage = rounded rectangles with a top band. Dashed = evidence-only link.
+  -->
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#44505E"/>
+    </marker>
+    <marker id="arwo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#E56735"/>
+    </marker>
+    <marker id="arwg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8A8A87"/>
+    </marker>
+  </defs>
+
+  <!-- ======== column headers ======== -->
+  <g font-size="12" font-weight="600" fill="#8A8A87" letter-spacing="1.5">
+    <text x="196" y="14">SOURCES</text>
+    <text x="436" y="14">PROCESSING</text>
+    <text x="676" y="14">STORAGE</text>
+    <text x="916" y="14">OUTPUT</text>
+  </g>
+
+  <!-- ======== RESEARCH PLANE ======== -->
+  <g>
+    <rect x="0" y="26" width="1142" height="176" rx="6" fill="#FFFFFF" stroke="#D9D5CE"/>
+    <rect x="0" y="26" width="6" height="176" rx="3" fill="#14263D"/>
+    <g transform="translate(20,44)">
+      <text font-size="13" font-weight="700" fill="#14263D" letter-spacing="1.2">RESEARCH PLANE</text>
+      <text y="22" font-size="12" fill="#5B6570">CURRENT · 운영 실행 증거</text>
+      <text y="52" font-size="12" fill="#5B6570">Provider-aggregated bar</text>
+      <text y="68" font-size="12" fill="#5B6570">기반 분석 데이터</text>
+    </g>
+
+    <!-- sources (3 stacked) -->
+    <g font-size="13" fill="#171717">
+      <rect x="196" y="38" width="200" height="40" rx="4" fill="#F1F4F8" stroke="#B9C4D2"/>
+      <text x="208" y="55" font-weight="600">공식 발표 일정</text>
+      <text x="208" y="71" font-size="12" fill="#5B6570">BLS · BEA · Federal Reserve</text>
+
+      <rect x="196" y="94" width="200" height="40" rx="4" fill="#F1F4F8" stroke="#B9C4D2"/>
+      <text x="208" y="111" font-weight="600">Alpaca SIP bars</text>
+      <text x="208" y="127" font-size="12" fill="#5B6570">provider-aggregated 1m</text>
+
+      <rect x="196" y="150" width="200" height="40" rx="4" fill="#F1F4F8" stroke="#B9C4D2"/>
+      <text x="208" y="167" font-weight="600">FRED / ALFRED</text>
+      <text x="208" y="183" font-size="12" fill="#5B6570">Point-in-Time 거시 맥락</text>
+    </g>
+
+    <!-- airflow -->
+    <rect x="436" y="80" width="200" height="66" rx="4" fill="#14263D"/>
+    <text x="448" y="103" font-size="13" font-weight="700" fill="#FFFFFF">Airflow historical backfill</text>
+    <text x="448" y="121" font-size="12" fill="#C7D0DC">202 event tasks · 10 symbols</text>
+    <text x="448" y="137" font-size="12" fill="#C7D0DC">→ 2,020 DB work items</text>
+
+    <!-- research PG -->
+    <rect x="676" y="70" width="200" height="86" rx="6" fill="#FFFFFF" stroke="#14263D" stroke-width="1.5"/>
+    <rect x="676" y="70" width="200" height="8" rx="4" fill="#14263D"/>
+    <text x="688" y="99" font-size="13" font-weight="700" fill="#14263D">PostgreSQL · research</text>
+    <text x="688" y="117" font-size="12" fill="#5B6570">market_bars · macro contexts</text>
+    <text x="688" y="133" font-size="12" fill="#5B6570">legacy impact 8,080 rows</text>
+    <text x="688" y="149" font-size="12" fill="#5B6570">exploratory strategy 2,020 rows</text>
+
+    <!-- legacy analysis -->
+    <rect x="916" y="80" width="200" height="66" rx="4" fill="#F1F4F8" stroke="#B9C4D2"/>
+    <text x="928" y="103" font-size="13" font-weight="600" fill="#171717">Legacy v1 event study</text>
+    <text x="928" y="121" font-size="12" fill="#5B6570">PRE_60M · POST_5M/30M/60M</text>
+    <text x="928" y="137" font-size="12" fill="#5B6570">pre60 momentum 탐색 규칙</text>
+
+    <!-- arrows -->
+    <g stroke="#44505E" stroke-width="1.4" fill="none" marker-end="url(#arw)">
+      <path d="M396 58 C420 58 412 113 434 113"/>
+      <path d="M396 114 L434 113"/>
+      <path d="M396 170 C420 170 412 113 434 113"/>
+      <path d="M636 113 L674 113"/>
+      <path d="M876 113 L914 113"/>
+    </g>
+  </g>
+
+  <!-- ======== VALIDATION PLANE ======== -->
+  <g>
+    <rect x="0" y="216" width="1142" height="122" rx="6" fill="#FFFFFF" stroke="#D9D5CE"/>
+    <rect x="0" y="216" width="6" height="122" rx="3" fill="#5E5A8A"/>
+    <g transform="translate(20,234)">
+      <text font-size="13" font-weight="700" fill="#5E5A8A" letter-spacing="1.2">VALIDATION PLANE</text>
+      <text y="22" font-size="12" fill="#5B6570">CURRENT · 별도 실험 증거</text>
+      <text y="52" font-size="12" fill="#5B6570">Raw SIP trade 기반</text>
+      <text y="68" font-size="12" fill="#5B6570">부하·무결성 검증 전용</text>
+    </g>
+
+    <rect x="196" y="250" width="200" height="54" rx="4" fill="#F3F1F8" stroke="#BDB8D2"/>
+    <text x="208" y="271" font-size="13" font-weight="600" fill="#171717">Archived Raw SIP trades</text>
+    <text x="208" y="289" font-size="12" fill="#5B6570">licensed · Git 미포함</text>
+
+    <rect x="436" y="240" width="94" height="74" rx="4" fill="#5E5A8A"/>
+    <text x="448" y="266" font-size="13" font-weight="700" fill="#FFFFFF">Kafka</text>
+    <text x="448" y="283" font-size="11" fill="#DDD9EC">bounded</text>
+    <text x="448" y="297" font-size="11" fill="#DDD9EC">replay</text>
+
+    <rect x="542" y="240" width="94" height="74" rx="4" fill="#5E5A8A"/>
+    <text x="554" y="266" font-size="13" font-weight="700" fill="#FFFFFF">Spark</text>
+    <text x="554" y="283" font-size="11" fill="#DDD9EC">validate · dedup</text>
+    <text x="554" y="297" font-size="11" fill="#DDD9EC">event-time agg</text>
+
+    <rect x="676" y="240" width="200" height="74" rx="6" fill="#FFFFFF" stroke="#5E5A8A" stroke-width="1.5"/>
+    <rect x="676" y="240" width="200" height="8" rx="4" fill="#5E5A8A"/>
+    <text x="688" y="269" font-size="13" font-weight="700" fill="#5E5A8A">PostgreSQL · validation-only</text>
+    <text x="688" y="287" font-size="12" fill="#5B6570">validation_runs (immutable)</text>
+    <text x="688" y="303" font-size="12" fill="#5B6570">validation_reconstructed_bars</text>
+
+    <rect x="916" y="250" width="200" height="54" rx="4" fill="#F3F1F8" stroke="#BDB8D2"/>
+    <text x="928" y="271" font-size="13" font-weight="600" fill="#171717">Validation evidence</text>
+    <text x="928" y="289" font-size="12" fill="#5B6570">parity · duplicate 0 · recovery</text>
+
+    <g stroke="#44505E" stroke-width="1.4" fill="none" marker-end="url(#arw)">
+      <path d="M396 277 L434 277"/>
+      <path d="M530 277 L540 277"/>
+      <path d="M636 277 L674 277"/>
+      <path d="M876 277 L914 277"/>
+    </g>
+
+    <!-- evidence-only link up to research PG -->
+    <path d="M776 240 L776 158" stroke="#8A8A87" stroke-width="1.2" stroke-dasharray="4 4" fill="none" marker-end="url(#arwg)"/>
+    <rect x="782" y="188" width="132" height="20" rx="3" fill="#F7F5F1"/>
+    <text x="788" y="202" font-size="11" fill="#5B6570">비교·증거 전용 · 데이터 미유입</text>
+  </g>
+
+  <!-- ======== PRODUCT PLANE ======== -->
+  <g>
+    <rect x="0" y="352" width="1142" height="122" rx="6" fill="#FFFFFF" stroke="#D9D5CE"/>
+    <rect x="0" y="352" width="6" height="122" rx="3" fill="#E56735"/>
+    <g transform="translate(20,370)">
+      <text font-size="13" font-weight="700" fill="#B84E23" letter-spacing="1.2">PRODUCT PLANE</text>
+      <text y="22" font-size="12" fill="#5B6570">CURRENT · 로컬 제품</text>
+      <text y="52" font-size="12" fill="#5B6570">저장 결과를 읽는</text>
+      <text y="68" font-size="12" fill="#5B6570">읽기 전용 화면 + 수동 Paper</text>
+    </g>
+
+    <!-- research PG feeds product: draw path from research PG bottom-left down -->
+    <path d="M700 156 L700 200 L172 200 L172 413 L194 413" stroke="#14263D" stroke-width="1.6" fill="none" marker-end="url(#arw)"/>
+    <text x="196" y="378" font-size="11" fill="#14263D" font-weight="600">research PostgreSQL 결과 조회</text>
+
+    <rect x="196" y="386" width="200" height="54" rx="4" fill="#FFF3EC" stroke="#E5B9A3"/>
+    <text x="208" y="407" font-size="13" font-weight="600" fill="#171717">Repository → Service</text>
+    <text x="208" y="425" font-size="12" fill="#5B6570">PostgreSQL 결과만 읽음</text>
+
+    <rect x="436" y="386" width="200" height="54" rx="4" fill="#E56735"/>
+    <text x="448" y="407" font-size="13" font-weight="700" fill="#FFFFFF">FastAPI</text>
+    <text x="448" y="425" font-size="12" fill="#FDE3D7">/api/v1 · 외부 API 미호출</text>
+
+    <rect x="676" y="386" width="200" height="54" rx="4" fill="#FFF3EC" stroke="#E5B9A3"/>
+    <text x="688" y="407" font-size="13" font-weight="600" fill="#171717">Browser UI</text>
+    <text x="688" y="425" font-size="12" fill="#5B6570">Overview · Research · Pipelines</text>
+
+    <rect x="916" y="386" width="200" height="54" rx="4" fill="#FFFFFF" stroke="#E56735" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="928" y="407" font-size="13" font-weight="700" fill="#B84E23">Manual Alpaca Paper</text>
+    <text x="928" y="425" font-size="11.5" fill="#5B6570">guarded submit · reconcile · cancel</text>
+
+    <g stroke="#44505E" stroke-width="1.4" fill="none" marker-end="url(#arw)">
+      <path d="M396 413 L434 413"/>
+      <path d="M636 413 L674 413"/>
+    </g>
+    <path d="M876 413 L914 413" stroke="#E56735" stroke-width="1.4" stroke-dasharray="5 4" fill="none" marker-end="url(#arwo)"/>
+    <text x="916" y="460" font-size="11" fill="#B84E23">사용자 수동 입력·검토·확인 · 자동 주문 없음</text>
+  </g>
+
+  <!-- ======== invariant ======== -->
+  <text x="0" y="494" font-size="12" fill="#44505E" font-weight="600">Invariant — 202 × 10 연구 데이터는 Raw SIP Kafka/Spark 경로로 생성된 것이 아닙니다. Research market_bars와 validation 테이블은 물리적으로 분리됩니다.</text>
+</svg>

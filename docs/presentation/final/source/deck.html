@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Economic Event Intelligence — final presentation source</title>
+<style>
+/* ------------------------------------------------------------------
+   Canvas: 1280 x 720 CSS px == 13.333in x 7.5in at 96dpi (16:9).
+   1pt = 1.333px.  Title 40px≈30pt · body 24px≈18pt · small 18px≈13.5pt
+   Grid: margin 69px (0.72in) · title top 43px · content top 144px · footer 677px
+   ------------------------------------------------------------------ */
+@page { size: 13.333in 7.5in; margin: 0; }
+:root{
+  --bg:#F7F5F1; --ink:#171717; --navy:#14263D; --orange:#E56735; --orange-dk:#B84E23;
+  --gray:#8A8A87; --gray-2:#5B6570; --rule:#D9D5CE; --violet:#5E5A8A; --white:#FFFFFF;
+  --m:69px; --title-top:43px; --content-top:196px; --footer-top:677px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#444;font-family:Pretendard,'Noto Sans KR','Apple SD Gothic Neo',sans-serif;color:var(--ink);
+  -webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1;}
+.slide{position:relative;width:1280px;height:720px;background:var(--bg);overflow:hidden;page-break-after:always;break-after:page;margin:0 auto}
+@media screen{.slide{margin:24px auto;box-shadow:0 2px 12px rgba(0,0,0,.35)}}
+.slide.dark{background:var(--navy);color:var(--white)}
+.notes{display:none}
+
+/* --- common chrome --- */
+.kicker{position:absolute;left:var(--m);top:var(--title-top);font-size:13px;font-weight:600;letter-spacing:1.6px;color:var(--gray-2);text-transform:uppercase}
+.kicker .tag{display:inline-block;margin-left:10px;padding:2px 8px;border-radius:3px;font-size:11px;letter-spacing:1.2px;vertical-align:1px}
+.tag.current{background:var(--navy);color:#fff}
+.tag.historical{background:#E9E5DD;color:#44505E}
+.tag.foundation{border:1.5px solid var(--orange);color:var(--orange-dk)}
+.tag.target{border:1.5px dashed var(--gray);color:var(--gray-2)}
+h1.title{position:absolute;left:var(--m);right:var(--m);top:66px;font-size:38px;line-height:1.28;font-weight:700;letter-spacing:-0.4px;color:var(--navy)}
+.slide.dark h1.title{color:#fff}
+.footer{position:absolute;left:var(--m);right:var(--m);top:var(--footer-top);font-size:12px;color:var(--gray);display:flex;justify-content:space-between;border-top:1px solid var(--rule);padding-top:8px}
+.slide.dark .footer{color:#9AA6B6;border-top-color:rgba(255,255,255,.18)}
+.footer .n{font-weight:600;color:var(--gray-2)}
+.content{position:absolute;left:var(--m);right:var(--m);top:var(--content-top);bottom:calc(720px - var(--footer-top) + 22px)}
+
+/* type helpers */
+.body{font-size:24px;line-height:1.45}
+.small{font-size:18px;line-height:1.45;color:var(--gray-2)}
+.num{font-weight:700;letter-spacing:-1.5px;line-height:1;color:var(--navy)}
+.label{font-size:13px;font-weight:600;letter-spacing:1.4px;color:var(--gray-2);text-transform:uppercase}
+.accent{color:var(--orange)}
+.rule{border-top:1px solid var(--rule)}
+
+/* ---------- S1 / S10 hero ---------- */
+.hero-kicker{position:absolute;left:var(--m);top:78px;font-size:14px;font-weight:600;letter-spacing:1.8px;color:#C7D0DC;text-transform:uppercase}
+.hero-title{position:absolute;left:var(--m);right:220px;top:200px;font-size:50px;line-height:1.26;font-weight:700;letter-spacing:-0.8px}
+.hero-title em{font-style:normal;color:#F3A483}
+.hero-sub{position:absolute;left:var(--m);right:300px;top:405px;font-size:22px;line-height:1.55;color:#C7D0DC}
+.hero-row{position:absolute;left:var(--m);right:var(--m);top:560px;display:flex;gap:40px}
+.hero-row .item{flex:1;border-top:1px solid rgba(255,255,255,.25);padding-top:14px}
+.hero-row .item .l{font-size:12px;letter-spacing:1.4px;color:#9AA6B6;font-weight:600;text-transform:uppercase}
+.hero-row .item .t{font-size:18px;margin-top:6px;color:#fff;line-height:1.4}
+
+/* ---------- S2 gap ---------- */
+.gap{display:grid;grid-template-columns:400px 90px 1fr;align-items:stretch;height:100%}
+.gap .col h3{font-size:13px;font-weight:600;letter-spacing:1.4px;color:var(--gray-2);text-transform:uppercase;margin-bottom:22px}
+.gap .have{display:flex;flex-direction:column;gap:14px}
+.gap .have .row{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--rule);padding-bottom:12px}
+.gap .have .k{font-size:22px;font-weight:600;color:var(--navy)}
+.gap .have .v{font-size:18px;color:var(--gray-2)}
+.gap .arrow{display:flex;align-items:flex-start;justify-content:center;padding-top:150px}
+.gap .arrow svg{width:56px;height:56px}
+.gap .need{display:flex;flex-direction:column;gap:18px}
+.gap .need .q{display:flex;gap:18px;align-items:flex-start;font-size:24px;line-height:1.35;color:var(--ink)}
+.gap .need .q .i{flex:none;width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.gap .need .q.hl{color:var(--orange-dk);font-weight:600}
+.gap .need .q.hl .i{background:var(--orange)}
+.gap .need .cap{margin-top:34px;font-size:16px;color:var(--gray-2);line-height:1.5}
+
+/* ---------- S3 architecture ---------- */
+.arch{display:flex;flex-direction:column;height:100%}
+.arch svg{width:1100px;height:482px}
+.legend{position:absolute;right:var(--m);top:var(--title-top);display:flex;gap:18px;font-size:12px;color:var(--gray-2)}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.legend .r::before{background:var(--navy)}.legend .v::before{background:var(--violet)}.legend .p::before{background:var(--orange)}
+
+/* ---------- S4 scale ---------- */
+.scale{display:grid;grid-template-columns:1fr 360px;column-gap:56px;height:100%}
+.scale .big{display:flex;flex-direction:column;justify-content:flex-start}
+.scale .eq{display:flex;align-items:flex-start;gap:20px;margin-top:0}
+.scale .eq .term .n{font-size:96px;display:block}
+.scale .eq .term .l{display:block;font-size:15px;color:var(--gray-2);margin-top:14px;letter-spacing:.4px}
+.scale .eq .op{font-size:48px;color:var(--gray);font-weight:300;line-height:1;padding-top:24px}
+.scale .eq .term.res .n{color:var(--orange)}
+.scale .under{margin-top:46px;display:flex;flex-direction:column;gap:14px}
+.scale .under .row{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--rule);padding-top:12px}
+.scale .under .k{font-size:18px;color:var(--gray-2)}
+.scale .under .v{font-size:26px;font-weight:700;color:var(--navy)}
+.scale .side .label{margin-bottom:10px}
+.scale .bars{display:flex;height:22px;border-radius:3px;overflow:hidden;margin-top:10px}
+.scale .bars div{height:100%}
+.scale .bar-lab{display:flex;margin-top:8px;font-size:15px;color:var(--gray-2)}
+.scale .bar-lab div{text-align:left}
+.scale .syms{margin-top:34px;display:flex;flex-wrap:wrap;gap:8px}
+.scale .syms span{font-size:15px;font-weight:600;color:var(--navy);border:1px solid #C4CBD5;border-radius:3px;padding:4px 9px;background:#fff}
+.scale .side .cap{margin-top:30px;font-size:15px;color:var(--gray-2);line-height:1.5}
+
+/* ---------- S5 raw sip ---------- */
+.sip .hero-n{font-size:136px;font-weight:700;letter-spacing:-3px;line-height:1;color:var(--navy)}
+.sip .hero-l{font-size:20px;color:var(--gray-2);margin-top:16px}
+.flow{display:grid;grid-template-columns:repeat(4,1fr);column-gap:26px;margin-top:100px}
+.flow .st{border-top:3px solid var(--violet);padding-top:14px;position:relative}
+.flow .st:not(:last-child)::after{content:"";position:absolute;right:-19px;top:-8px;width:10px;height:10px;border-top:1.5px solid var(--gray);border-right:1.5px solid var(--gray);transform:rotate(45deg)}
+.flow .st .l{font-size:13px;letter-spacing:1.4px;color:var(--gray-2);font-weight:600;text-transform:uppercase}
+.flow .st .t{font-size:23px;font-weight:700;color:var(--navy);margin-top:8px}
+.flow .st .v{font-size:36px;font-weight:700;color:var(--violet);margin-top:22px;letter-spacing:-0.5px}
+.flow .st .s{font-size:16px;color:var(--gray-2);margin-top:6px}
+.flow .st.out{border-top-color:var(--navy)}
+.flow .st.out .v{color:var(--navy)}
+.sip .facts{position:absolute;right:0;top:6px;width:310px;display:flex;flex-direction:column;gap:22px}
+.sip .facts .f{border-left:2px solid var(--rule);padding-left:14px}
+.sip .facts .f .k{font-size:12px;letter-spacing:1.2px;color:var(--gray);font-weight:600;text-transform:uppercase}
+.sip .facts .f .v{font-size:17px;color:var(--ink);margin-top:3px;line-height:1.35}
+
+/* ---------- S6 incident ---------- */
+.inc{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;column-gap:26px;height:100%}
+.inc .step{position:relative}
+.inc .step .no{display:block;font-size:12px;letter-spacing:1.4px;color:var(--gray-2);font-weight:600;padding-bottom:12px;border-bottom:3px solid var(--rule);margin-bottom:40px}
+.inc .step.hl .no{border-bottom-color:var(--orange);color:var(--orange-dk)}
+.inc .step .big{font-size:144px;font-weight:700;line-height:1;letter-spacing:-4px;margin-top:0;color:var(--navy)}
+.inc .step .big.zero{color:var(--orange)}
+.inc .step .t{font-size:21px;font-weight:600;color:var(--navy);margin-top:22px;line-height:1.35}
+.inc .step .d{font-size:16.5px;color:var(--gray-2);margin-top:14px;line-height:1.55}
+.ident{margin-top:26px;font-family:ui-monospace,Menlo,monospace;font-size:13.5px;line-height:1.8;color:var(--gray-2);background:#fff;border:1px solid var(--rule);border-radius:4px;padding:10px 12px}
+.ident .miss{color:#B8B4AC;text-decoration:line-through}
+.ident .add{color:var(--orange-dk);font-weight:700;background:#FDE9DF;border-radius:2px;padding:0 3px}
+.inc .arrowline{position:absolute;left:0;right:0;top:-2px}
+
+/* ---------- S7 recovery ---------- */
+.rec .steps{display:grid;grid-template-columns:repeat(4,1fr);column-gap:30px;position:relative}
+.rec .track{position:absolute;left:0;right:0;top:94px;height:4px;background:var(--rule)}
+.rec .track .seg{position:absolute;top:0;height:4px}
+.rec .track .ok{background:var(--navy)}
+.rec .track .bad{background:repeating-linear-gradient(90deg,var(--orange) 0 8px,transparent 8px 14px)}
+.rec .ev{position:relative;min-height:264px}
+.rec .ev .l{font-size:12px;letter-spacing:1.4px;color:var(--gray-2);font-weight:600;text-transform:uppercase}
+.rec .ev .t{font-size:22px;font-weight:700;color:var(--navy);line-height:1.3;margin-top:8px;height:58px}
+.rec .ev.bad .t{color:var(--orange-dk)}
+.rec .ev .dot{width:18px;height:18px;border-radius:50%;background:var(--navy);border:4px solid var(--bg);position:absolute;left:-2px;top:87px;box-shadow:0 0 0 1.5px var(--navy)}
+.rec .ev.bad .dot{background:var(--orange);box-shadow:0 0 0 1.5px var(--orange)}
+.rec .ev .below{position:absolute;top:124px;left:0;right:0;font-size:16px;color:var(--gray-2);line-height:1.5}
+.rec .ev .below b{display:block;font-size:26px;color:var(--navy);font-weight:700;margin-bottom:6px;letter-spacing:-0.5px}
+.rec .ev.bad .below b{color:var(--orange-dk)}
+.rec .result{margin-top:26px;display:grid;grid-template-columns:repeat(3,1fr);column-gap:30px}
+.rec .result .r{border-top:1px solid var(--rule);padding-top:12px}
+.rec .result .r .k{font-size:13px;letter-spacing:1.2px;color:var(--gray-2);font-weight:600;text-transform:uppercase}
+.rec .result .r .v{font-size:24px;font-weight:700;color:var(--navy);margin-top:6px}
+.rec .result .r .v.mono{font-family:ui-monospace,Menlo,monospace;font-size:17px;letter-spacing:0;color:var(--gray-2);font-weight:500;margin-top:10px}
+.rec .bound{margin-top:38px;font-size:16px;color:var(--gray-2);line-height:1.5;border-left:3px solid var(--orange);padding-left:14px}
+
+/* ---------- S8 PIT / session ---------- */
+.pit svg{width:1142px;height:330px;display:block}
+.pit .notes3{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);column-gap:36px}
+.pit .notes3 .n3{border-top:1px solid var(--rule);padding-top:12px}
+.pit .notes3 .k{font-size:13px;letter-spacing:1.2px;color:var(--gray-2);font-weight:600;text-transform:uppercase}
+.pit .notes3 .t{font-size:18px;color:var(--ink);margin-top:8px;line-height:1.45}
+.pit .notes3 .t b{color:var(--navy)}
+
+/* ---------- S9 product ---------- */
+.prod{display:grid;grid-template-columns:530px 1fr;column-gap:34px;align-items:start}
+.prod .shot{border:1px solid #C9CDD3;border-radius:6px;overflow:hidden;background:#0B1220;box-shadow:0 4px 18px rgba(20,38,61,.16)}
+.prod .shot img{display:block;width:100%;height:auto}
+.prod .main .cap{font-size:13px;color:var(--gray-2);margin-top:8px;line-height:1.4}
+.prod .right{display:flex;flex-direction:column;gap:10px}
+.prod .right .shot img{width:100%}
+.prod .right .cap{font-size:13px;color:var(--gray-2);margin-top:-4px}
+.cft{margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);column-gap:30px}
+.cft .c{padding-top:12px;border-top:3px solid var(--navy)}
+.cft .c.f{border-top-color:var(--orange)}
+.cft .c.t{border-top-style:dashed;border-top-color:var(--gray)}
+.cft .c h4{font-size:13px;letter-spacing:1.4px;font-weight:700;text-transform:uppercase;color:var(--navy)}
+.cft .c.f h4{color:var(--orange-dk)}.cft .c.t h4{color:var(--gray-2)}
+.cft .c h4 small{font-weight:500;letter-spacing:0;text-transform:none;color:var(--gray-2);margin-left:8px;font-size:13px}
+.cft .c ul{list-style:none;margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.cft .c li{font-size:14.5px;line-height:1.4;color:var(--ink);padding-left:14px;position:relative}
+.cft .c li::before{content:"";position:absolute;left:0;top:11px;width:6px;height:6px;border-radius:50%;background:var(--navy)}
+.cft .c.f li::before{background:var(--orange)}.cft .c.t li::before{background:var(--gray)}
+
+/* ---------- S10 conclusion ---------- */
+.life{position:absolute;left:var(--m);right:var(--m);top:392px;display:grid;grid-template-columns:repeat(5,1fr);column-gap:0}
+.life .s{position:relative;padding-top:16px;border-top:1px solid rgba(255,255,255,.28);padding-right:30px}
+.life .s .k{font-size:12px;letter-spacing:1.6px;color:#9AA6B6;font-weight:600}
+.life .s .t{font-size:18px;color:#fff;margin-top:8px;line-height:1.4}
+.life .s::after{content:"";position:absolute;right:10px;top:-6px;width:10px;height:10px;border-top:1.5px solid #F3A483;border-right:1.5px solid #F3A483;transform:rotate(45deg)}
+.life .s:last-child::after{display:none}
+.life .s.dim .t{color:#9AA6B6}
+.life .s.dim .k{color:#6F7C8E}
+.conc-note{position:absolute;left:var(--m);right:var(--m);top:560px;display:grid;grid-template-columns:1fr 1fr;column-gap:60px}
+.conc-note .b{border-left:2px solid #F3A483;padding-left:16px}
+.conc-note .k{font-size:12px;letter-spacing:1.4px;color:#9AA6B6;font-weight:600;text-transform:uppercase}
+.conc-note .t{font-size:17px;color:#E4E9F0;margin-top:6px;line-height:1.5}
+.conc-note .t b{color:#fff}
+
+/* ---------- backup tables ---------- */
+table.ev{width:100%;border-collapse:collapse;font-size:14px}
+table.ev th{text-align:left;font-size:12px;letter-spacing:1.2px;color:var(--gray-2);text-transform:uppercase;font-weight:600;padding:0 10px 10px 0;border-bottom:1.5px solid var(--navy)}
+table.ev td{padding:6px 10px 6px 0;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.35}
+table.ev td.n{font-weight:700;color:var(--navy);white-space:nowrap;font-size:15px}
+table.ev td.s{color:var(--gray-2)}
+table.ev tr.h td{padding-top:10px}
+.bk-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:56px;height:100%}
+.bk-grid h3{font-size:13px;letter-spacing:1.4px;color:var(--gray-2);font-weight:600;text-transform:uppercase;margin-bottom:14px}
+.bk-grid .list{display:flex;flex-direction:column;gap:12px}
+.bk-grid .list .it{display:grid;grid-template-columns:300px 1fr;column-gap:16px;border-bottom:1px solid var(--rule);padding-bottom:10px}
+.bk-grid .list .k{font-size:15px;word-break:break-all;font-weight:600;color:var(--navy)}
+.bk-grid .list .v{font-size:15px;color:var(--ink);line-height:1.45}
+.bk-grid .list .v small{display:block;color:var(--gray-2);font-size:14px;margin-top:2px}
+.matrix{width:100%;border-collapse:collapse;font-size:14.5px}
+.matrix th{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;text-align:left;padding:0 10px 10px 0;border-bottom:1.5px solid var(--navy);color:var(--gray-2)}
+.matrix th.c{color:var(--navy)}.matrix th.f{color:var(--orange-dk)}.matrix th.t{color:var(--gray-2)}
+.matrix td{padding:8px 10px 8px 0;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.4}
+.matrix td.k{font-weight:600;color:var(--navy);white-space:nowrap}
+.matrix td.f{color:var(--orange-dk)}.matrix td.t{color:var(--gray-2)}
+</style>
+</head>
+<body>
+
+<!-- ============================ SLIDE 1 — WHY ============================ -->
+<section class="slide dark" data-id="01">
+  <div class="hero-kicker">Economic Event Intelligence &amp; Strategy Validation Platform</div>
+  <div class="hero-title">경제 이벤트를 남의 설명이 아니라<br><em>실제 데이터로 직접 판단</em>하고 싶었습니다</div>
+  <div class="hero-sub">개인 투자자로서 CPI·고용·PCE·FOMC 발표를 접할 때마다 요약과 댓글은 많았지만,
+    그 설명이 실제 가격 반응과 맞는지 스스로 확인할 방법이 없었습니다.</div>
+  <div class="hero-row">
+    <div class="item"><div class="l">문제 1</div><div class="t">경제지표의 의미를 비전문가가 해석하기 어렵다</div></div>
+    <div class="item"><div class="l">문제 2</div><div class="t">뉴스·AI 요약·커뮤니티 설명이 실제 움직임과 늘 맞지는 않는다</div></div>
+    <div class="item"><div class="l">문제 3</div><div class="t">가격이 움직인 뒤에는 어떤 설명이든 붙일 수 있다</div></div>
+  </div>
+  <div class="footer"><span>hjh6709 / us-market-intelligence-pipeline · 2026-09-10</span><span class="n">1</span></div>
+  <aside class="notes">
+의도: 발표의 출발점은 개인 투자자로서의 실제 불편. 특정 증권사·서비스를 비난하지 않는다.
+말할 문장: "기존 요약이나 댓글을 그대로 받아들이기보다, 당시 이용 가능했던 데이터와 실제 가격 반응을 연결해 직접 판단할 수 있는 환경을 만들고 싶었습니다."
+장기 목표는 더 나은 근거로 투자 판단을 내리는 것. 수익 보장이 아님.
+전환: "그렇다면 경제 캘린더가 이미 주는 정보로는 무엇이 부족한가?"
+근거: docs/presentation/final/PRESENTATION_TRUTH.md (왜 시작했는가). 30–40초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 2 — GAP ============================ -->
+<section class="slide" data-id="02">
+  <div class="kicker">Problem</div>
+  <h1 class="title">경제 캘린더는 발표값을 알려주지만,<br>그것이 시장에서 어떤 의미였는지는 알려주지 않습니다</h1>
+  <div class="content">
+    <div class="gap">
+      <div class="col">
+        <h3>캘린더가 주는 것</h3>
+        <div class="have">
+          <div class="row"><span class="k">ACTUAL</span><span class="v">실제 발표값</span></div>
+          <div class="row"><span class="k">CONSENSUS</span><span class="v">시장 예상치</span></div>
+          <div class="row"><span class="k">PREVIOUS</span><span class="v">이전 발표값</span></div>
+          <div class="row"><span class="k">RELEASE TIME</span><span class="v">발표 시각</span></div>
+        </div>
+      </div>
+      <div class="arrow"><svg viewBox="0 0 56 56" fill="none" stroke="#8A8A87" stroke-width="2"><path d="M8 28h38M30 14l16 14-16 14"/></svg></div>
+      <div class="col need">
+        <h3>투자자가 실제로 알아야 하는 것</h3>
+        <div class="q"><span class="i">1</span><span>시장은 그 발표에 <b>어떻게 반응</b>했는가?</span></div>
+        <div class="q"><span class="i">2</span><span>그 반응은 과거와 비교해 <b>이례적</b>이었는가?</span></div>
+        <div class="q"><span class="i">3</span><span>반응이 <b>지속</b>되었는가, 되돌려졌는가?</span></div>
+        <div class="q"><span class="i">4</span><span>당시 알 수 있었던 정보만으로 그 <b>설명이 성립</b>하는가?</span></div>
+        <div class="q hl"><span class="i">5</span><span>그 해석으로 세운 가설이 <b>과거·Paper 검증</b>을 견디는가?</span></div>
+        <div class="cap">이 다섯 질문에 답하는 재현 가능한 환경이 이 프로젝트의 제품 방향입니다. 현재 구현 범위는 3번 슬라이드부터 단계별로 구분해 설명합니다.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>제품 가설 — PRESENTATION_TRUTH.md · consensus/surprise 운영 수집은 현재 미구현(foundation)</span><span class="n">2</span></div>
+  <aside class="notes">
+의도: 숫자 4개(ACTUAL/CONSENSUS/PREVIOUS/TIME)와 "의미" 사이의 간극을 보여준다.
+주의: consensus adapter가 지금 운영 중인 것처럼 말하지 않는다. "예상치 대비 surprise를 계약으로 고정한 foundation은 있지만 운영 수집은 다음 단계"라고 8번 슬라이드에서 설명.
+전환: "이 질문에 답하려면 데이터를 어떻게 모으고 나누어야 하는가 — 현재 아키텍처."
+45–55초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 3 — ARCHITECTURE ============================ -->
+<section class="slide" data-id="03">
+  <div class="kicker">Current architecture <span class="tag current">CURRENT</span></div>
+  <div class="legend"><span class="r">Research</span><span class="v">Validation</span><span class="p">Product</span></div>
+  <h1 class="title">분석용 Research와 Raw SIP 검증 경로를 분리하고,<br>제품 계층은 저장된 결과만 읽도록 연결했습니다</h1>
+  <div class="content" style="top:182px">
+    <div class="arch"><!--INLINE:architecture.svg--></div>
+  </div>
+  <div class="footer"><span>semantic source: docs/presentation/final/CURRENT_ARCHITECTURE.mmd · Airflow DAG 4개 모두 schedule=None · catchup=False · max_active_runs=1</span><span class="n">3</span></div>
+  <aside class="notes">
+의도: 세 plane의 경계를 5초 안에 읽히게. Research(navy) = provider-aggregated bar 기반 분석 데이터, Validation(violet) = Raw SIP 부하·무결성 검증 전용, Product(orange) = PostgreSQL 결과를 읽는 로컬 화면 + 수동 Paper.
+반드시 말할 것: 202×10 연구 데이터는 Kafka/Spark 경로로 만든 것이 아니다. validation 테이블(validation_runs, validation_reconstructed_bars)은 research market_bars와 물리적으로 분리.
+Airflow: market DAG는 발표별 202 mapped task, 각 task 내부 10종목 → 2,020 DB work item. "2,020 mapped tasks"가 아님.
+Paper: 사용자가 직접 입력·검토·확인하는 guarded manual 경계. research 신호 → 자동 주문 없음.
+65–75초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 4 — SCALE ============================ -->
+<section class="slide" data-id="04">
+  <div class="kicker">Research dataset <span class="tag current">CURRENT</span><span class="tag historical">EVIDENCE 2026-09-08</span></div>
+  <h1 class="title">202개 공식 경제 발표와 10개 자산을<br>실제 연구 데이터로 구축했습니다</h1>
+  <div class="content">
+    <div class="scale">
+      <div class="big">
+        <div class="eq">
+          <div class="term"><span class="n num">202</span><span class="l">공식 발표 · 회</span></div><span class="op">×</span>
+          <div class="term"><span class="n num">10</span><span class="l">자산 · 종목</span></div><span class="op">=</span>
+          <div class="term res"><span class="n num">2,020</span><span class="l">발표 × 자산 조합 · 연구 구간</span></div>
+        </div>
+        <div class="under">
+          <div class="row"><span class="k">저장된 SIP 1분봉 (DB unique)</span><span class="v">308,512</span></div>
+          <div class="row"><span class="k">파생 3분봉 / 5분봉 (실제 1분봉만 집계)</span><span class="v">112,593 / 70,090</span></div>
+          <div class="row"><span class="k">발표 시점 이용 가능 거시 맥락 (PIT)</span><span class="v">2,020</span></div>
+        </div>
+      </div>
+      <div class="side">
+        <div class="label">발표 유형 · 2022-01 ~ 2026-08</div>
+        <div class="bars">
+          <div style="width:27.2%;background:#14263D"></div>
+          <div style="width:27.2%;background:#2F4A6B"></div>
+          <div style="width:27.2%;background:#5A7190"></div>
+          <div style="width:18.4%;background:#E56735"></div>
+        </div>
+        <div class="bar-lab">
+          <div style="width:27.2%"><b>CPI</b> 55</div>
+          <div style="width:27.2%"><b>고용</b> 55</div>
+          <div style="width:27.2%"><b>PCE</b> 55</div>
+          <div style="width:18.4%"><b>FOMC</b> 37</div>
+        </div>
+        <div class="label" style="margin-top:34px">10개 자산</div>
+        <div class="syms" style="margin-top:12px">
+          <span>SPY</span><span>QQQ</span><span>IWM</span><span>TLT</span><span>XLF</span><span>SMH</span><span>GLD</span><span>NVDA</span><span>AAPL</span><span>JPM</span>
+        </div>
+        <div class="cap">수집 완료(2,020건 정상 종료)와 관측 품질은 분리해 기록합니다.<br>1분봉 품질: COMPLETE 581 · PARTIAL 1,409 · NO_MARKET_DATA 30.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/evidence/multi-event-expansion/full-expansion-summary.json (2026-09-08) · Alpaca provider-aggregated SIP · Airflow historical backfill</span><span class="n">4</span></div>
+  <aside class="notes">
+의도: 한 개의 지배적 숫자 위계 — 202 × 10 = 2,020. 나머지는 보조.
+숫자는 모두 PRESENTATION_CLAIMS.md: 202(CPI 55/고용 55/PCE 55/FOMC 37), 10 symbols, 2,020 pairs, 1m 308,512, 3m 112,593, 5m 70,090, PIT contexts 2,020.
+주의: 파생봉·선택 합계를 원본 총량과 합산하지 않는다. 736만 Raw SIP와 절대 합치지 않는다. daily 30,270은 event별 선택 합계, DB unique 1d는 11,700 (backup).
+품질 분리: 수집 lifecycle 정상 종료 ≠ 모든 분의 가격 존재. COMPLETE 581 / PARTIAL 1,409 / NO_MARKET_DATA 30.
+35–45초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 5 — RAW SIP ============================ -->
+<section class="slide" data-id="05">
+  <div class="kicker">Validation plane <span class="tag historical">HISTORICAL EXPERIMENT · 2026-08-31</span></div>
+  <h1 class="title">736만 건 Raw SIP를 GCP에서 처리해<br>별도 검증 경로의 부하와 무결성을 확인했습니다</h1>
+  <div class="content sip">
+    <div style="width:790px">
+      <div class="hero-n">7,360,804</div>
+      <div class="hero-l">Raw SIP trades · CPI 55회 × 4종목(SPY·QQQ·SMH·NVDA) · 220 archive partitions</div>
+      <div class="flow">
+        <div class="st"><div class="l">Source</div><div class="t">Raw SIP archive</div><div class="v">7,360,804</div><div class="s">raw input trades</div></div>
+        <div class="st"><div class="l">Kafka</div><div class="t">bounded replay</div><div class="v">7,360,804</div><div class="s">published = consumed</div></div>
+        <div class="st"><div class="l">Spark</div><div class="t">validate · dedup</div><div class="v">7,360,804</div><div class="s">input · invalid 0</div></div>
+        <div class="st out"><div class="l">PostgreSQL</div><div class="t">validation sink</div><div class="v">22,260</div><div class="s">stored bars · dup 0</div></div>
+      </div>
+    </div>
+    <div class="facts">
+      <div class="f"><div class="k">Compute</div><div class="v">GCP Compute Engine e2-standard-4<br>4 vCPU · 16 GB · us-central1-a</div></div>
+      <div class="f"><div class="k">Runtime</div><div class="v">1,690.25초 (≈28분) · 4,355 events/s</div></div>
+      <div class="f"><div class="k">Role</div><div class="v">실험용 compute 환경 (프로덕션 아님)<br>evidence 복사 후 VM 삭제</div></div>
+      <div class="f"><div class="k">Boundary</div><div class="v">202×10 연구 데이터와 별개의 검증 경로</div></div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/evidence/load-recovery/results.json (run gcp-load-20260831) · 당시 Spark duplicate 49는 6번 슬라이드에서 교정</span><span class="n">5</span></div>
+  <aside class="notes">
+의도: 7.36M 한 숫자 지배. 각 단계 parity(published=consumed=Spark input=7,360,804)로 손실 없음을 보임.
+GCP 표현: "GCP Compute Engine 기반 대용량 부하·장애·복구 검증". 절대 "GCP production deployment / Cloud Run / Cloud SQL" 아님. VM은 evidence 복사 후 삭제.
+당시 run에는 Spark duplicates 49가 기록됨 → 다음 슬라이드에서 false positive로 교정. 여기서 "0"이라고 앞서 말하지 않는다 (DB business-key duplicate는 당시에도 0).
+이 데이터는 CPI 55회 × 4종목 raw trades. 연구 데이터셋(202×10 bar)과 혼동 금지.
+runtime을 로컬 v2(18.7초/118,118건)와 성능 비교하지 않는다 — 다른 환경·입력.
+55–65초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 6 — FALSE DUPLICATES ============================ -->
+<section class="slide" data-id="06">
+  <div class="kicker">Engineering incident <span class="tag historical">HISTORICAL CORRECTION · 2026-09-01</span></div>
+  <h1 class="title">49건의 이상치를 중복으로 처리하지 않고<br>식별자 설계 오류까지 추적해 전체를 재검증했습니다</h1>
+  <div class="content">
+    <div class="inc">
+      <div class="step">
+        <div class="no">01 · OBSERVATION</div>
+        <div class="big">49</div>
+        <div class="t">Spark가 보고한<br>"duplicate" 레코드</div>
+        <div class="d">7,360,804건 GCP 부하 실행에서 발생. 실제 시장 중복 거래인지 확인되지 않은 상태.</div>
+      </div>
+      <div class="step hl">
+        <div class="no">02 · ROOT CAUSE</div>
+        <div class="t" style="margin-top:0">event identity에<br><span class="accent">exchange</span>가 빠져 있었다</div>
+        <div class="d">원본 payload를 추적한 결과, 거래소가 다른 체결이 같은 provider_trade_id·timestamp를 가질 수 있어 동일 event_id로 충돌.</div>
+        <div class="ident">source · feed · event_type<br>symbol · <span class="miss">exchange</span> · provider_trade_id<br>event_timestamp</div>
+      </div>
+      <div class="step hl">
+        <div class="no">03 · FIX</div>
+        <div class="t" style="margin-top:0">식별자에 exchange 추가<br>+ 단위 테스트 고정</div>
+        <div class="d">같은 체결의 재생은 같은 event_id, 다른 거래소는 다른 event_id가 되도록 계약을 테스트로 고정.</div>
+        <div class="ident">source · feed · event_type<br>symbol · <span class="add">exchange</span> · provider_trade_id<br>event_timestamp</div>
+      </div>
+      <div class="step">
+        <div class="no">04 · FULL REVALIDATION</div>
+        <div class="big zero">0</div>
+        <div class="t">7,360,804건 전체 archive<br>재스캔 + 파이프라인 재실행</div>
+        <div class="d">identity collision 0 · Spark duplicate 0 · DB business-key duplicate 0. 데이터를 지우지 않고 설계를 고쳤다.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/evidence/pipeline-review/event-identity-correction.json · corrected-load-run.json · 49건은 실제 중복 거래로 입증된 적이 없음</span><span class="n">6</span></div>
+  <aside class="notes">
+의도: 관측 → 원인 → 수정 → 전체 재검증. 가장 강한 엔지니어링 슬라이드.
+핵심 문장: "이상치 49건을 실제 중복으로 처리하지 않고 원본 payload까지 추적한 결과, exchange가 빠진 식별자 설계 문제를 발견했고, 식별자 수정 후 736만 건 전체를 다시 검증했습니다."
+금지: "49개 중복 거래를 제거했다." — 실제 중복 시장 거래로 입증되지 않았다. 잘못 dedup했다면 진짜 거래를 잃었을 것.
+증거: previous identity fields 6개 collisions 49 → corrected 7개(exchange 추가) collisions 0; full archive scan 7,360,804 rows; full pipeline rerun published=consumed=Spark input=7,360,804, Spark duplicates 0.
+60–75초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 7 — FAILURE / RECOVERY ============================ -->
+<section class="slide" data-id="07">
+  <div class="kicker">Failure injection <span class="tag historical">HISTORICAL EXPERIMENT · 2026-08-31 · GCP</span></div>
+  <h1 class="title">DB 장애를 직접 주입하고, 동일 입력을 재처리해<br>결과 무결성을 다시 확인했습니다</h1>
+  <div class="content rec">
+    <div class="steps">
+      <div class="track"><div class="seg ok" style="left:0;width:33%"></div><div class="seg bad" style="left:33%;width:34%"></div><div class="seg ok" style="left:67%;width:33%"></div></div>
+      <div class="ev"><div class="l">01 · Normal</div><div class="t">정상 replay</div><div class="dot"></div>
+        <div class="below"><b>118,118 → 472</b>Kafka published = consumed<br>Spark output = DB stored bars</div></div>
+      <div class="ev bad"><div class="l">02 · Fault</div><div class="t">PostgreSQL 의도적 중단</div><div class="dot"></div>
+        <div class="below"><b>OperationalError</b>동일 118,118건 입력<br>write 실패 · 저장 0행 · run failed</div></div>
+      <div class="ev"><div class="l">03 · Recover</div><div class="t">DB 복구 후 동일 입력 재처리</div><div class="dot"></div>
+        <div class="below"><b>118,118 → 472</b>같은 입력 replay<br>Spark duplicate 0</div></div>
+      <div class="ev"><div class="l">04 · Verify</div><div class="t">무결성 재확인</div><div class="dot"></div>
+        <div class="below"><b>hash 동일</b>결과 hash before = after<br>DB business-key duplicate 0</div></div>
+    </div>
+    <div class="result">
+      <div class="r"><div class="k">Result hash · before / after</div><div class="v mono">85ba8d31…39d4 = 85ba8d31…39d4</div></div>
+      <div class="r"><div class="k">DB business-key duplicates</div><div class="v">0 <span style="font-size:16px;font-weight:500;color:var(--gray-2)">· 최종 22,260 bars 기준</span></div></div>
+      <div class="r"><div class="k">Failed attempt residue</div><div class="v">0 rows <span style="font-size:16px;font-weight:500;color:var(--gray-2)">· 부분 쓰기 없음</span></div></div>
+    </div>
+    <div class="bound">이 결과는 <b>해당 bounded experiment 범위</b>의 upsert/replay 복구 증거입니다. Kafka 전역 exactly-once 보장이나 모든 분산 장애 모드의 해결을 의미하지 않습니다.</div>
+  </div>
+  <div class="footer"><span>docs/evidence/load-recovery/results.json (gcp-baseline · gcp-db-failure · gcp-db-recovered) · 02-failure-and-recovery.png</span><span class="n">7</span></div>
+  <aside class="notes">
+의도: NORMAL → DB DOWN → FAILURE DETECTED → RESTORED → REPLAY → SAME RESULT / DUP 0.
+문장: "DB sink 장애를 의도적으로 발생시키고 동일 입력을 재처리해 bounded experiment 범위에서 결과 무결성을 확인했습니다."
+증거: baseline 118,118→472 (76.5s); db-failure: OperationalError, postgres_stored_bars 0, status failed; db-recovered: 118,118→472, spark_duplicates 0, DB dup 0; same_input_result_hash before/after 85ba8d3153a1bbbd6277f969ecce39d4 동일.
+금지: "global exactly-once", "모든 장애 모드 해결".
+50–65초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 8 — PIT / SESSION FOUNDATION ============================ -->
+<section class="slide" data-id="08">
+  <div class="kicker">Correctness foundation <span class="tag foundation">FOUNDATION · schema · contracts · tests</span></div>
+  <h1 class="title">"발표 후 N분" 분석에서 벗어나, 발표 당시 알 수 있었던 정보와<br>실제 거래 세션을 기준으로 분석 계약을 재설계했습니다</h1>
+  <div class="content pit">
+    <svg viewBox="0 0 1142 330" font-family="Pretendard,'Noto Sans KR',sans-serif">
+      <!-- ===== upper band: PIT consensus ===== -->
+      <text x="0" y="16" font-size="13" font-weight="700" fill="#5B6570" letter-spacing="1.4">POINT-IN-TIME CONSENSUS · provider-local</text>
+      <line x1="0" y1="72" x2="1142" y2="72" stroke="#C9C5BD" stroke-width="1.5"/>
+      <!-- snapshots -->
+      <g font-size="12" fill="#5B6570">
+        <circle cx="120" cy="72" r="7" fill="#C9C5BD"/><text x="120" y="102" text-anchor="middle">snapshot T-30d</text>
+        <circle cx="300" cy="72" r="7" fill="#C9C5BD"/><text x="300" y="102" text-anchor="middle">snapshot T-7d</text>
+        <circle cx="480" cy="72" r="9" fill="#14263D"/><text x="480" y="102" text-anchor="middle" font-weight="700" fill="#14263D">latest valid · marker 직전</text>
+        <circle cx="700" cy="72" r="7" fill="#FFFFFF" stroke="#E56735" stroke-width="2" stroke-dasharray="3 2"/><text x="700" y="102" text-anchor="middle" fill="#B84E23">marker 이후 snapshot · 제외</text>
+      </g>
+      <!-- selection bracket -->
+      <path d="M480 50 L480 40 L600 40" stroke="#14263D" stroke-width="1.5" fill="none"/>
+      <text x="606" y="44" font-size="13" fill="#14263D" font-weight="600">selected consensus → surprise = actual − consensus</text>
+      <!-- marker (vertical line spanning both bands) -->
+      <line x1="600" y1="26" x2="600" y2="300" stroke="#E56735" stroke-width="2.5"/>
+      <rect x="546" y="118" width="108" height="24" rx="3" fill="#E56735"/>
+      <text x="600" y="135" font-size="12.5" font-weight="700" fill="#FFFFFF" text-anchor="middle">공식 발표 marker</text>
+      <text x="600" y="160" font-size="11.5" fill="#B84E23" text-anchor="middle">corrections = 새 revision · 원본 보존</text>
+
+      <!-- ===== lower band: sessions ===== -->
+      <text x="0" y="192" font-size="13" font-weight="700" fill="#5B6570" letter-spacing="1.4">TRADING SESSIONS · America/New_York · verified calendar snapshot</text>
+      <g font-size="13">
+        <!-- day D -->
+        <rect x="0" y="206" width="180" height="46" fill="#ECEAE4"/>
+        <text x="90" y="234" text-anchor="middle" fill="#5B6570">CLOSED</text>
+        <rect x="180" y="206" width="140" height="46" fill="#DDE3EB"/>
+        <text x="250" y="234" text-anchor="middle" fill="#14263D">PRE_MARKET</text>
+        <rect x="320" y="206" width="380" height="46" fill="#14263D"/>
+        <text x="510" y="234" text-anchor="middle" fill="#FFFFFF" font-weight="700">REGULAR 09:30–16:00</text>
+        <rect x="700" y="206" width="120" height="46" fill="#DDE3EB"/>
+        <text x="760" y="234" text-anchor="middle" fill="#14263D">POST_MARKET</text>
+        <rect x="820" y="206" width="80" height="46" fill="#ECEAE4"/>
+        <text x="860" y="234" text-anchor="middle" fill="#5B6570">CLOSED</text>
+        <!-- next session -->
+        <rect x="900" y="206" width="242" height="46" fill="#5A7190"/>
+        <text x="1021" y="234" text-anchor="middle" fill="#FFFFFF" font-weight="700">S+1 REGULAR</text>
+      </g>
+      <!-- S0 bracket -->
+      <path d="M320 262 L320 272 L700 272 L700 262" stroke="#14263D" stroke-width="1.5" fill="none"/>
+      <text x="320" y="292" font-size="13" font-weight="700" fill="#14263D">S0 = marker를 흡수할 수 있는 첫 실제 거래 세션</text>
+      <!-- marker in regular -> S0 same day annotation -->
+      <text x="612" y="180" font-size="11.5" fill="#B84E23">REGULAR 중 발표 → S0 = 당일</text>
+      <!-- phase mapping -->
+      <g font-size="12" fill="#5B6570">
+        <text x="180" y="272">PRE_MARKET → S0 당일</text>
+        <text x="700" y="292" fill="#5B6570">POST_MARKET / CLOSED → S0 = 다음 세션</text>
+      </g>
+      <!-- S+N -->
+      <text x="1021" y="272" font-size="12" fill="#5B6570" text-anchor="middle">S+1 / S+3 / S+7 · 주말·휴장 건너뜀</text>
+      <!-- weekend/holiday note -->
+      <text x="0" y="322" font-size="12" fill="#8A8A87">Reaction-v2 metrics: OPEN_GAP · OPEN_30M · OPEN_60M · EVENT_TO_CLOSE · SESSION_RETURN_S0 · S0_CLOSE_TO_S+1/+3/+7_CLOSE — typed contract, historical backfill은 target</text>
+    </svg>
+    <div class="notes3">
+      <div class="n3"><div class="k">No future leakage</div><div class="t">marker <b>직전</b>의 provider별 최신 consensus만 선택. 합성 consensus 없음. 나중에 수정된 actual은 <b>append-only revision</b>으로 보존.</div></div>
+      <div class="n3"><div class="k">Session-aware reaction</div><div class="t">발표가 장전·장중·장후·휴장 중 언제였는지에 따라 <b>S0</b>가 달라집니다. 단순 "발표 후 N분"이 아닌 실제 거래 가능 세션 기준.</div></div>
+      <div class="n3"><div class="k">Quality ≠ collection</div><div class="t">수집 완료 · 시장 상태 · 관측 커버리지 · 분석 적격성을 <b>서로 다른 축</b>으로 기록. PARTIAL은 채우지 않고 그대로 보존.</div></div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/architecture/data-contracts.md · research-contracts.md · migration 009 · 51 semantic counterexample tests green (T01–T51) · 운영 데이터 적재는 target</span><span class="n">8</span></div>
+  <aside class="notes">
+의도: PIT/session 타임라인 하나가 지배. 비전문가도 "미래 정보를 안 쓴다 + 실제 거래 세션 기준"을 이해하도록.
+반드시 강조: 이 슬라이드는 FOUNDATION. schema(migration 009)·pure contracts·tests(T01–T51 51개, Python 318 / PG 46 / UI 6)로 검증됐지만 production adapter로 채워진 운영 데이터가 아니다. Reaction-v2 historical backfill 미완. 현재 화면 수치는 legacy v1(4 windows).
+계약 요점: select_canonical_prerelease_consensus = 해당 provider의 snapshot_at이 현재 primary marker "strictly before"인 최신 하나. provider 혼합 금지. surprise = actual − consensus, 초기 observation은 marker 이전 발표 불가. marker 수정은 새 revision(append-only).
+세션: PRE_MARKET/REGULAR → S0 당일, POST_MARKET/MARKET_CLOSED → 다음 세션. S+1/+3/+7은 verified calendar snapshot 행을 세어 주말·휴장 건너뜀.
+70–85초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 9 — PRODUCT + C/F/T ============================ -->
+<section class="slide" data-id="09">
+  <div class="kicker">Product today <span class="tag current">CURRENT · local FastAPI + browser · 2026-09-10 capture</span></div>
+  <h1 class="title">현재 동작하는 연구·검증 제품 위에<br>Event Intelligence foundation까지 구축했습니다</h1>
+  <div class="content" style="top:188px">
+    <div class="prod">
+      <div class="main">
+        <div class="shot"><img src="assets/crop-research-chart.png" alt="Research: CPI 2026-07 NVDA 1m bars with official release marker"></div>
+        <div class="cap">Research — CPI 2026-07 · NVDA · 발표 전 60분 ~ 후 120분 1분봉 · 공식 발표 marker</div>
+      </div>
+      <div class="right">
+        <div class="shot"><img src="assets/crop-overview-kpi-top.png" alt="Overview KPI"></div>
+        <div class="cap">Overview — 저장된 연구 규모 (202 · 10 · 2,020 · 308,512 …)</div>
+        <div class="shot" style="width:410px"><img src="assets/crop-research-gate.png" alt="Research only gate"></div>
+        <div class="cap">실행 경계 — RESEARCH_ONLY / NO_TRADE · 자동 주문 DISABLED</div>
+      </div>
+    </div>
+    <div class="cft">
+      <div class="c"><h4>Current <small>운영·실행 증거 있음</small></h4><ul>
+        <li>공식 일정 · Alpaca SIP bars · FRED/ALFRED ingestion</li>
+        <li>legacy 4-window impact · 탐색 전략 · 조회 화면</li>
+        <li>분리된 Raw SIP Kafka/Spark validation sink</li>
+        <li>manual Alpaca Paper · accepted→canceled · fill 0</li></ul></div>
+      <div class="c f"><h4>Foundation <small>schema · contracts · tests</small></h4><ul>
+        <li>canonical event identity · append-only revisions</li>
+        <li>provider-local PIT consensus · surprise semantics</li>
+        <li>calendar snapshots · sessions · S0/S+N planner</li>
+        <li>Reaction-v2 typed metrics · quality taxonomy</li></ul></div>
+      <div class="c t"><h4>Target <small>미구현</small></h4><ul>
+        <li>observation · consensus production adapters</li>
+        <li>Reaction-v2 backfill · macro regime · comparables</li>
+        <li>registered hypothesis · time-split simulator</li>
+        <li>Paper fills/positions/risk · managed 배포</li></ul></div>
+    </div>
+  </div>
+  <div class="footer"><span>capture: local app, port 8018, research PostgreSQL read-only, Paper writes disabled · docs/engineering/current-vs-target.md</span><span class="n">9</span></div>
+  <aside class="notes">
+의도: 실제 제품 화면 하나 지배(Research chart) + 작은 crop 2개, 그 아래 Current / Foundation / Target 3열.
+화면: 로컬 FastAPI + browser. Overview / Research / Pipelines / Paper Execution 4개 화면. 외부 API 호출 없이 PostgreSQL 저장 결과만 읽음.
+Paper: guarded manual Alpaca Paper 경계. 실제 probe: 주문 1건 accepted → canceled, filled_qty 0. 체결·포지션 대사·수익은 검증되지 않음. research 신호가 자동 주문으로 변환되지 않음.
+Foundation ≠ 운영 기능. Target은 미구현이라고 명확히.
+55–70초.
+  </aside>
+</section>
+
+<!-- ============================ SLIDE 10 — CONCLUSION ============================ -->
+<section class="slide dark" data-id="10">
+  <div class="hero-kicker">Conclusion</div>
+  <div class="hero-title" style="top:150px;right:140px;font-size:44px">목표는 수익을 포장하는 것이 아니라,<br>투자 가설을 <em>확인하거나 기각할 수 있는 환경</em>을<br>만드는 것입니다</div>
+  <div class="life">
+    <div class="s"><div class="k">EVENT</div><div class="t">공식 발표 · 예상 · 실제</div></div>
+    <div class="s"><div class="k">EVIDENCE</div><div class="t">당시 정보 · 실제 가격 반응</div></div>
+    <div class="s"><div class="k">INTERPRET</div><div class="t">이례성 · 지속성 · 거시 맥락</div></div>
+    <div class="s dim"><div class="k">HYPOTHESIS · TARGET</div><div class="t">등록 가설 · 과거 시뮬레이션</div></div>
+    <div class="s dim"><div class="k">VALIDATION · TARGET</div><div class="t">forward Paper · 기각/채택</div></div>
+  </div>
+  <div class="conc-note">
+    <div class="b"><div class="k">현재 시스템이 실제로 낸 결과</div><div class="t">legacy 탐색 전략은 10 bp 비용 후 평균 <b>−0.15649%</b>, 양수 비율 <b>39.336%</b>. 이는 숨길 실패가 아니라, <b>약한 가설을 기각한 사례</b>입니다.</div></div>
+    <div class="b"><div class="k">제품 방향</div><div class="t">재현 가능한 증거로 <b>더 나은 근거의 투자 판단</b>을 돕는 것. 수익을 약속하지 않으며, 보이는 결과를 만들어내지 않습니다.</div></div>
+  </div>
+  <div class="footer"><span>docs/evidence/multi-event-expansion/event-analysis.json (2026-09-08) · 흐린 단계(HYPOTHESIS · VALIDATION)는 target</span><span class="n">10</span></div>
+  <aside class="notes">
+의도: 결론 문장 지배. EVENT → EVIDENCE → INTERPRET → HYPOTHESIS → VALIDATION 생애주기 중 뒤의 두 단계는 target(흐리게).
+음수 결과를 숨기지 않는다: -0.15649% / 39.336%는 과거 관측 평균이며 기대수익률·portfolio return이 아니다. "좋은 플랫폼은 수익을 꾸미지 않고 약한 가설을 기각한다."
+마무리: 재현 가능한 증거로 더 나은 근거의 투자 판단. 수익 보장 없음.
+35–50초.
+  </aside>
+</section>
+
+<!-- ============================ BACKUP A — NUMBERS ============================ -->
+<section class="slide" data-id="B1">
+  <div class="kicker">Backup A <span class="tag historical">EVIDENCE LEDGER</span></div>
+  <h1 class="title">숫자와 실행일 정본</h1>
+  <div class="content" style="top:132px">
+    <table class="ev">
+      <tr><th style="width:300px">항목</th><th style="width:210px">값</th><th>의미 · 경계</th><th style="width:120px">증거일</th></tr>
+      <tr><td>공식 발표 / 종목 / 조합</td><td class="n">202 / 10 / 2,020</td><td class="s">CPI 55 · Employment 55 · PCE 55 · FOMC 37 · 2022-01 ~ 2026-08</td><td class="s">2026-09-08</td></tr>
+      <tr><td>1m research bars (DB unique)</td><td class="n">308,512</td><td class="s">Alpaca provider-aggregated SIP · Raw SIP 736만과 합산 금지</td><td class="s">2026-09-08</td></tr>
+      <tr><td>derived 3m / 5m</td><td class="n">112,593 / 70,090</td><td class="s">실제 1m만 집계 · forward fill 없음 · PARTIAL 보존</td><td class="s">2026-09-08</td></tr>
+      <tr><td>event-selected daily / DB unique 1d</td><td class="n">30,270 / 11,700</td><td class="s">event별 선택 합계 vs 실제 저장 행 · 30,250은 stale</td><td class="s">2026-09-08</td></tr>
+      <tr><td>PIT macro contexts</td><td class="n">2,020</td><td class="s">FRED/ALFRED · 발표 시점 이용 가능 거시 맥락 · surprise 아님</td><td class="s">2026-09-08</td></tr>
+      <tr><td>legacy impact / strategy rows</td><td class="n">8,080 / 2,020</td><td class="s">202×10×4 windows · 계산 가능 1,988 · Reaction-v2 아님</td><td class="s">2026-09-08</td></tr>
+      <tr><td>legacy mean after 10 bp / positive ratio</td><td class="n">−0.15649% / 39.336%</td><td class="s">과거 관측 평균 · 기대수익률 아님 · 가설 기각 사례</td><td class="s">2026-09-08</td></tr>
+      <tr><td>1m observed quality</td><td class="n">581 / 1,409 / 30</td><td class="s">COMPLETE / PARTIAL / NO_MARKET_DATA · 수집 완료 2,020과 분리</td><td class="s">2026-09-08</td></tr>
+      <tr class="h"><td>Raw SIP GCP load</td><td class="n">7,360,804</td><td class="s">CPI 55 × 4종목 · 22,260 bars · 1,690.25 s · e2-standard-4 · VM 삭제</td><td class="s">2026-08-31</td></tr>
+      <tr><td>identity correction</td><td class="n">49 → 0</td><td class="s">exchange 누락 false-positive collision · 전체 archive 재검증</td><td class="s">2026-09-01</td></tr>
+      <tr><td>DB failure / recovery</td><td class="n">118,118 → 472</td><td class="s">OperationalError · 0 rows · 복구 후 동일 hash · dup 0</td><td class="s">2026-08-31</td></tr>
+      <tr><td>Airflow market / macro run</td><td class="n">522.660 s / 14.835 s</td><td class="s">202 mapped tasks · 2,020 DB work items · 상시 스케줄 아님</td><td class="s">2026-09-03</td></tr>
+      <tr><td>foundation verification</td><td class="n">51 · 318 · 46 · 6</td><td class="s">counterexamples T01–T51 · Python(263 pass+55 skip) · PostgreSQL · UI</td><td class="s">2026-09-10</td></tr>
+    </table>
+  </div>
+  <div class="footer"><span>docs/presentation/final/PRESENTATION_CLAIMS.md · 모든 값은 claims ledger에서 복사</span><span class="n">B1</span></div>
+  <aside class="notes">모든 수치는 PRESENTATION_CLAIMS.md의 evidence date와 함께 사용. 질문 시 이 표로 답한다.</aside>
+</section>
+
+<!-- ============================ BACKUP B — AIRFLOW / VALIDATION DETAIL ============================ -->
+<section class="slide" data-id="B2">
+  <div class="kicker">Backup B <span class="tag current">CURRENT CODE</span><span class="tag historical">RUNS 2026-09-03 / 09-08</span></div>
+  <h1 class="title">Airflow는 통제된 historical workflow이며,<br>시장 DAG는 202 mapped tasks · 2,020 DB work items입니다</h1>
+  <div class="content">
+    <div class="bk-grid">
+      <div>
+        <h3>DAG 4개 · schedule=None · catchup=False · max_active_runs=1</h3>
+        <div class="list">
+          <div class="it"><div class="k">market_context_backfill_pipeline</div><div class="v">발표별 mapped task <b>202</b>개 → 각 task가 10종목 처리 → <b>2,020</b> DB work items<small>2026-09-03 run 522.660 s · SUCCEEDED · 경고 40 / 실패 0</small></div></div>
+          <div class="it"><div class="k">macro_context_backfill_pipeline</div><div class="v">FRED/ALFRED PIT 거시 맥락 · 2,020 context rows<small>2026-09-03 run 14.835 s</small></div></div>
+          <div class="it"><div class="k">market_context_backfill_orchestrator</div><div class="v">TriggerDagRun partial/expand · 발표 유형별 conf로 시장 DAG 호출</div></div>
+          <div class="it"><div class="k">market_sip_replay_pipeline</div><div class="v">Raw SIP replay → Kafka consumer → Spark → validation PostgreSQL · validation plane 전용</div></div>
+        </div>
+        <div class="small" style="margin-top:18px;font-size:15px">"2,020 Airflow mapped tasks"가 아닙니다. mapped task는 발표(202) 단위, work item은 발표×종목(2,020) 단위입니다.</div>
+      </div>
+      <div>
+        <h3>Validation plane · bounded routing 증거</h3>
+        <div class="list">
+          <div class="it"><div class="k">GCP symbol-key routing (v1)</div><div class="v">3 partitions · 최대 파티션 비중 <b>97.53%</b><small>2026-08-31 · 7,360,804 trades · e2-standard-4</small></div></div>
+          <div class="it"><div class="k">Local v2 routing</div><div class="v">6 partitions · 최대 파티션 비중 <b>33.92%</b><small>2026-09-03 · 118,118 trades · 18.67 s · 별도 환경 — throughput 비교 아님</small></div></div>
+          <div class="it"><div class="k">Validation sink</div><div class="v">validation_runs (immutable) · validation_reconstructed_bars<small>research market_bars와 물리적 분리 · migration 009</small></div></div>
+          <div class="it"><div class="k">Safe local faults</div><div class="v">mocked API 503→retry · invalid input→corrected rerun · DB unavailable→health query</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/engineering/airflow-audit.md · dags/*.py · docs/evidence/multi-event-expansion/airflow-full-run.json · load-recovery/v2-partition-routing.json</span><span class="n">B2</span></div>
+  <aside class="notes">DAG 설정은 현재 dags/*.py 코드에서 확인(schedule=None, catchup=False, max_active_runs=1). 파티션 skew 비교는 서로 다른 환경·입력이므로 "bounded validation에서 skew 감소"까지만.</aside>
+</section>
+
+<!-- ============================ BACKUP C — CAPABILITY MATRIX ============================ -->
+<section class="slide" data-id="B3">
+  <div class="kicker">Backup C <span class="tag current">CURRENT</span><span class="tag foundation">FOUNDATION</span><span class="tag target">TARGET</span></div>
+  <h1 class="title">Current / Foundation / Target 상세 capability matrix</h1>
+  <div class="content" style="top:132px">
+    <table class="matrix">
+      <tr><th style="width:170px">Capability</th><th class="c" style="width:300px">Current (운영·증거)</th><th class="f" style="width:330px">Foundation (schema·contracts·tests)</th><th class="t">Target (미구현)</th></tr>
+      <tr><td class="k">Release events</td><td>legacy catalog · 202-event backfill</td><td class="f">canonical identity · append-only lifecycle</td><td class="t">official change adapter</td></tr>
+      <tr><td class="k">Official actual revisions</td><td>legacy scalar fields</td><td class="f">observation ontology · revisions</td><td class="t">production adapters · backfill</td></tr>
+      <tr><td class="k">Consensus / surprise</td><td>운영 경로 없음</td><td class="f">provider-local PIT selector · immutable surprise lineage</td><td class="t">historical provider ingestion · population</td></tr>
+      <tr><td class="k">Research market bars</td><td>Alpaca provider SIP · 308,512 1m</td><td class="f">source/feed/version isolation</td><td class="t">stricter collection conflict policy</td></tr>
+      <tr><td class="k">Raw SIP validation</td><td>bounded replay · 7.36M historical</td><td class="f">immutable validation run/bar lineage</td><td class="t">managed object storage · workers</td></tr>
+      <tr><td class="k">Sessions / S0</td><td>legacy release-relative</td><td class="f">snapshot · session · marker planner</td><td class="t">operational calendar adapter · persistence</td></tr>
+      <tr><td class="k">Reaction metrics</td><td>legacy 4 windows · 8,080 rows</td><td class="f">typed Reaction-v2 contract</td><td class="t">recomputation · backfill · serving</td></tr>
+      <tr><td class="k">Comparable events</td><td>—</td><td class="f">deterministic outline/contract</td><td class="t">computation · serving</td></tr>
+      <tr><td class="k">Strategy validation</td><td>1 exploratory rule · negative mean</td><td class="f">hypothesis/simulation contract</td><td class="t">time-split simulator · cost registry</td></tr>
+      <tr><td class="k">Serving UI</td><td>local FastAPI · browser</td><td class="f">resource boundary docs</td><td class="t">authenticated managed deployment</td></tr>
+      <tr><td class="k">Paper execution</td><td>manual submit/reconcile/cancel · fill 0</td><td class="f">journal · idempotency boundary</td><td class="t">fills · positions · outcomes · risk · automation</td></tr>
+      <tr><td class="k">Operations</td><td>controlled historical DAGs</td><td class="f">target contracts · audits</td><td class="t">schedules · SLAs · observability</td></tr>
+    </table>
+  </div>
+  <div class="footer"><span>docs/presentation/final/PRESENTATION_TRUTH.md capability matrix · docs/engineering/current-vs-target.md</span><span class="n">B3</span></div>
+  <aside class="notes">PRESENTATION_TRUTH.md capability matrix 축약. Foundation은 운영 데이터 경로가 아님을 반복.</aside>
+</section>
+
+<!-- ============================ BACKUP D — PAPER + VERIFICATION ============================ -->
+<section class="slide" data-id="B4">
+  <div class="kicker">Backup D <span class="tag current">CURRENT</span><span class="tag historical">PROBE 2026-09-07 · VERIFICATION 2026-09-10</span></div>
+  <h1 class="title">Paper 경계는 수동·guarded이며,<br>검증된 것과 검증되지 않은 것을 구분합니다</h1>
+  <div class="content">
+    <div class="bk-grid">
+      <div>
+        <h3>Alpaca Paper boundary</h3>
+        <div class="list">
+          <div class="it"><div class="k">경계 성격</div><div class="v">사용자가 직접 입력 · 검토 · 확인하는 Alpaca Paper 전용 경계<small>ENABLE_PAPER_WEB_ORDERS 미설정 시 review까지만 · writes disabled</small></div></div>
+          <div class="it"><div class="k">실제 probe 결과</div><div class="v">주문 1건 <b>accepted → canceled</b> · filled_qty <b>0</b> · 동일 요청 재제출은 idempotent<small>PostgreSQL journal_rows 1 · state canceled</small></div></div>
+          <div class="it"><div class="k">검증되지 않음</div><div class="v">부분/전체 체결 · 포지션 대사 · 실거래 · 전략 수익성</div></div>
+          <div class="it"><div class="k">자동화</div><div class="v">research 신호 → 주문 자동 변환 <b>없음</b> · release-level execution lock</div></div>
+        </div>
+      </div>
+      <div>
+        <h3>PR #36 foundation verification · 2026-09-10</h3>
+        <div class="list">
+          <div class="it"><div class="k">Semantic counterexamples</div><div class="v"><b>51</b> required · 51 present · 51 green (T01–T51)<small>T35–T51은 최소 수정 전 RED 확인</small></div></div>
+          <div class="it"><div class="k">Python</div><div class="v"><b>318</b> tests · 263 pass · 55 opt-in integration skip · 0 fail</div></div>
+          <div class="it"><div class="k">PostgreSQL 17.6</div><div class="v"><b>46</b> behavior tests pass · migrations 001..009 fresh apply · 009 재적용 PASS</div></div>
+          <div class="it"><div class="k">UI / CI</div><div class="v"><b>6</b> Node UI tests pass · merge commit push CI success</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"><span>docs/paper-execution.md · docs/evidence/paper-execution/actual-paper-probe.json · docs/evidence/architecture-pass-2026-09-10/verification.json</span><span class="n">B4</span></div>
+  <aside class="notes">Paper: accepted→canceled fill 0만 검증. 체결·포지션·수익 미검증. 검증 수치는 verification.json.</aside>
+</section>
+
+</body>
+</html>
