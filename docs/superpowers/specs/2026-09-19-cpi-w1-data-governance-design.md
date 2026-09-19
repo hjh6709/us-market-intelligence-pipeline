@@ -314,11 +314,18 @@ Required concepts:
 
 Run state and outcome remain separate.
 
-Candidate run states:
+W1 run states:
 
 - CREATED
 - RUNNING
 - TERMINAL
+
+Allowed run transitions:
+
+- CREATED -> RUNNING;
+- CREATED -> TERMINAL only for a pre-execution NO_WORK or terminal orchestration failure;
+- RUNNING -> TERMINAL;
+- TERMINAL has no outgoing transition.
 
 Run outcomes:
 
@@ -352,11 +359,22 @@ Unique identity:
 
 - run_id + work_key.
 
-Candidate work states:
+W1 work states:
 
 - PENDING
 - CLAIMED
 - TERMINAL
+
+Allowed work behavior:
+
+- new executable work starts PENDING;
+- a claim moves PENDING -> CLAIMED and increments claim_generation;
+- a worker holding the current claim may terminalize CLAIMED -> TERMINAL;
+- a retryable attempt may return CLAIMED -> PENDING with next_claim_at and without changing business identity;
+- an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
+- TERMINAL has no outgoing transition.
+
+SKIP LOCKED or equivalent claim SQL is only a queue primitive. It does not define business-data consistency.
 
 Work outcomes:
 
@@ -387,7 +405,21 @@ Unique identity:
 
 - work_item_id + attempt_number.
 
-claim_generation and attempt number advance together as a transaction-level workflow invariant. No business truth depends on attempt number.
+W1 attempt states:
+
+- RUNNING
+- TERMINAL
+
+Attempt outcomes when TERMINAL:
+
+- SUCCEEDED
+- FAILED
+- QUARANTINED
+- DATA_NOT_AVAILABLE
+
+SKIPPED is a work-level terminal outcome and does not require manufacturing an execution attempt when no execution occurred.
+
+claim_generation and attempt_number advance together when a new execution ownership generation starts. A stale attempt can finish logging locally, but it cannot mutate work state or canonical evidence after losing the current claim generation. No business truth depends on attempt number.
 
 ### 11.4 Scope and domain integrity
 
@@ -432,7 +464,7 @@ Object storage may still use content hashes inside physical keys, but storage de
 
 retrieval_url is forensic provenance only. It is not automatically product-safe or stable.
 
-Candidate content states:
+W1 content states:
 
 - RETAINED
 - NOT_RETAINED
@@ -741,7 +773,7 @@ interpretation_subjects provides a stable governance target identity for exactly
 
 Identity nodes such as core_event_occurrences and event_disclosures are not directly invalidated. Incorrect topology or interpretation is removed from serving through governed evidence relations.
 
-The evidence row's own UUID should be reused as the subject UUID where practical to avoid duplicate identity proliferation.
+For every W1 governable evidence row, the evidence row UUID is the interpretation_subjects.subject_id. No second governance UUID is created. subject_type disambiguates the governed evidence type and composite integrity rules bind the subject to the corresponding typed row.
 
 ### 22.2 Requests
 
