@@ -1045,18 +1045,38 @@ Neither is the request timestamp.
 
 Representation identity must be derived from served semantics, not server instance, latency, trace ID, or request time.
 
-## 27. Idempotency and transaction boundaries
+## 27. Promotion families, idempotency, and transaction boundaries
 
-Fetch, parse, and semantic validation occur outside the short canonical promotion transaction.
+Fetch, parse, and semantic validation occur outside short canonical promotion transactions.
 
-The promotion transaction:
+One artifact may safely establish that a release occurred even when its numeric observation surface cannot yet be interpreted. CPI W1 therefore does not use one all-or-nothing promotion outcome for release envelope and observation bundle.
 
-1. verifies work-item fencing/lease ownership;
-2. inserts or verifies event/disclosure/topology evidence, including the exact event-disclosure and disclosure-artifact relations required by downstream assertions;
-3. inserts or verifies the complete CPI observation bundle with provenance links consistent with that topology;
-4. detects idempotence, determinism failure, or evidence conflict;
-5. terminalizes attempt/work state as appropriate;
+Two promotion families are required for the primary CPI release artifact:
+
+1. CPI_RELEASE_ENVELOPE_PROMOTE
+   - validates program identity, reference month, disclosure identity, EVENT_RELEASE topology, RELEASE_REPRESENTATION provenance, and official marker semantics;
+   - may SUCCEED even when observation extraction later quarantines;
+   - atomically inserts or verifies the disclosure, its EVENT_RELEASE link, the disclosure-artifact relation, and marker assertions.
+
+2. CPI_OBSERVATION_BUNDLE_PROMOTE
+   - requires a valid, visible EVENT_RELEASE relation and matching disclosure-artifact relation for the input artifact;
+   - validates and promotes the four CPI W1 observation semantics atomically;
+   - may QUARANTINE without rolling back already accepted release-envelope evidence.
+
+This split is a semantic boundary, not a microservice requirement. Both work families may run in the same promoter codebase and under the same economic-promoter logical writer capability.
+
+For an official corroborating representation such as an eligible same-release XLSX, the representation-provenance step and its observation-bundle promotion are separately identifiable work. A valid conflicting representation may succeed operationally and cause selector CONFLICT; it is not converted into a parser failure.
+
+Each promotion transaction:
+
+1. verifies current work-item fencing/lease ownership;
+2. verifies the artifact, execution scope, data domain, source contract, and extractor contract expected by that work family;
+3. inserts or verifies only that family's immutable evidence;
+4. detects idempotence or same-parse determinism failure;
+5. terminalizes its attempt/work state as appropriate;
 6. commits atomically.
+
+The envelope transaction never inserts partial observation values. The observation-bundle transaction never manufactures missing disclosure topology.
 
 If the worker loses the connection after COMMIT and cannot know the outcome, it does not guess. Retry resolves the outcome using durable identities and existing terminal state.
 
@@ -1077,17 +1097,21 @@ Promoter:
 - interprets validated artifacts;
 - cannot manufacture missing evidence by falling back to direct internet retrieval.
 
-Handoff uses a control-plane/orchestrator path.
+Handoff uses a control-plane/orchestrator path. The collector itself does not need cross-scope mutation rights to create promoter work.
 
 Fast path:
 
-- artifact commit -> authenticated handoff -> promotion work.
+- artifact commit -> authenticated handoff -> orchestrator creates the required promotion-family work items.
 
 Recovery path:
 
-- reconciliation detects retained artifacts lacking expected automatic promotion work and safely creates the missing work.
+- reconciliation detects committed artifacts lacking expected promotion-family work and safely creates the missing work.
 
-Automatic promote-work identity includes artifact identity plus extractor contract version, so duplicate handoffs converge while parser replay remains distinguishable.
+For the primary CPI release HTML, expected automatic work includes both CPI_RELEASE_ENVELOPE_PROMOTE and CPI_OBSERVATION_BUNDLE_PROMOTE.
+
+Automatic promotion-work identity includes artifact identity + promotion-family contract + extractor contract version. Duplicate handoffs therefore converge, while a new extractor version creates an explicit replayable interpretation attempt.
+
+A run may finish PARTIAL when envelope promotion succeeds but observation promotion is QUARANTINED or FAILED. Product release state and observation-resolution state remain independent axes.
 
 ## 29. Ingestion transition authority
 
@@ -1165,6 +1189,7 @@ Canonical selector conformance vectors must include at least:
 - no schedule assertion -> schedule UNRESOLVED;
 - exact schedule before due -> NOT_YET_DUE;
 - exact schedule after due without release -> AWAITING_CONFIRMATION;
+- valid release envelope with quarantined observation bundle -> release DISCLOSED while observations remain UNRESOLVED/WITHHELD by consumer policy;
 - date-only schedule on its source-local date -> DUE_DATE_UNTIMED;
 - canceled schedule -> NO_RELEASE_EXPECTED;
 - canceled selected schedule plus unresolved valid EVENT_RELEASE contradiction -> CONFLICT;
