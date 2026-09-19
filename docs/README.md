@@ -1,17 +1,27 @@
 # Documentation hub
 
-현재 제품 계약과 과거 과제 증거를 분리합니다. 코드·migration·테스트와 아래 **현재 정본**이 우선이며, 날짜가 붙은 문서는 실행 당시 사실을 보존하는 archive입니다.
+현재 구현, CPI W1 목표 계약, 과거 설계와 실행 증거를 분리합니다. 먼저
+[Architecture Authority Index](architecture/AUTHORITY.md)에서 관심사별 권위를
+확인합니다. 날짜가 붙은 문서는 해당 시점의 사실을 보존할 뿐 현재 구현이나
+새 CPI W1 의미를 자동으로 정의하지 않습니다.
 
-## 현재 정본
+## 권위 라우팅
+
+- `CURRENT_IMPLEMENTATION`: 현재 checkout의 코드·migration·테스트
+- `TARGET_CANONICAL`: [2026-09-19 CPI W1 Data & Governance 설계](superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md)
+- `HISTORICAL_SUPERSEDED`: migration 009 및 2026-09-10 target 문서
+- `STATUS_LEDGER`: [현재/목표 진행표](engineering/current-vs-target.md)
+
+## 현재 구현과 호환성 문서
 
 ### Architecture
 
-- [플랫폼 최상위 계약과 target architecture](architecture/platform-contract.md)
-- [현재 시스템과 세 개 plane](architecture/current-system.md)
-- [정본 데이터·품질·lineage 계약](architecture/data-contracts.md)
+- [과거 플랫폼 target 계약](architecture/platform-contract.md) (`HISTORICAL_SUPERSEDED`)
+- [검증된 현재 시스템 snapshot](architecture/current-system.md)
+- [migration 009 데이터·품질·lineage 계약](architecture/data-contracts.md) (`HISTORICAL_SUPERSEDED`)
 - [연구·검증 계약](architecture/research-contracts.md)
-- [운영·저장·배포 계약](architecture/operations-and-deployment.md)
-- [현재와 target 비교](engineering/current-vs-target.md)
+- [과거 운영·저장·배포 target](architecture/operations-and-deployment.md) (`HISTORICAL_SUPERSEDED`)
+- [현재와 target 상태 ledger](engineering/current-vs-target.md)
 - [데이터 출처 catalog](data-source-catalog.md)
 - [Archify 구성도와 검증 receipt](diagrams/README.md)
 - [설정 경계와 current/target 구분](configuration/README.md)

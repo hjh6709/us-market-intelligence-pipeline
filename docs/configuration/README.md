@@ -1,6 +1,11 @@
 # Configuration contract
 
-This page owns configuration boundaries for the **Economic Event Intelligence & Strategy Validation Platform**. It distinguishes configuration already consumed by the repository from target configuration that has no operational adapter yet.
+Status: `CURRENT_IMPLEMENTATION` configuration compatibility plus
+`HISTORICAL_SUPERSEDED` target notes. Executable variable names and behavior remain
+owned by the current code and tests; future CPI W1 and Runtime/Security configuration
+must follow their separate specifications. See [the authority index](../architecture/AUTHORITY.md).
+
+This page records configuration boundaries for the **Economic Event Intelligence & Strategy Validation Platform** at the 2026-09-10 baseline.
 
 ## Current configuration
 
@@ -14,7 +19,7 @@ This page owns configuration boundaries for the **Economic Event Intelligence & 
 
 Variable names and startup commands remain owned by the executable README and `.env.example`. This contract does not publish secret values, account identifiers or provider payloads.
 
-## P1 foundation configuration
+## Historical migration-009 foundation configuration
 
 The new verified-session planner accepts configuration as explicit typed input rather than reading process environment:
 
@@ -27,9 +32,10 @@ The planner does **not** fetch an exchange calendar and is not wired into legacy
 
 The shared quality vocabulary and `event_session_reaction_v2` metric definitions are code contracts in `src/platform_contracts.py`. Coverage thresholds, endpoint tolerances and maturity rules remain versioned research policy; they must not be inferred from provider request success.
 
-## Target-only configuration
+## Historical target-only configuration
 
-The following configuration families are approved target architecture, not current runtime capability:
+The following configuration families are preserved as 2026-09-10 design context,
+not current runtime capability or approved CPI W1/runtime target:
 
 - consensus provider and snapshot cutoff policy;
 - canonical release-observation adapters and revision policy;

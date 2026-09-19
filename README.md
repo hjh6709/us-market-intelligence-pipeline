@@ -10,13 +10,13 @@
 
 ### Architecture
 
-[현재 구현](docs/architecture/current-system.md) · [approved target contract](docs/architecture/platform-contract.md) · [현재와 target 차이](docs/engineering/current-vs-target.md) · [Airflow 실행 계약](docs/engineering/airflow-audit.md)
+[권위 라우팅](docs/architecture/AUTHORITY.md) · [현재 구현 snapshot](docs/architecture/current-system.md) · [CPI W1 canonical target](docs/superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md) · [현재와 target 상태 ledger](docs/engineering/current-vs-target.md) · [Airflow 실행 기록](docs/engineering/airflow-audit.md)
 
-아래 이미지는 구현 완료 그림이 아니라 approved target입니다. 노드의 `CURRENT`, `EVOLVING`, `P1 FOUNDATION` tag와 [현재/target 표](docs/engineering/current-vs-target.md)를 함께 읽어야 합니다. 이어지는 Mermaid는 현재 연결만 설명합니다.
+아래 이미지는 2026-09-10에 작성된 과거 target이며 구현 완료 그림이나 CPI W1 semantic authority가 아닙니다. 노드의 `CURRENT`, `EVOLVING`, `P1 FOUNDATION` tag와 [상태 ledger](docs/engineering/current-vs-target.md)를 함께 읽어야 합니다. 이어지는 Mermaid는 현재 연결만 설명합니다.
 
-[![approved target architecture](docs/diagrams/target-platform.visual-check.1440x900.light.png)](docs/diagrams/target-platform.html)
+[![historical target architecture](docs/diagrams/target-platform.visual-check.1440x900.light.png)](docs/diagrams/target-platform.html)
 
-아래 정적 이미지는 과정 과제에서 사용한 기존 구현 흐름을 보존한 것입니다. approved target이나 최신 완료 범위를 뜻하지 않으며, 판단에는 위 target diagram과 current/target 표를 사용합니다.
+아래 정적 이미지는 과정 과제에서 사용한 기존 구현 흐름을 보존한 것입니다. 최신 완료 범위나 CPI W1 target을 뜻하지 않으며, 판단에는 권위 인덱스와 현재 checkout의 실행 증거를 사용합니다.
 
 ![전체 프로젝트 데이터 파이프라인 아키텍처](docs/diagrams/pipeline-architecture.png)
 
@@ -280,7 +280,7 @@ Normalized event/calendar 테이블은 현재 비어 있는 foundation이며 pro
 - [Paper execution 계약과 증거](docs/paper-execution.md)
 - [최종 테스트·통합·브라우저 검증](docs/evidence/final-portfolio/verification.md)
 - [최종 발표 truth·storyboard·asset handoff](docs/presentation/final/PRESENTATION_TRUTH.md)
-- [현재 아키텍처 재현 원본](docs/presentation/final/CURRENT_ARCHITECTURE.mmd) · [approved target Archify](docs/diagrams/target-platform.html)
+- [현재 아키텍처 재현 원본](docs/presentation/final/CURRENT_ARCHITECTURE.mmd) · [2026-09-10 historical target Archify](docs/diagrams/target-platform.html)
 - [과정 발표 자료와 과거 실행 기록](docs/README.md#과정-아카이브)
 
 현재 구현과 한계의 정본은 코드·migration·테스트와 최신 검증 증거입니다. 날짜가 붙은 과제 자료는 당시 실행을 보존하는 역사 기록이며 현재 계약을 덮어쓰지 않습니다.

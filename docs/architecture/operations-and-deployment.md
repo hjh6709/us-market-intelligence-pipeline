@@ -1,6 +1,9 @@
 # Operational, storage and deployment contract
 
-Status: target contract with explicit current gaps. None of the three target operational DAGs below is implemented by migration 009.
+Status: `HISTORICAL_SUPERSEDED` 2026-09-10 target. The DAGs below are retained as
+historical design context; they are not the production ingestion authority and are
+not implemented by migration 009. Runtime/security target semantics remain
+`NOT_YET_SPECIFIED`; see [the authority index](AUTHORITY.md).
 
 ## Three operational Airflow DAGs
 

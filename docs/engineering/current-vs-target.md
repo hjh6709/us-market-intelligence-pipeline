@@ -1,8 +1,11 @@
-# Current implementation versus approved target
+# Current implementation versus historical target
 
-Baseline revision: `63633a50c85c88e507be458067ecf6706220f813`.
+Status: `STATUS_LEDGER` only. This page records progress and gaps at baseline
+`63633a50c85c88e507be458067ecf6706220f813`; it is not semantic authority and
+cannot override current executable behavior or the CPI W1 canonical target. See
+[the authority index](../architecture/AUTHORITY.md).
 
-| Capability | Implemented now | Foundation added in this pass | Approved target, not yet implemented |
+| Capability | Implemented at baseline | Foundation added in that pass | Historical target, not yet implemented |
 | --- | --- | --- | --- |
 | event lifecycle | historical catalog writes legacy `economic_events` with release-first semantics | exact four-event universe; append-only lifecycle chain, transition checks, idempotency/conflict boundary, current view; no rows populated | official schedule/change adapter and compatibility migration |
 | event facts | legacy scalar event fields and FRED/ALFRED context | immutable canonical identity; exact event/code/unit ontology; append-only official revisions; provider-local consensus selector; historical surprises plus dynamic current-canonical projection; serialized idempotent writes; no rows populated | official/external provider adapters and historical consensus backfill |
