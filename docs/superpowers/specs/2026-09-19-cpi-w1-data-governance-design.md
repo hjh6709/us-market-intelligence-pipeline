@@ -204,12 +204,13 @@ The following clocks are distinct and must never be substituted.
 
 Source chronology selection rules:
 
-1. If all valid schedule materials agree, the schedule is resolved.
-2. If different materials have comparable authoritative source-effective chronology, the later applicable source chronology may supersede earlier schedule evidence.
-3. If source-effective chronology is unavailable but artifacts were captured live, captured_at may order live acquisition evidence when the source contract permits it.
-4. Unknown, date-only, or historical evidences that cannot be safely ordered remain in conflict rather than receiving synthetic times.
-5. accepted_at controls system-known visibility, not historical source chronology.
-6. A replayed old artifact keeps its original captured_at; replay accepted_at must not make it look newly published.
+1. Apply source-contract surface roles before comparing schedule materials. AUTHORITATIVE CPI-schedule evidence is evaluated first; FALLBACK_CORROBORATION never displaces valid authoritative evidence merely because it was captured later.
+2. If all eligible schedule materials at the active authority tier agree, the schedule is resolved.
+3. If different eligible materials at that tier have comparable authoritative source-effective chronology, the later applicable source chronology may supersede earlier schedule evidence.
+4. If source-effective chronology is unavailable but eligible artifacts were captured live, captured_at may order live acquisition evidence only when the source contract explicitly permits it.
+5. Unknown, date-only, or historical evidences that cannot be safely ordered remain in conflict rather than receiving synthetic times.
+6. accepted_at controls system-known visibility, not historical source chronology.
+7. A replayed old artifact keeps its original captured_at; replay accepted_at must not make it look newly published.
 
 ## 9. Physical data model
 
@@ -622,16 +623,17 @@ It is:
       -> permitted official corroboration
       -> canonical promotion
 
-Blocking failures include:
+Blocking interpretation failures include:
 
 - required semantic heading missing;
 - ambiguous row or column mapping;
 - reference-period mismatch;
 - unit mismatch;
 - source text and normalized-decimal mismatch;
-- required observation unresolved;
-- same parse identity producing different material;
-- same-release authoritative representations disagreeing when the source contract marks that comparison as blocking.
+- required observation unresolved for the artifact contract;
+- same parse identity producing different material.
+
+A disagreement between two successfully validated official representations is not a parser failure and does not cause either evidence item to be discarded. Both evidences are retained; the selector produces CONFLICT for the affected material, and operational policy may withhold serving while the disagreement is investigated.
 
 Advisory anomalies do not automatically replace or reject official source truth.
 
@@ -698,7 +700,9 @@ CPI W1 expects exactly four observation semantics:
 
 The expected set is owned by the versioned CPI observation-set contract, not an additional DB table.
 
-W1 release promotion is correctness-first. A release bundle is accepted only when each expected observation is safely resolved as VALUE or EXPLICIT_UNAVAILABLE.
+W1 EVENT_RELEASE promotion is correctness-first. For the CPI release adapter, a release bundle is accepted only when each expected observation is safely resolved as VALUE or EXPLICIT_UNAVAILABLE.
+
+This four-observation bundle rule applies to the CPI EVENT_RELEASE contract. It does not require every SUPPLEMENTAL_DISCLOSURE or future correction representation to manufacture all four values; those flows must obey their own explicitly versioned source/extractor contract and may not silently masquerade as the event release.
 
 The November-2025 exceptional release is a required acceptance fixture because complete source resolution can coexist with partial numeric availability.
 
@@ -730,11 +734,14 @@ Required concepts:
 - expected_decision_version;
 - reason_code;
 - case_ref;
-- required_approvals;
 - governance_policy_version;
 - proposer_subject;
 - requested_at;
 - expires_at.
+
+For W1 interpretation decisions, activation requires exactly one independent APPROVE from a subject other than the proposer and no REJECT. A later governance-policy version may change that rule only through an explicit contract change; the proposer cannot choose the approval threshold per request.
+
+expires_at is generated under the governance policy and is not a client-selected bypass.
 
 No mutable APPROVED/APPLIED status is required.
 
@@ -776,7 +783,9 @@ A wrong invalidation is corrected by a later VALID decision, never by deleting h
 
 Only an effective decision changes selector eligibility. Requests and approvals alone do not change product truth.
 
-Application-level two-person convention is insufficient. Production mutation must use a guarded activation boundary that verifies request, expiry, approvals, rejection state, expected version, decision insert, and business audit atomically. The exact DB privilege implementation belongs to the Runtime/Security specification.
+For a subject with no prior decision, expected_decision_version is 0 and the first applied decision receives decision_version 1. Competing requests based on the same expected version cannot both become effective.
+
+Application-level two-person convention is insufficient. Production mutation must use a guarded activation boundary that verifies request, policy-derived approval requirement, expiry, approvals, rejection state, expected version, decision insert, and business audit atomically. The exact DB privilege implementation belongs to the Runtime/Security specification.
 
 ## 23. Business audit
 
@@ -1002,7 +1011,7 @@ Rules:
 
 ### 31.1 Source corpus
 
-The approved CPI source corpus should cover all available releases in the W1 historical window, with explicit inclusion of:
+The baseline approved CPI source corpus covers reference months 2022-01 through 2026-08, matching the design-review window available on 2026-09-19. The corpus may be extended forward without changing this semantic contract. It must cover every available release artifact in that baseline window, with explicit inclusion of:
 
 - ordinary releases;
 - negative monthly changes;
