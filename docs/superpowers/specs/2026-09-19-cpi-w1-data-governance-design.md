@@ -543,8 +543,11 @@ Required concepts:
 - event_occurrence_id;
 - disclosure_id;
 - relation_kind;
-- linked_by_attempt_id;
+- accepted_by_attempt_id;
+- accepted_at;
 - created_at.
+
+accepted_at is the platform knowledge time for this topology interpretation. created_at is storage metadata and must not be substituted for PIT visibility.
 
 CPI W1 relation kinds:
 
@@ -569,8 +572,13 @@ Required concepts:
 - disclosure_id;
 - artifact_id;
 - relation_kind;
-- linked_by_attempt_id;
+- accepted_by_attempt_id;
+- accepted_at;
 - created_at.
+
+Unique material identity includes disclosure_id + artifact_id + relation_kind.
+
+accepted_at is the platform knowledge time for this representation relation.
 
 Initial relation kinds:
 
@@ -594,6 +602,7 @@ Required concepts:
 
 - marker_assertion_id;
 - disclosure_id;
+- disclosure_artifact_link_id;
 - marker_semantics;
 - marker_date;
 - marker_at;
@@ -605,6 +614,8 @@ Required concepts:
 - accepted_by_attempt_id;
 - accepted_at;
 - material_fingerprint.
+
+The marker must pin the exact disclosure-artifact relation from which it was interpreted. DB integrity or promotion validation must ensure disclosure_id, disclosure_artifact_link_id, and source_artifact_id describe one consistent provenance chain.
 
 The marker is not artifact capture time.
 
@@ -664,6 +675,8 @@ Required concepts:
 - event_occurrence_id;
 - event_type;
 - disclosure_id;
+- disclosure_link_id;
+- disclosure_artifact_link_id;
 - observation_code;
 - assertion_state;
 - normalized_value;
@@ -690,6 +703,8 @@ EXPLICIT_UNAVAILABLE requires normalized_value to be null and positive source-co
 CPI percent values are stored as exact decimal values with canonical unit PERCENT. For example, 2.9 percent is represented as decimal 2.9, not 0.029 and not a binary floating approximation.
 
 DB integrity must prevent cross-event-type observation codes and source/artifact provenance mismatches.
+
+Every official observation assertion must pin the exact event-disclosure relation and disclosure-artifact relation that support it. The pinned disclosure_link_id must resolve to the same event_occurrence_id and disclosure_id carried by the assertion. The pinned disclosure_artifact_link_id must resolve to the same disclosure_id and source_artifact_id. This prevents an observation from being attached to an unrelated disclosure or artifact merely because the high-level source is the same.
 
 Parse identity is separate from semantic material identity. Different artifacts may legitimately support the same material.
 
@@ -787,6 +802,8 @@ No decision means VALID by default.
 
 A wrong invalidation is corrected by a later VALID decision, never by deleting history.
 
+Activation rejects a no-op request whose requested_state is already the subject's current effective state. Case closure or reaffirmation belongs in audit/case evidence rather than meaningless interpretation versions.
+
 Only an effective decision changes selector eligibility. Requests and approvals alone do not change product truth.
 
 For a subject with no prior decision, expected_decision_version is 0 and the first applied decision receives decision_version 1. Competing requests based on the same expected version cannot both become effective.
@@ -830,9 +847,11 @@ Initial scopes:
 - CPI_DOMAIN
 - EVENT_OCCURRENCE
 
+Scope consistency is structural: CPI_DOMAIN has no event_occurrence_id; EVENT_OCCURRENCE requires one CPI event_occurrence_id.
+
 No decision means ENABLED.
 
-For a scope with no prior decision, expected_control_version is 0 and the first applied decision receives control_version 1. Concurrent control changes based on the same expected version cannot both become effective. The activation boundary must serialize one scope's version transition and atomically write the business-audit event. The concrete locking mechanism belongs to the Runtime/Security implementation plan; no client may choose control_version arbitrarily.
+For a scope with no prior decision, expected_control_version is 0 and the first applied decision receives control_version 1. Concurrent control changes based on the same expected version cannot both become effective. A control activation that would leave the scope in the same effective state is rejected as a no-op. The activation boundary must serialize one scope's version transition and atomically write the business-audit event. The concrete locking mechanism belongs to the Runtime/Security implementation plan; no client may choose control_version arbitrarily.
 
 applied_at is the activation transaction's recorded application time, not a claim of exact database commit timestamp.
 
@@ -861,10 +880,20 @@ OFFICIAL_SOURCE_RECONSTRUCTION:
 
 SYSTEM_KNOWN_PIT(T):
 
-- includes only assertions accepted by T;
+- includes only governable evidence whose platform knowledge time is <= T;
 - applies interpretation decisions with applied_at <= T;
 - reconstructs what the system considered valid by the decision time;
 - is for internal research/forward-validation use, not a casual public query switch.
+
+Platform knowledge time is explicit per evidence type:
+
+- schedule assertion -> accepted_at;
+- event-disclosure link -> accepted_at;
+- disclosure-artifact link -> accepted_at;
+- disclosure marker assertion -> accepted_at;
+- official observation assertion -> accepted_at.
+
+Storage created_at is never substituted for this contract.
 
 ### 25.2 Current validity
 
@@ -875,7 +904,27 @@ For each governable subject:
 
 Current reconstruction excludes subjects whose latest decision is INVALID.
 
-### 25.3 Observation resolution
+Eligibility is transitive across the provenance graph. A typed assertion is usable only when its own interpretation subject is valid and every governable relation required to justify that assertion is also visible and valid in the selected knowledge mode.
+
+In particular:
+
+- an official observation requires its pinned event-disclosure link and disclosure-artifact link to be visible and valid;
+- a disclosure marker requires its pinned disclosure-artifact link to be visible and valid;
+- invalidating a relation does not delete dependent evidence, but dependent evidence becomes ineligible until a new valid supporting relation is explicitly established and new interpretation evidence is accepted.
+
+### 25.3 Semantic material identity
+
+material_fingerprint is a deterministic hash of typed semantic material only. It must not include source URL, artifact id, parser version, accepted_at, capture time, operator identity, or other provenance.
+
+For CPI W1:
+
+- schedule material includes schedule_status, scheduled_date, scheduled_at, schedule_timezone, and time_precision; source-effective chronology remains separate ordering metadata;
+- disclosure-marker material includes marker_semantics, marker_date, marker_at, marker_timezone, and time_precision;
+- observation material includes observation_code, assertion_state, and normalized_value under the observation definition's canonical unit; source_value_text and source_reason_text are provenance and are excluded.
+
+The same semantic material from different artifacts or parser versions therefore converges at selector time without erasing its independent evidence lineage.
+
+### 25.4 Observation resolution
 
 For one event + observation code, after validity and knowledge-mode filtering:
 
@@ -886,7 +935,7 @@ For one event + observation code, after validity and knowledge-mode filtering:
 
 No majority vote and no latest-wins rule exists.
 
-### 25.4 Release selection
+### 25.5 Release selection
 
 CPI release selection considers valid EVENT_RELEASE links only.
 
@@ -919,7 +968,7 @@ A canceled applicable schedule with no EVENT_RELEASE gives NO_RELEASE_EXPECTED.
 
 If the currently selected applicable schedule is CANCELED while a valid EVENT_RELEASE also exists and no newer authoritative schedule evidence safely resolves that contradiction, the release projection is CONFLICT rather than silently choosing either cancellation or disclosure.
 
-### 25.5 Serving overlay
+### 25.6 Serving overlay
 
 Selector truth and serving policy are separate.
 
@@ -952,8 +1001,8 @@ Fetch, parse, and semantic validation occur outside the short canonical promotio
 The promotion transaction:
 
 1. verifies work-item fencing/lease ownership;
-2. inserts or verifies event/disclosure/topology evidence;
-3. inserts or verifies the complete CPI observation bundle;
+2. inserts or verifies event/disclosure/topology evidence, including the exact event-disclosure and disclosure-artifact relations required by downstream assertions;
+3. inserts or verifies the complete CPI observation bundle with provenance links consistent with that topology;
 4. detects idempotence, determinism failure, or evidence conflict;
 5. terminalizes attempt/work state as appropriate;
 6. commits atomically.
@@ -1075,6 +1124,10 @@ Canonical selector conformance vectors must include at least:
 - invalidated evidence excluded from current reconstruction;
 - evidence visible in SYSTEM_KNOWN_PIT before its later invalidation;
 - backfilled assertion absent from PIT before accepted_at;
+- event-disclosure link absent from PIT before its accepted_at;
+- invalidating an event-disclosure link makes observations pinned to that link ineligible without deleting them;
+- invalidating a disclosure-artifact link makes markers/observations pinned to it ineligible without deleting them;
+- identical semantic material from different artifacts/parser versions has the same material identity while preserving separate evidence rows;
 - EVENT_RELEASE versus SUPPLEMENTAL_DISCLOSURE behavior;
 - serving-control WITHHELD overlay;
 - domain WITHHELD overriding event ENABLED.
