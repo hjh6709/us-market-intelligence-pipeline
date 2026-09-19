@@ -425,7 +425,7 @@ Test:
 - EXPLICIT_UNAVAILABLE with numeric value fails;
 - cross-event/disclosure link mismatch fails;
 - cross-artifact link mismatch fails;
-- SUPPLEMENTAL_DISClOSURE cannot be used by the repository's Core 4 promotion path in Task 10 even though the storage layer can retain supplemental evidence.
+- SUPPLEMENTAL_DISCLOSURE cannot be used by the repository's Core 4 promotion path in Task 10 even though the storage layer can retain supplemental evidence.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -612,7 +612,7 @@ Use contract version `bls-cpi-source-v1`.
 
 Include:
 - HTTPS only;
-- allowlisted hosts `www.bls.gov` and `download.bls.gov` only if actually used by a configured locator;
+- allowlisted host `www.bls.gov` for the initial W1 contract; any additional official host requires an explicit source-contract change and test before use;
 - redirect target must remain allowlisted;
 - bounded redirect count;
 - connect/read timeout;
