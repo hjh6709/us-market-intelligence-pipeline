@@ -424,7 +424,11 @@ Required concepts:
 - storage_generation when retained on a versioned object store;
 - created_at.
 
-Artifact identity converges on source/domain locator plus content hash according to the source contract.
+A source_artifact row represents one successful capture event, not a globally deduplicated content object. Its durable idempotency identity is scoped to the collector attempt and captured locator/content, for example created_by_attempt_id + locator_key + content_sha256. Repeated captures by different attempts may therefore create distinct artifact rows even when bytes are identical.
+
+This is intentional: captured_at must remain the time of that specific successful capture and must not become an imprecise "first observed" timestamp caused by cross-attempt deduplication. Semantic selectors already converge identical material from multiple artifacts, so CPI W1 does not need global artifact-row deduplication.
+
+Object storage may still use content hashes inside physical keys, but storage deduplication must not collapse legal/retention or capture-provenance boundaries.
 
 retrieval_url is forensic provenance only. It is not automatically product-safe or stable.
 
@@ -573,6 +577,8 @@ Initial relation kinds:
 - RELEASE_REPRESENTATION
 - CORROBORATING_REPRESENTATION
 - CORRECTION_NOTICE
+
+CORRECTION_NOTICE is used only when the official notice is actually scoped to that disclosure. A BLS notice affecting an unrelated database series, geography, or representation remains source evidence but must not be linked to a CPI disclosure merely because it is a CPI-program notice.
 
 Different official representations may have different bytes while yielding the same semantic material.
 
@@ -793,6 +799,8 @@ business_audit_events records material privileged business actions, not every HT
 
 For interpretation activation, the effective decision and its audit event commit atomically.
 
+For economic serving-control activation, the serving-control decision and its business-audit event also commit atomically. A serving-control state change without its corresponding material-action audit record is not a valid successful activation.
+
 The audit table is append-only to normal runtime identities.
 
 Failed activation attempts belong in security/application logs, not as successful business-audit facts.
@@ -810,6 +818,7 @@ Required concepts:
 - control_decision_id;
 - scope_kind;
 - event_occurrence_id when event-scoped;
+- expected_control_version;
 - control_version;
 - state: ENABLED or WITHHELD;
 - reason_code;
@@ -822,6 +831,10 @@ Initial scopes:
 - EVENT_OCCURRENCE
 
 No decision means ENABLED.
+
+For a scope with no prior decision, expected_control_version is 0 and the first applied decision receives control_version 1. Concurrent control changes based on the same expected version cannot both become effective. The activation boundary must serialize one scope's version transition and atomically write the business-audit event. The concrete locking mechanism belongs to the Runtime/Security implementation plan; no client may choose control_version arbitrarily.
+
+applied_at is the activation transaction's recorded application time, not a claim of exact database commit timestamp.
 
 Effective policy is deny-overrides:
 
@@ -882,6 +895,7 @@ SUPPLEMENTAL_DISCLOSURE never becomes the release anchor.
 Projection states:
 
 - NOT_YET_DUE
+- DUE_DATE_UNTIMED
 - AWAITING_CONFIRMATION
 - DISCLOSED
 - NO_RELEASE_EXPECTED
@@ -896,10 +910,14 @@ Exact-time schedule:
 Date-only schedule:
 
 - before source-local scheduled date -> NOT_YET_DUE;
-- on the scheduled date -> do not invent an exact due time;
+- on the scheduled date without validated release -> DUE_DATE_UNTIMED;
 - after the scheduled date without validated release -> AWAITING_CONFIRMATION.
 
+DUE_DATE_UNTIMED means the official date is known but the contract does not know whether the due time has passed. It must not be collapsed into NOT_YET_DUE or AWAITING_CONFIRMATION.
+
 A canceled applicable schedule with no EVENT_RELEASE gives NO_RELEASE_EXPECTED.
+
+If the currently selected applicable schedule is CANCELED while a valid EVENT_RELEASE also exists and no newer authoritative schedule evidence safely resolves that contradiction, the release projection is CONFLICT rather than silently choosing either cancellation or disclosure.
 
 ### 25.5 Serving overlay
 
@@ -1047,7 +1065,9 @@ Canonical selector conformance vectors must include at least:
 - no schedule assertion -> schedule UNRESOLVED;
 - exact schedule before due -> NOT_YET_DUE;
 - exact schedule after due without release -> AWAITING_CONFIRMATION;
+- date-only schedule on its source-local date -> DUE_DATE_UNTIMED;
 - canceled schedule -> NO_RELEASE_EXPECTED;
+- canceled selected schedule plus unresolved valid EVENT_RELEASE contradiction -> CONFLICT;
 - valid VALUE;
 - EXPLICIT_UNAVAILABLE;
 - different valid materials -> CONFLICT;
