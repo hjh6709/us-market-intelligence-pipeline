@@ -460,7 +460,9 @@ A source_artifact row represents one successful capture event, not a globally de
 
 This is intentional: captured_at must remain the time of that specific successful capture and must not become an imprecise "first observed" timestamp caused by cross-attempt deduplication. Semantic selectors already converge identical material from multiple artifacts, so CPI W1 does not need global artifact-row deduplication.
 
-Object storage may still use content hashes inside physical keys, but storage deduplication must not collapse legal/retention or capture-provenance boundaries.
+For W1, raw-object storage does not deduplicate across distinct source_artifact rows. Each retained artifact receives its own immutable physical object identity, with a key that incorporates durable artifact/attempt identity and the content hash. This deliberately spends a small amount of storage to keep capture provenance, retention, deletion, and forensic ownership independent.
+
+content_sha256 remains the byte-integrity identity and may be used for comparison, but two artifact rows with the same hash do not share a deletable physical object in W1.
 
 retrieval_url is forensic provenance only. It is not automatically product-safe or stable.
 
@@ -555,13 +557,14 @@ Required concepts:
 - source_code;
 - canonical_disclosure_key;
 - disclosure_kind;
-- established_by_artifact_id;
 - established_by_attempt_id;
 - created_at.
 
 For CPI W1 the relevant kind is DATA_RELEASE.
 
 canonical_disclosure_key is a platform-owned stable identity produced by the versioned disclosure-identity contract. It is not represented as a source-native identifier unless the source actually supplies one.
+
+The artifact that established a disclosure is represented only through event_disclosure_artifacts. The disclosure row does not duplicate an established_by_artifact_id foreign key. When a disclosure is first established from an artifact, the disclosure row and its initial disclosure-artifact relation are inserted in the same promotion transaction.
 
 Release timestamp is not disclosure identity.
 
@@ -737,6 +740,10 @@ CPI percent values are stored as exact decimal values with canonical unit PERCEN
 DB integrity must prevent cross-event-type observation codes and source/artifact provenance mismatches.
 
 Every official observation assertion must pin the exact event-disclosure relation and disclosure-artifact relation that support it. The pinned disclosure_link_id must resolve to the same event_occurrence_id and disclosure_id carried by the assertion. The pinned disclosure_artifact_link_id must resolve to the same disclosure_id and source_artifact_id. This prevents an observation from being attached to an unrelated disclosure or artifact merely because the high-level source is the same.
+
+For CPI W1 Core 4 actuals, the pinned event-disclosure relation must be EVENT_RELEASE. A SUPPLEMENTAL_DISCLOSURE may preserve provenance and historical context but may not manufacture or fill the event's four canonical actuals. This prevents a later publication from silently converting a canceled or missing release into an as-released value.
+
+A CORRECTION_NOTICE representation may yield corrected CPI Core 4 assertions only through an explicit correction extractor contract tied to the same EVENT_RELEASE disclosure. Such corrected evidence does not silently supersede prior valid material; conflicting material remains CONFLICT until the governed interpretation process resolves the platform's eligibility view.
 
 Parse identity is separate from semantic material identity. Different artifacts may legitimately support the same material.
 
@@ -1000,15 +1007,27 @@ A canceled applicable schedule with no EVENT_RELEASE gives NO_RELEASE_EXPECTED.
 
 If the currently selected applicable schedule is CANCELED while a valid EVENT_RELEASE also exists and no newer authoritative schedule evidence safely resolves that contradiction, the release projection is CONFLICT rather than silently choosing either cancellation or disclosure.
 
-### 25.6 Serving overlay
+### 25.6 Serving and decision-eligibility overlay
 
-Selector truth and serving policy are separate.
+Knowledge selection and consumer eligibility are separate.
 
-If the source resolution is VALUE but effective serving control is WITHHELD:
+OFFICIAL_SOURCE_RECONSTRUCTION and SYSTEM_KNOWN_PIT reconstruct knowledge. economic_serving_control_decisions do not rewrite those knowledge results and are not themselves part of historical source truth.
 
-- the public value is absent;
+Live governed consumers then apply the effective serving-control overlay:
+
+- public Product API/UI must obey it;
+- forward/Paper decision paths must obey it before using CPI values for a live or simulated-forward decision;
+- alert/notification generation must obey it before emitting a numeric CPI value;
+- authorized offline research may inspect the underlying knowledge result only in an explicit diagnostic/research mode that cannot create live customer or trading side effects.
+
+If the knowledge result is VALUE but the effective control is WITHHELD:
+
+- governed consumer value availability becomes WITHHELD;
+- the numeric value is absent from governed consumer payloads and side effects;
 - underlying evidence remains VALID unless separately governed;
-- the public reason is a serving/governance reason, not a fabricated source state.
+- the reason is a serving/governance reason, not a fabricated source state.
+
+Historical user-visible representation replay, if later required, must apply serving-control decisions as-of the requested representation time. That capability is not required for W1 Internal Alpha.
 
 ## 26. Representation timestamps and fingerprint
 
@@ -1161,7 +1180,9 @@ Canonical selector conformance vectors must include at least:
 - invalidating a disclosure-artifact link makes markers/observations pinned to it ineligible without deleting them;
 - identical semantic material from different artifacts/parser versions has the same material identity while preserving separate evidence rows;
 - EVENT_RELEASE versus SUPPLEMENTAL_DISCLOSURE behavior;
-- serving-control WITHHELD overlay;
+- SUPPLEMENTAL_DISCLOSURE cannot contribute CPI W1 Core 4 canonical actuals;
+- correction representation creates conflict rather than silent supersession when prior valid material differs;
+- serving-control WITHHELD overlay leaves knowledge reconstruction intact while withholding governed consumers;
 - domain WITHHELD overriding event ENABLED.
 
 Java and Python selector implementations, if both exist, must conform to the same vectors.
