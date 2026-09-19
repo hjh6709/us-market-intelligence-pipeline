@@ -1,4 +1,4 @@
-STATUS: PROPOSED TARGET SPEC — AWAITING USER REVIEW
+STATUS: TARGET_CANONICAL
 
 # CPI W1 Data & Governance Design
 
@@ -327,6 +327,13 @@ Allowed run transitions:
 - RUNNING -> TERMINAL;
 - TERMINAL has no outgoing transition.
 
+Run state/timestamp invariants:
+
+- CREATED has outcome=NULL, started_at=NULL, finished_at=NULL;
+- RUNNING has outcome=NULL, started_at non-null, finished_at=NULL;
+- TERMINAL has outcome non-null and finished_at non-null;
+- a TERMINAL run may have started_at=NULL only when it terminalized directly from CREATED.
+
 Run outcomes:
 
 - SUCCEEDED
@@ -334,7 +341,18 @@ Run outcomes:
 - FAILED
 - NO_WORK
 
-A scheduled logical invocation converges on one run identity even when scheduler delivery is duplicated.
+A run may terminalize only after every existing work item is TERMINAL.
+
+Run outcome aggregation is deterministic:
+
+- NO_WORK when no work item exists or every work item is SKIPPED;
+- SUCCEEDED when at least one non-SKIPPED work item exists and every non-SKIPPED outcome is SUCCEEDED or DATA_NOT_AVAILABLE;
+- FAILED when every non-SKIPPED work item is FAILED;
+- PARTIAL for every other terminal mix, including any QUARANTINED outcome or a mixture of successful/DATA_NOT_AVAILABLE and FAILED outcomes.
+
+DATA_NOT_AVAILABLE therefore means the work executed safely but the expected source fact was not available; it does not by itself make the run fail.
+
+A scheduled logical invocation converges on one run identity even when scheduler delivery is duplicated. A non-null trigger_idempotency_key is unique within data_domain + execution_scope + job_type + trigger_type.
 
 ### 11.2 ingestion_work_items
 
@@ -372,7 +390,17 @@ Allowed work behavior:
 - a worker holding the current claim may terminalize CLAIMED -> TERMINAL;
 - a retryable attempt may return CLAIMED -> PENDING with next_claim_at and without changing business identity;
 - an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
+- the orchestrator may terminalize PENDING -> TERMINAL with outcome=SKIPPED before any attempt exists when the work is no longer applicable;
+- once a parent run is TERMINAL, no new work item may be attached to that run;
 - TERMINAL has no outgoing transition.
+
+Work state/timestamp/claim invariants:
+
+- PENDING has outcome=NULL, claim_token=NULL, lease_until=NULL;
+- CLAIMED has outcome=NULL, claim_token non-null, lease_until non-null;
+- TERMINAL has outcome non-null, claim_token=NULL, lease_until=NULL;
+- SKIPPED is valid only for a PENDING -> TERMINAL orchestrator transition with no execution attempt;
+- DATA_NOT_AVAILABLE, QUARANTINED, FAILED, and SUCCEEDED require an execution attempt.
 
 SKIP LOCKED or equivalent claim SQL is only a queue primitive. It does not define business-data consistency.
 
@@ -416,6 +444,11 @@ Attempt outcomes when TERMINAL:
 - FAILED
 - QUARANTINED
 - DATA_NOT_AVAILABLE
+
+Attempt state/timestamp invariants:
+
+- RUNNING has outcome=NULL and finished_at=NULL;
+- TERMINAL has outcome non-null and finished_at non-null.
 
 SKIPPED is a work-level terminal outcome and does not require manufacturing an execution attempt when no execution occurred.
 
@@ -799,9 +832,9 @@ Required concepts:
 - requested_at;
 - expires_at.
 
-For W1 interpretation decisions, activation requires exactly one independent APPROVE from a subject other than the proposer and no REJECT. A later governance-policy version may change that rule only through an explicit contract change; the proposer cannot choose the approval threshold per request.
+For W1 interpretation decisions, governance policy `cpi-governance-v1` requires at least one independent APPROVE from a subject other than the proposer and no REJECT. Additional independent APPROVE records do not invalidate an otherwise valid request. A later governance-policy version may change the minimum threshold only through an explicit contract change; the proposer cannot choose the approval threshold per request.
 
-expires_at is generated under the governance policy and is not a client-selected bypass.
+For `cpi-governance-v1`, request validity is exactly 24 hours from requested_at. expires_at is generated under the governance policy and is not a client-selected bypass.
 
 No mutable APPROVED/APPLIED status is required.
 
@@ -879,7 +912,9 @@ Required concepts:
 - state: ENABLED or WITHHELD;
 - reason_code;
 - applied_at;
-- actor/case linkage.
+- actor_subject;
+- case_ref;
+- verified_knowledge_fingerprint when required for re-enable.
 
 Initial scopes:
 
@@ -903,7 +938,9 @@ Emergency containment may be faster than truth correction.
 
 Truth correction remains the governed interpretation workflow.
 
-Re-enabling after a data-integrity incident requires corrected selector verification according to the later Runtime/Readiness contract.
+For W1 Internal Alpha, an authorized operator may apply WITHHELD immediately. Re-enabling an EVENT_OCCURRENCE after a prior WITHHELD requires a non-empty case_ref and the current selector knowledge fingerprint recorded as verified_knowledge_fingerprint; the application boundary must refuse re-enable while the event remains CONFLICT or UNRESOLVED. Re-enabling CPI_DOMAIN requires a non-empty case_ref plus a verification_ref recorded in the business audit because one event fingerprint cannot prove domain-wide recovery.
+
+These are correctness guards, not a complete production authorization model. Independent production re-enable approval, break-glass policy, and workforce role enforcement remain mandatory before Public Beta under the Runtime/Security/Readiness contract.
 
 ## 25. Selector contract
 
@@ -1276,24 +1313,24 @@ This specification becomes implementation-ready when approved, but Internal Alph
 
 Those readiness controls are owned by the separate Runtime/Security/Readiness specification.
 
-## 36. Repository authority migration required before canonical activation
+## 36. Repository authority status
 
-Approval of this spec does not by itself make every existing repository document consistent.
+This document is the active `TARGET_CANONICAL` authority for CPI W1 Data & Governance semantics. Canonical target status does not imply implementation completion.
 
-Before this target becomes repository-canonical, the same architecture-change program must:
+The repository authority migration must keep the following routing true:
 
-- add docs/architecture/AUTHORITY.md as a routing index;
-- reclassify docs/architecture/platform-contract.md as superseded historical target;
-- reclassify docs/architecture/data-contracts.md as migration-009 foundation/historical contract;
-- rewrite or supersede docs/architecture/operations-and-deployment.md where it describes Airflow as the production ingestion authority;
-- reclassify docs/engineering/api-contracts.md as current/legacy FastAPI compatibility;
-- convert docs/engineering/current-vs-target.md into status-ledger-only semantics;
-- update docs/configuration/README.md to remove obsolete target semantics;
-- update docs/README.md routing language;
-- treat current-system.md as a verified implementation snapshot at a stated commit, not an authority that can override newer executable behavior;
-- mark superseded 2026-09-10 Superpowers target specs visibly as historical/superseded where they conflict with this approved design.
+- docs/architecture/AUTHORITY.md routes CPI W1 Data & Governance here;
+- docs/architecture/platform-contract.md is superseded historical target context;
+- docs/architecture/data-contracts.md is migration-009 foundation/historical context;
+- docs/architecture/operations-and-deployment.md cannot define production ingestion authority;
+- docs/engineering/api-contracts.md is current/legacy FastAPI compatibility only;
+- docs/engineering/current-vs-target.md is status-ledger-only;
+- docs/configuration/README.md cannot create target semantics;
+- docs/README.md routes readers through the authority index;
+- current-system.md is a verified implementation snapshot, not executable authority;
+- conflicting 2026-09-10 Superpowers target specs remain visibly historical/superseded.
 
-Until that migration is complete, this document remains a proposed target spec, not the sole repository authority.
+Executable implementation truth remains code + migrations + tests at the commit being inspected. Any future repository change that makes these routing statements false is an authority regression.
 
 ## 37. Implementation sequence after spec approval
 
