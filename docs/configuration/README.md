@@ -3,7 +3,9 @@
 Status: `CURRENT_IMPLEMENTATION` configuration compatibility plus
 `HISTORICAL_SUPERSEDED` target notes. Executable variable names and behavior remain
 owned by the current code and tests; future CPI W1 and Runtime/Security configuration
-must follow their separate specifications. See [the authority index](../architecture/AUTHORITY.md).
+must follow the authority routed for those concerns by
+[the authority index](../architecture/AUTHORITY.md). This document does not create
+or override active target semantics.
 
 This page records configuration boundaries for the **Economic Event Intelligence & Strategy Validation Platform** at the 2026-09-10 baseline.
 
@@ -50,6 +52,13 @@ Adding one of these settings does not make the subsystem implemented. A setting 
 
 ## Truth boundaries
 
-Executable settings describe current implementation. Canonical contracts describe required target semantics. Dated evidence proves only the captured run. `docs/engineering/current-vs-target.md` records gaps; none of these truth types silently overrides another.
+Executable settings describe current implementation only to the extent they are
+consumed by the code and tests at the commit being inspected. Active target semantics
+come only from the document to which
+[the authority index](../architecture/AUTHORITY.md) routes the relevant concern as
+`TARGET_CANONICAL`; this configuration document cannot promote its historical
+target notes into active target authority. Dated evidence proves only the captured
+run. `docs/engineering/current-vs-target.md` is a `STATUS_LEDGER`, not semantic
+authority or current executable truth.
 
 Migration 009 can be replayed on a database that already has its corrected schema. It is not a claim that every historical migration is universally rerunnable, nor that an already-applied draft migration 009 can be upgraded in place after population.

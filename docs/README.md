@@ -7,7 +7,7 @@
 
 ## 권위 라우팅
 
-- `CURRENT_IMPLEMENTATION`: 현재 checkout의 코드·migration·테스트
+- `CURRENT_IMPLEMENTATION`: 현재 checkout의 executable code + migrations + tests
 - `TARGET_CANONICAL`: [2026-09-19 CPI W1 Data & Governance 설계](superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md)
 - `HISTORICAL_SUPERSEDED`: migration 009 및 2026-09-10 target 문서
 - `STATUS_LEDGER`: [현재/목표 진행표](engineering/current-vs-target.md)
@@ -80,8 +80,10 @@
 
 ## 문서 유지 규칙
 
-- 현재 기능은 코드와 테스트가 있을 때만 현재형으로 표현합니다.
-- target contract는 구현 완료의 증거가 아니며, 현재 상태는 `architecture/current-system.md`와 `engineering/current-vs-target.md`로 확인합니다.
+- 현재 구현 truth는 현재 checkout의 executable code + migrations + tests가 소유합니다.
+- `architecture/current-system.md`는 특정 기준점에서 검증된 descriptive snapshot이며, 더 새로운 executable behavior를 덮어쓰지 않습니다.
+- `engineering/current-vs-target.md`는 `STATUS_LEDGER`이며 semantic authority나 current implementation truth가 아닙니다.
+- target semantics는 [Architecture Authority Index](architecture/AUTHORITY.md)가 concern별로 `TARGET_CANONICAL`에 라우팅한 문서만 권위를 가집니다. target contract는 구현 완료의 증거가 아닙니다.
 - 집계에는 source table, unit, source/feed/version을 함께 적습니다.
 - `collection integrity`, `observed coverage`, `analysis eligibility`를 합치지 않습니다.
 - 연구 결과와 Paper 주문 결과를 같은 성과로 표현하지 않습니다.

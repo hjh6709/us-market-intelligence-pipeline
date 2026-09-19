@@ -5,7 +5,7 @@ When documents disagree, use the authority for the specific concern below.
 
 | Concern | Status | Authority |
 | --- | --- | --- |
-| Current executable behavior | `CURRENT_IMPLEMENTATION` | code + migrations + tests at the deployed commit |
+| Current executable behavior | `CURRENT_IMPLEMENTATION` | code + migrations + tests at the commit being inspected |
 | CPI W1 Data & Governance target | `TARGET_CANONICAL` | [2026-09-19 CPI W1 design](../superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md) |
 | Legacy migration-009 event model | `HISTORICAL_SUPERSEDED` | [data-contracts.md](data-contracts.md) |
 | Current FastAPI API | `CURRENT_IMPLEMENTATION` | [api-contracts.md](../engineering/api-contracts.md) |
