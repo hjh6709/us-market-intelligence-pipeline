@@ -1187,5 +1187,86 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (event_id,),
                 )
 
+    def test_abnormal_work_terminalization_requires_reason_code(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED',
+                       claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_work_items
+                       SET state='TERMINAL', outcome='FAILED',
+                           claim_token=NULL, lease_until=NULL
+                     WHERE work_item_id=%s
+                    """,
+                    (work_id,),
+                )
+
+    def test_succeeded_work_rejects_reason_code(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED',
+                       claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_work_items
+                       SET state='TERMINAL', outcome='SUCCEEDED',
+                           reason_code='SHOULD_NOT_EXIST',
+                           claim_token=NULL, lease_until=NULL
+                     WHERE work_item_id=%s
+                    """,
+                    (work_id,),
+                )
+
+    def test_failed_attempt_requires_reason_code(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED',
+                       claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            attempt_id = self.insert_attempt(connection, work_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_attempts
+                       SET state='TERMINAL', outcome='FAILED',
+                           finished_at=CURRENT_TIMESTAMP
+                     WHERE attempt_id=%s
+                    """,
+                    (attempt_id,),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

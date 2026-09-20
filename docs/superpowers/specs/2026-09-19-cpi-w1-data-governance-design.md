@@ -422,6 +422,12 @@ Work outcomes:
 
 QUARANTINED means execution completed but platform interpretation could not safely be accepted. It is not the same as official-evidence CONFLICT.
 
+Abnormal terminal work outcomes require a durable reason_code. For work items,
+FAILED, QUARANTINED, DATA_NOT_AVAILABLE, and SKIPPED require a non-empty canonical
+uppercase reason token. SUCCEEDED must not carry a reason_code. PENDING and CLAIMED
+work items do not carry stale terminal reasons; retry-attempt diagnostics remain in
+the immutable attempt history.
+
 ### 11.3 ingestion_attempts
 
 Required concepts:
@@ -459,6 +465,12 @@ Attempt state/timestamp invariants:
 - TERMINAL has outcome non-null and finished_at non-null.
 
 SKIPPED is a work-level terminal outcome and does not require manufacturing an execution attempt when no execution occurred.
+
+For attempts, FAILED, QUARANTINED, and DATA_NOT_AVAILABLE require a non-empty
+canonical uppercase reason token. SUCCEEDED must not carry a reason_code, and RUNNING
+attempts do not carry a terminal reason. The reason vocabulary is a bounded
+application/extractor contract, while the database enforces token shape and
+outcome/reason consistency.
 
 claim_generation and attempt_number advance together when a new execution ownership generation starts. A stale attempt can finish logging locally, but it cannot mutate work state or canonical evidence after losing the current claim generation. No business truth depends on attempt number.
 
