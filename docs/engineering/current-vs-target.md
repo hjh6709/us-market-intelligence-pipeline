@@ -32,3 +32,48 @@ cannot override current executable behavior or the CPI W1 canonical target. See
 Permanent dual-write is not the canonical solution.
 
 “Foundation” means additive schema, pure contracts or tests. It does not mean an operational ingestion path exists.
+
+## CPI W1 working-branch status
+
+This section is a coordination snapshot for the CPI W1 working branch. It remains
+`STATUS_LEDGER`, not semantic authority. Always verify the branch HEAD and CI before
+using it for release decisions.
+
+Current implemented foundation on the CPI W1 branch includes:
+
+- additive migrations 010-013 for ingestion/artifact lineage, event/disclosure
+  evidence, Core 4 observations, interpretation governance, and serving-control
+  history;
+- DB enforcement that canonical CPI evidence is attributable to
+  `ECONOMIC_PROMOTE` attempts rather than collector attempts;
+- forensic source-artifact metadata immutability, with only the retained-object
+  lifecycle transition `RETAINED -> DELETED_BY_POLICY` allowed;
+- target-only Python semantic contracts and deterministic material
+  fingerprints;
+- bounded BLS source retrieval and development/test filesystem artifact storage;
+- CPI schedule candidate parsing with authoritative HTML versus fallback ICS
+  source-role separation.
+
+The following are **not implemented or not launch-ready** and must not be represented
+to Product, Marketing, Sales, CS, or users as production capability:
+
+- release-envelope and Core 4 extraction;
+- promotion repository, claim fencing, and atomic four-observation promotion;
+- source-reconstruction/PIT selector and serving-control overlay;
+- application governance client and production authorization/RBAC;
+- golden-corpus differential replay and parser-change release gate;
+- controlled collector/orchestrator and reconciliation;
+- production object-storage retention, orphan cleanup, integrity repair, and
+  restore procedures;
+- Product API/UI/SEO/cache/notification withholding integration;
+- production observability/SLO/on-call/runbook/DR evidence;
+- final legal/readiness sign-off and Public Beta/Paid Launch gates.
+
+The current filesystem artifact store is a deterministic development/test adapter,
+not a production immutable/versioned object-storage claim. Its local generation token
+must not be treated as a cloud object generation or as production recoverability
+evidence.
+
+A green CI run proves only the tested repository contract at that commit. It does not
+by itself prove deployment, source availability, legal approval, operational
+readiness, or customer-facing launch readiness.

@@ -37,9 +37,15 @@
     }
   },
   "legal_operational_notes": {
-    "attribution_required": true,
-    "bls_branding_not_implied": true,
+    "bls_material_default_status": "PUBLIC_DOMAIN_EXCEPT_THIRD_PARTY_PHOTOS_OR_ILLUSTRATIONS",
+    "source_attribution_requested": true,
+    "bls_emblem_or_logo_reuse_prohibited_without_authorization": true,
+    "raw_capture_retention_does_not_imply_product_republication": true,
     "api_access_date_disclaimer_if_api_used": true,
-    "legal_evidence_ref": "BLS terms/copyright review required before Public Beta"
+    "public_beta_legal_review_required": true,
+    "evidence_refs": [
+      "https://www.bls.gov/opub/copyright-information.htm",
+      "https://www.bls.gov/developers/termsOfService.htm"
+    ]
   }
 }
