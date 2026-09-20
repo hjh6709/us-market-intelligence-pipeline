@@ -1,6 +1,7 @@
 import hashlib
 import os
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -606,6 +607,233 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """,
                     (link_id, disclosure_id, artifact_id, promote_attempt),
                 )
+
+
+    def make_observation_topology(
+        self,
+        connection,
+        *,
+        reference_month="2026-08-01",
+        relation_kind="EVENT_RELEASE",
+        artifact_locator=None,
+    ):
+        event_id, promote_attempt = self.make_event(connection, reference_month)
+        disclosure_id = self.make_disclosure(connection, promote_attempt)
+
+        disclosure_link_id = uuid4()
+        self.insert_subject(connection, disclosure_link_id, "EVENT_DISCLOSURE_LINK")
+        connection.execute(
+            """
+            INSERT INTO event_disclosure_links (
+                disclosure_link_id, event_occurrence_id, disclosure_id,
+                relation_kind, accepted_by_attempt_id, accepted_at
+            ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """,
+            (
+                disclosure_link_id,
+                event_id,
+                disclosure_id,
+                relation_kind,
+                promote_attempt,
+            ),
+        )
+
+        artifact_id = self.make_artifact(
+            connection,
+            artifact_locator or f"observation:{reference_month}:{uuid4()}",
+        )
+        disclosure_artifact_link_id = uuid4()
+        self.insert_subject(
+            connection,
+            disclosure_artifact_link_id,
+            "DISCLOSURE_ARTIFACT_LINK",
+        )
+        connection.execute(
+            """
+            INSERT INTO event_disclosure_artifacts (
+                disclosure_artifact_link_id, disclosure_id, artifact_id,
+                relation_kind, accepted_by_attempt_id, accepted_at
+            ) VALUES (
+                %s, %s, %s, 'RELEASE_REPRESENTATION', %s, CURRENT_TIMESTAMP
+            )
+            """,
+            (
+                disclosure_artifact_link_id,
+                disclosure_id,
+                artifact_id,
+                promote_attempt,
+            ),
+        )
+        return {
+            "event_id": event_id,
+            "promote_attempt": promote_attempt,
+            "disclosure_id": disclosure_id,
+            "disclosure_link_id": disclosure_link_id,
+            "artifact_id": artifact_id,
+            "disclosure_artifact_link_id": disclosure_artifact_link_id,
+        }
+
+    def insert_observation_assertion(
+        self,
+        connection,
+        topology,
+        *,
+        assertion_state="VALUE",
+        normalized_value=Decimal("2.9"),
+        observation_code="CPI_HEADLINE_YOY",
+        source_reason_text=None,
+        event_id=None,
+        disclosure_id=None,
+        disclosure_link_id=None,
+        artifact_id=None,
+        disclosure_artifact_link_id=None,
+    ):
+        assertion_id = uuid4()
+        self.insert_subject(
+            connection,
+            assertion_id,
+            "OFFICIAL_OBSERVATION_ASSERTION",
+        )
+        connection.execute(
+            """
+            INSERT INTO official_observation_assertions (
+                assertion_id, event_occurrence_id, event_type, disclosure_id,
+                disclosure_link_id, disclosure_artifact_link_id,
+                observation_code, assertion_state, normalized_value,
+                source_value_text, source_reason_text, source_code,
+                source_artifact_id, extractor_contract_version,
+                accepted_by_attempt_id, accepted_at, material_fingerprint
+            ) VALUES (
+                %s, %s, 'CPI', %s, %s, %s, %s, %s, %s,
+                %s, %s, 'BLS', %s, 'bls-cpi-extractor-v1',
+                %s, CURRENT_TIMESTAMP, %s
+            )
+            """,
+            (
+                assertion_id,
+                event_id or topology["event_id"],
+                disclosure_id or topology["disclosure_id"],
+                disclosure_link_id or topology["disclosure_link_id"],
+                disclosure_artifact_link_id
+                or topology["disclosure_artifact_link_id"],
+                observation_code,
+                assertion_state,
+                normalized_value,
+                None if normalized_value is None else str(normalized_value),
+                source_reason_text,
+                artifact_id or topology["artifact_id"],
+                topology["promote_attempt"],
+                digest(
+                    f"{observation_code}:{assertion_state}:{normalized_value}"
+                ),
+            ),
+        )
+        return assertion_id
+
+    def test_official_observation_decimal_round_trips_exactly(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            assertion_id = self.insert_observation_assertion(
+                connection,
+                topology,
+                normalized_value=Decimal("2.9"),
+            )
+            value = connection.execute(
+                """
+                SELECT normalized_value
+                  FROM official_observation_assertions
+                 WHERE assertion_id=%s
+                """,
+                (assertion_id,),
+            ).fetchone()[0]
+        self.assertEqual(value, Decimal("2.9"))
+
+    def test_value_observation_requires_numeric_value(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    assertion_state="VALUE",
+                    normalized_value=None,
+                )
+
+    def test_explicit_unavailable_rejects_numeric_value(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    assertion_state="EXPLICIT_UNAVAILABLE",
+                    normalized_value=Decimal("0"),
+                    source_reason_text="Source explicitly states value unavailable.",
+                )
+
+    def test_explicit_unavailable_requires_positive_source_context(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    assertion_state="EXPLICIT_UNAVAILABLE",
+                    normalized_value=None,
+                    source_reason_text=None,
+                )
+
+    def test_observation_cannot_pin_disclosure_link_from_other_event(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(
+                connection,
+                reference_month="2026-08-01",
+            )
+            other_event_id, _ = self.make_event(connection, "2026-07-01")
+            with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    event_id=other_event_id,
+                )
+
+    def test_observation_cannot_pin_unrelated_artifact(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            unrelated_artifact = self.make_artifact(
+                connection,
+                f"observation:unrelated:{uuid4()}",
+            )
+            with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    artifact_id=unrelated_artifact,
+                )
+
+    def test_storage_can_preserve_supplemental_observation_evidence(self) -> None:
+        with self.connection() as connection:
+            topology = self.make_observation_topology(
+                connection,
+                relation_kind="SUPPLEMENTAL_DISCLOSURE",
+            )
+            assertion_id = self.insert_observation_assertion(
+                connection,
+                topology,
+                observation_code="CPI_CORE_YOY",
+                normalized_value=Decimal("3.1"),
+            )
+            relation_kind = connection.execute(
+                """
+                SELECT l.relation_kind
+                  FROM official_observation_assertions o
+                  JOIN event_disclosure_links l
+                    ON l.disclosure_link_id = o.disclosure_link_id
+                 WHERE o.assertion_id=%s
+                """,
+                (assertion_id,),
+            ).fetchone()[0]
+        self.assertEqual(relation_kind, "SUPPLEMENTAL_DISCLOSURE")
 
 
 if __name__ == "__main__":
