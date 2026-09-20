@@ -202,12 +202,36 @@ DECLARE
     lineage_attempt UUID;
     lineage_scope TEXT;
     lineage_domain TEXT;
+    lineage_field TEXT;
+    row_payload JSONB;
 BEGIN
-    lineage_attempt := CASE TG_TABLE_NAME
-        WHEN 'core_event_occurrences' THEN NEW.created_by_attempt_id
-        WHEN 'event_disclosures' THEN NEW.established_by_attempt_id
-        ELSE NEW.accepted_by_attempt_id
-    END;
+    IF TG_NARGS <> 1 THEN
+        RAISE EXCEPTION 'promoter lineage guard requires one lineage-field argument'
+            USING ERRCODE = '23514';
+    END IF;
+
+    lineage_field := TG_ARGV[0];
+    IF lineage_field NOT IN (
+        'created_by_attempt_id',
+        'established_by_attempt_id',
+        'accepted_by_attempt_id'
+    ) THEN
+        RAISE EXCEPTION 'unsupported promoter lineage field: %', lineage_field
+            USING ERRCODE = '23514';
+    END IF;
+
+    row_payload := to_jsonb(NEW);
+    IF NOT row_payload ? lineage_field THEN
+        RAISE EXCEPTION 'promoter lineage field % is absent from %',
+            lineage_field, TG_TABLE_NAME
+            USING ERRCODE = '23514';
+    END IF;
+
+    lineage_attempt := NULLIF(row_payload ->> lineage_field, '')::UUID;
+    IF lineage_attempt IS NULL THEN
+        RAISE EXCEPTION 'canonical CPI evidence requires promoter attempt lineage'
+            USING ERRCODE = '23514';
+    END IF;
 
     SELECT execution_scope, data_domain
       INTO STRICT lineage_scope, lineage_domain
@@ -296,30 +320,30 @@ CREATE TRIGGER disclosure_marker_assertions_immutable
 DROP TRIGGER IF EXISTS core_event_occurrences_promoter_lineage_guard ON core_event_occurrences;
 CREATE TRIGGER core_event_occurrences_promoter_lineage_guard
     BEFORE INSERT ON core_event_occurrences
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('created_by_attempt_id');
 
 DROP TRIGGER IF EXISTS event_schedule_assertions_promoter_lineage_guard ON event_schedule_assertions;
 CREATE TRIGGER event_schedule_assertions_promoter_lineage_guard
     BEFORE INSERT ON event_schedule_assertions
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
 
 DROP TRIGGER IF EXISTS event_disclosures_promoter_lineage_guard ON event_disclosures;
 CREATE TRIGGER event_disclosures_promoter_lineage_guard
     BEFORE INSERT ON event_disclosures
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('established_by_attempt_id');
 
 DROP TRIGGER IF EXISTS event_disclosure_links_promoter_lineage_guard ON event_disclosure_links;
 CREATE TRIGGER event_disclosure_links_promoter_lineage_guard
     BEFORE INSERT ON event_disclosure_links
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
 
 DROP TRIGGER IF EXISTS event_disclosure_artifacts_promoter_lineage_guard ON event_disclosure_artifacts;
 CREATE TRIGGER event_disclosure_artifacts_promoter_lineage_guard
     BEFORE INSERT ON event_disclosure_artifacts
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
 
 DROP TRIGGER IF EXISTS disclosure_marker_assertions_promoter_lineage_guard ON disclosure_marker_assertions;
 CREATE TRIGGER disclosure_marker_assertions_promoter_lineage_guard
     BEFORE INSERT ON disclosure_marker_assertions
-    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
 

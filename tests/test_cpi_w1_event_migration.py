@@ -87,6 +87,20 @@ class CpiW1EventMigrationTest(unittest.TestCase):
             "canonical CPI evidence requires ECONOMIC_PROMOTE attempt lineage",
             self.sql,
         )
+        self.assertIn("row_payload := to_jsonb(NEW)", self.sql)
+        self.assertIn("TG_ARGV[0]", self.sql)
+        self.assertIn(
+            "enforce_cpi_w1_promoter_attempt('created_by_attempt_id')",
+            self.sql,
+        )
+        self.assertIn(
+            "enforce_cpi_w1_promoter_attempt('established_by_attempt_id')",
+            self.sql,
+        )
+        self.assertIn(
+            "enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id')",
+            self.sql,
+        )
 
     def test_evidence_is_append_only(self) -> None:
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
