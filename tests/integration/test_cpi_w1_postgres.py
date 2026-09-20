@@ -1,6 +1,7 @@
 import hashlib
 import os
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
@@ -835,6 +836,229 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone()[0]
         self.assertEqual(relation_kind, "SUPPLEMENTAL_DISCLOSURE")
 
+
+    def create_interpretation_request(
+        self,
+        connection,
+        subject_id,
+        *,
+        requested_state="INVALID",
+        expected_version=0,
+        proposer="worker:proposer",
+        requested_at=None,
+    ):
+        request_id = uuid4()
+        connection.execute(
+            """
+            INSERT INTO interpretation_requests (
+                request_id, subject_id, requested_state,
+                expected_decision_version, reason_code, case_ref,
+                governance_policy_version, proposer_subject, requested_at
+            ) VALUES (
+                %s, %s, %s, %s, 'TEST_REVIEW', 'CASE-1',
+                'cpi-governance-v1', %s, COALESCE(%s, CURRENT_TIMESTAMP)
+            )
+            """,
+            (
+                request_id,
+                subject_id,
+                requested_state,
+                expected_version,
+                proposer,
+                requested_at,
+            ),
+        )
+        return request_id
+
+    def approve_interpretation_request(
+        self,
+        connection,
+        request_id,
+        *,
+        proposer="worker:proposer",
+        approver="worker:approver",
+        decision="APPROVE",
+    ):
+        connection.execute(
+            """
+            INSERT INTO interpretation_approvals (
+                approval_id, request_id, proposer_subject,
+                approver_subject, approval_decision
+            ) VALUES (%s, %s, %s, %s, %s)
+            """,
+            (uuid4(), request_id, proposer, approver, decision),
+        )
+
+    def make_governable_observation(self, connection):
+        topology = self.make_observation_topology(connection)
+        return self.insert_observation_assertion(
+            connection,
+            topology,
+            normalized_value=Decimal("2.9"),
+        )
+
+    def test_interpretation_self_approval_is_structurally_rejected(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(connection, subject_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.approve_interpretation_request(
+                    connection,
+                    request_id,
+                    approver="worker:proposer",
+                )
+
+    def test_reject_vote_blocks_interpretation_activation(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(connection, subject_id)
+            self.approve_interpretation_request(
+                connection,
+                request_id,
+                approver="worker:reviewer",
+                decision="REJECT",
+            )
+            with self.assertRaises(psycopg.Error):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (request_id, "worker:activator"),
+                )
+
+    def test_expired_request_cannot_activate(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(
+                connection,
+                subject_id,
+                requested_at="2020-01-01 00:00:00+00",
+            )
+            self.approve_interpretation_request(connection, request_id)
+            with self.assertRaises(psycopg.Error):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (request_id, "worker:activator"),
+                )
+
+    def test_second_same_state_interpretation_is_rejected_as_noop(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            first = self.create_interpretation_request(connection, subject_id)
+            self.approve_interpretation_request(connection, first)
+            connection.execute(
+                "SELECT apply_interpretation_decision(%s, %s)",
+                (first, "worker:activator"),
+            )
+
+            second = self.create_interpretation_request(
+                connection,
+                subject_id,
+                expected_version=1,
+            )
+            self.approve_interpretation_request(
+                connection,
+                second,
+                approver="worker:approver-2",
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (second, "worker:activator"),
+                )
+
+    def test_competing_interpretation_requests_same_version_only_one_commits(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_ids = []
+            for index in range(2):
+                request_id = self.create_interpretation_request(
+                    connection,
+                    subject_id,
+                    expected_version=0,
+                    proposer=f"worker:proposer-{index}",
+                )
+                self.approve_interpretation_request(
+                    connection,
+                    request_id,
+                    proposer=f"worker:proposer-{index}",
+                    approver=f"worker:approver-{index}",
+                )
+                request_ids.append(request_id)
+
+        def activate(request_id):
+            try:
+                with self.connection() as connection:
+                    connection.execute(
+                        "SELECT apply_interpretation_decision(%s, %s)",
+                        (request_id, f"worker:activator-{request_id}"),
+                    )
+                return True
+            except psycopg.Error:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(activate, request_ids))
+        self.assertEqual(sum(results), 1)
+
+    def test_serving_control_noop_default_enabled_is_rejected(self) -> None:
+        with self.connection() as connection:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    SELECT apply_economic_serving_control(
+                        'CPI_DOMAIN', NULL, 0, 'ENABLED', 'TEST',
+                        'worker:operator', 'CASE-1', NULL, 'VERIFY-1'
+                    )
+                    """
+                )
+
+    def test_competing_serving_controls_same_version_only_one_commits(self) -> None:
+        def withhold(actor):
+            try:
+                with self.connection() as connection:
+                    connection.execute(
+                        """
+                        SELECT apply_economic_serving_control(
+                            'CPI_DOMAIN', NULL, 0, 'WITHHELD', 'TEST',
+                            %s, 'CASE-1', NULL, NULL
+                        )
+                        """,
+                        (actor,),
+                    )
+                return True
+            except psycopg.Error:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(
+                executor.map(
+                    withhold,
+                    ("worker:operator-a", "worker:operator-b"),
+                )
+            )
+        self.assertEqual(sum(results), 1)
+
+    def test_event_reenable_requires_case_and_verified_fingerprint(self) -> None:
+        with self.connection() as connection:
+            event_id, _ = self.make_event(connection, "2026-06-01")
+            connection.execute(
+                """
+                SELECT apply_economic_serving_control(
+                    'EVENT_OCCURRENCE', %s, 0, 'WITHHELD', 'TEST',
+                    'worker:operator', NULL, NULL, NULL
+                )
+                """,
+                (event_id,),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    SELECT apply_economic_serving_control(
+                        'EVENT_OCCURRENCE', %s, 1, 'ENABLED', 'TEST',
+                        'worker:operator', 'CASE-2', NULL, NULL
+                    )
+                    """,
+                    (event_id,),
+                )
 
 if __name__ == "__main__":
     unittest.main()
