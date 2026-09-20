@@ -62,20 +62,52 @@ CREATE TABLE IF NOT EXISTS event_schedule_assertions (
     CONSTRAINT event_schedule_assertions_artifact_source_fk
         FOREIGN KEY (source_artifact_id, source_code)
         REFERENCES source_artifacts(artifact_id, source_code),
-    CONSTRAINT event_schedule_assertions_precision_valid CHECK (
-        (time_precision = 'EXACT'
-            AND scheduled_date IS NOT NULL
-            AND scheduled_at IS NOT NULL
-            AND schedule_timezone IS NOT NULL)
-        OR (time_precision = 'DATE_ONLY'
-            AND scheduled_date IS NOT NULL
+    CONSTRAINT event_schedule_assertions_state_fields_valid CHECK (
+        (
+            schedule_status = 'SCHEDULED'
+            AND (
+                (
+                    time_precision = 'EXACT'
+                    AND scheduled_date IS NOT NULL
+                    AND scheduled_at IS NOT NULL
+                    AND NULLIF(BTRIM(schedule_timezone), '') IS NOT NULL
+                )
+                OR
+                (
+                    time_precision = 'DATE_ONLY'
+                    AND scheduled_date IS NOT NULL
+                    AND scheduled_at IS NULL
+                    AND NULLIF(BTRIM(schedule_timezone), '') IS NOT NULL
+                )
+            )
+        )
+        OR
+        (
+            schedule_status IN ('DATE_PENDING', 'CANCELED')
+            AND scheduled_date IS NULL
             AND scheduled_at IS NULL
-            AND schedule_timezone IS NOT NULL)
-        OR (time_precision IS NULL AND scheduled_at IS NULL)
+            AND schedule_timezone IS NULL
+            AND time_precision IS NULL
+        )
     ),
-    CONSTRAINT event_schedule_assertions_date_pending_valid CHECK (
-        schedule_status <> 'DATE_PENDING'
-        OR (scheduled_date IS NULL AND scheduled_at IS NULL AND time_precision IS NULL)
+    CONSTRAINT event_schedule_assertions_source_effective_valid CHECK (
+        (
+            source_effective_precision = 'EXACT'
+            AND source_effective_date IS NOT NULL
+            AND source_effective_at IS NOT NULL
+        )
+        OR
+        (
+            source_effective_precision = 'DATE_ONLY'
+            AND source_effective_date IS NOT NULL
+            AND source_effective_at IS NULL
+        )
+        OR
+        (
+            source_effective_precision IS NULL
+            AND source_effective_date IS NULL
+            AND source_effective_at IS NULL
+        )
     ),
     CONSTRAINT event_schedule_assertions_parse_identity
         UNIQUE (event_occurrence_id, source_artifact_id, extractor_contract_version)

@@ -1293,5 +1293,94 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assertNotEqual(after.year, 2000)
 
 
+    def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            artifact_id = self.make_artifact(connection, "schedule:canceled-invalid")
+            assertion_id = uuid4()
+            self.insert_subject(connection, assertion_id, "SCHEDULE_ASSERTION")
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO event_schedule_assertions (
+                        schedule_assertion_id, event_occurrence_id, schedule_status,
+                        scheduled_date, scheduled_at, schedule_timezone, time_precision,
+                        source_code, source_artifact_id, extractor_contract_version,
+                        accepted_by_attempt_id, accepted_at, material_fingerprint
+                    ) VALUES (
+                        %s, %s, 'CANCELED', '2026-09-11', NULL,
+                        'America/New_York', NULL, 'BLS', %s,
+                        'schedule-v1', %s, CURRENT_TIMESTAMP, %s
+                    )
+                    """,
+                    (
+                        assertion_id,
+                        event_id,
+                        artifact_id,
+                        promote_attempt,
+                        digest("canceled-invalid"),
+                    ),
+                )
+
+    def test_date_pending_schedule_has_no_synthetic_schedule_fields(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            artifact_id = self.make_artifact(connection, "schedule:pending")
+            assertion_id = uuid4()
+            self.insert_subject(connection, assertion_id, "SCHEDULE_ASSERTION")
+            connection.execute(
+                """
+                INSERT INTO event_schedule_assertions (
+                    schedule_assertion_id, event_occurrence_id, schedule_status,
+                    scheduled_date, scheduled_at, schedule_timezone, time_precision,
+                    source_code, source_artifact_id, extractor_contract_version,
+                    accepted_by_attempt_id, accepted_at, material_fingerprint
+                ) VALUES (
+                    %s, %s, 'DATE_PENDING', NULL, NULL, NULL, NULL,
+                    'BLS', %s, 'schedule-v1', %s, CURRENT_TIMESTAMP, %s
+                )
+                """,
+                (
+                    assertion_id,
+                    event_id,
+                    artifact_id,
+                    promote_attempt,
+                    digest("date-pending"),
+                ),
+            )
+
+    def test_source_effective_exact_requires_timestamp(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            artifact_id = self.make_artifact(connection, "schedule:source-effective")
+            assertion_id = uuid4()
+            self.insert_subject(connection, assertion_id, "SCHEDULE_ASSERTION")
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO event_schedule_assertions (
+                        schedule_assertion_id, event_occurrence_id, schedule_status,
+                        scheduled_date, scheduled_at, schedule_timezone, time_precision,
+                        source_effective_date, source_effective_at,
+                        source_effective_precision,
+                        source_code, source_artifact_id, extractor_contract_version,
+                        accepted_by_attempt_id, accepted_at, material_fingerprint
+                    ) VALUES (
+                        %s, %s, 'SCHEDULED', '2026-09-11', NULL,
+                        'America/New_York', 'DATE_ONLY',
+                        '2026-08-01', NULL, 'EXACT',
+                        'BLS', %s, 'schedule-v1', %s, CURRENT_TIMESTAMP, %s
+                    )
+                    """,
+                    (
+                        assertion_id,
+                        event_id,
+                        artifact_id,
+                        promote_attempt,
+                        digest("source-effective-invalid"),
+                    ),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

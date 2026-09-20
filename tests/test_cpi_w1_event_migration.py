@@ -102,6 +102,12 @@ class CpiW1EventMigrationTest(unittest.TestCase):
             self.sql,
         )
 
+    def test_schedule_state_field_matrix_is_structural(self) -> None:
+        self.assertIn("event_schedule_assertions_state_fields_valid", self.sql)
+        self.assertIn("schedule_status IN ('DATE_PENDING', 'CANCELED')", self.sql)
+        self.assertIn("schedule_timezone IS NULL", self.sql)
+        self.assertIn("event_schedule_assertions_source_effective_valid", self.sql)
+
     def test_evidence_is_append_only(self) -> None:
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
         for table in (

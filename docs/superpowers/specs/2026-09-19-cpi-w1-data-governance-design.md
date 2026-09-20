@@ -601,6 +601,21 @@ No schedule assertion row means unresolved, not DATE_PENDING.
 
 Synthetic midnight is forbidden.
 
+Schedule field combinations are closed, not best-effort:
+
+- A SCHEDULED assertion has exactly one of two precision forms:
+  - EXACT: scheduled_date, scheduled_at, schedule_timezone are present;
+  - DATE_ONLY: scheduled_date and schedule_timezone are present, scheduled_at is absent.
+- DATE_PENDING carries no scheduled_date, scheduled_at, schedule_timezone, or
+  time_precision. It is an explicit source assertion that a date is pending.
+- CANCELED carries no scheduled_date, scheduled_at, schedule_timezone, or
+  time_precision. Any previously announced date remains preserved in the earlier
+  SCHEDULED assertion; cancellation does not rewrite or duplicate that schedule.
+- source_effective_precision follows the same precision discipline: EXACT requires
+  source_effective_date and source_effective_at; DATE_ONLY requires
+  source_effective_date and no source_effective_at; NULL precision requires both
+  source-effective fields to be NULL.
+
 Parse identity prevents the same artifact/event/extractor contract from producing different rows silently.
 
 Schedule assertions are governable interpretation subjects.
