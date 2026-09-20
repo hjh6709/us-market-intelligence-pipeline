@@ -82,7 +82,8 @@ jobs:
           .venv/bin/python -m unittest
           tests.integration.test_event_session_foundation_postgres
           tests.integration.test_postgres_market_bars
-          tests.integration.test_validation_lineage_postgres -v
+          tests.integration.test_validation_lineage_postgres
+          tests.integration.test_cpi_w1_postgres -v
 
       - name: Run isolated paper recovery tests (no external API)
         env:
