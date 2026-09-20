@@ -23,12 +23,25 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
 
     def test_declares_required_state_and_provenance_vocabulary(self) -> None:
         for token in (
-            "'LIVE'", "'BACKFILL'", "'REPLAY'",
-            "'CREATED'", "'RUNNING'", "'TERMINAL'",
-            "'PENDING'", "'CLAIMED'", "'QUARANTINED'", "'DATA_NOT_AVAILABLE'", "'SKIPPED'",
-            "claim_generation", "claim_token", "lease_until",
-            "source_contract_version", "content_sha256",
-            "'RETAINED'", "'NOT_RETAINED'", "'DELETED_BY_POLICY'",
+            "'LIVE'",
+            "'BACKFILL'",
+            "'REPLAY'",
+            "'CREATED'",
+            "'RUNNING'",
+            "'TERMINAL'",
+            "'PENDING'",
+            "'CLAIMED'",
+            "'QUARANTINED'",
+            "'DATA_NOT_AVAILABLE'",
+            "'SKIPPED'",
+            "claim_generation",
+            "claim_token",
+            "lease_until",
+            "source_contract_version",
+            "content_sha256",
+            "'RETAINED'",
+            "'NOT_RETAINED'",
+            "'DELETED_BY_POLICY'",
         ):
             self.assertIn(token, self.sql)
 
@@ -57,58 +70,7 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
     def test_abnormal_terminal_outcomes_require_canonical_reason_codes(self) -> None:
         self.assertIn("ingestion_work_items_reason_valid", self.sql)
         self.assertIn("ingestion_attempts_reason_valid", self.sql)
-        self.assertIn("reason_code ~ '^[A-Z][A-Z0-9_]*
-        self.assertIn(
-            "UNIQUE (created_by_attempt_id, locator_key, content_sha256)", self.sql
-        )
-        self.assertIn("source_artifacts_retention_valid", self.sql)
-        self.assertIn("content_state IN ('RETAINED', 'DELETED_BY_POLICY')", self.sql)
-        self.assertIn("storage_generation IS NOT NULL", self.sql)
-        self.assertIn("content_state = 'NOT_RETAINED'", self.sql)
-        self.assertIn("storage_generation IS NULL", self.sql)
-        self.assertIn("created_by_execution_scope = 'ECONOMIC_COLLECT'", self.sql)
-
-    def test_replay_and_scheduled_delivery_have_durable_identity(self) -> None:
-        self.assertIn("ingestion_runs_replay_reference_valid", self.sql)
-        self.assertIn("ingestion_runs_trigger_idempotency", self.sql)
-        self.assertIn(
-            "data_domain, execution_scope, job_type, trigger_type, trigger_idempotency_key",
-            self.sql,
-        )
-
-    def test_interpretation_subject_registry_is_narrowly_typed(self) -> None:
-        for subject_type in (
-            "SCHEDULE_ASSERTION",
-            "EVENT_DISCLOSURE_LINK",
-            "DISCLOSURE_ARTIFACT_LINK",
-            "DISCLOSURE_MARKER_ASSERTION",
-            "OFFICIAL_OBSERVATION_ASSERTION",
-        ):
-            self.assertIn(subject_type, self.sql)
-        self.assertIn("UNIQUE (subject_id, subject_type)", self.sql)
-
-    def test_bls_source_is_migration_owned(self) -> None:
-        self.assertIn("VALUES ('BLS', 'U.S. Bureau of Labor Statistics')", self.sql)
-        self.assertIn("ON CONFLICT (source_code) DO NOTHING", self.sql)
-
-    def test_bls_source_seed_detects_drift(self) -> None:
-        self.assertIn("BLS source registry seed mismatch", self.sql)
-
-    def test_plpgsql_function_bodies_use_complete_dollar_quotes(self) -> None:
-        self.assertNotIn("\nAS $\n", self.sql)
-        self.assertNotIn("\n$;\n", self.sql)
-        self.assertGreaterEqual(self.sql.count("AS $"), 4)
-        self.assertGreaterEqual(self.sql.count("$;"), 4)
-
-    def test_keeps_new_ingestion_model_separate_from_legacy_pipeline_telemetry(self) -> None:
-        self.assertNotIn("ALTER TABLE pipeline_", self.sql)
-        self.assertNotIn("UPDATE pipeline_", self.sql)
-        self.assertNotIn("INSERT INTO pipeline_", self.sql)
-
-
-if __name__ == "__main__":
-    unittest.main()
-", self.sql)
+        self.assertIn("reason_code ~ '^[A-Z][A-Z0-9_]*$'", self.sql)
         self.assertIn("outcome = 'SUCCEEDED' AND reason_code IS NULL", self.sql)
 
     def test_work_updated_at_is_database_owned(self) -> None:
@@ -116,10 +78,14 @@ if __name__ == "__main__":
 
     def test_artifact_identity_and_retention_are_explicit(self) -> None:
         self.assertIn(
-            "UNIQUE (created_by_attempt_id, locator_key, content_sha256)", self.sql
+            "UNIQUE (created_by_attempt_id, locator_key, content_sha256)",
+            self.sql,
         )
         self.assertIn("source_artifacts_retention_valid", self.sql)
-        self.assertIn("content_state IN ('RETAINED', 'DELETED_BY_POLICY')", self.sql)
+        self.assertIn(
+            "content_state IN ('RETAINED', 'DELETED_BY_POLICY')",
+            self.sql,
+        )
         self.assertIn("storage_generation IS NOT NULL", self.sql)
         self.assertIn("content_state = 'NOT_RETAINED'", self.sql)
         self.assertIn("storage_generation IS NULL", self.sql)
@@ -145,8 +111,14 @@ if __name__ == "__main__":
         self.assertIn("UNIQUE (subject_id, subject_type)", self.sql)
 
     def test_bls_source_is_migration_owned(self) -> None:
-        self.assertIn("VALUES ('BLS', 'U.S. Bureau of Labor Statistics')", self.sql)
+        self.assertIn(
+            "VALUES ('BLS', 'U.S. Bureau of Labor Statistics')",
+            self.sql,
+        )
         self.assertIn("ON CONFLICT (source_code) DO NOTHING", self.sql)
+
+    def test_bls_source_seed_detects_drift(self) -> None:
+        self.assertIn("BLS source registry seed mismatch", self.sql)
 
     def test_plpgsql_function_bodies_use_complete_dollar_quotes(self) -> None:
         self.assertNotIn("\nAS $\n", self.sql)
