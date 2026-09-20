@@ -169,6 +169,58 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (uuid4(), digest("artifact"), attempt_id),
                 )
 
+    def test_source_artifact_hash_cannot_be_mutated(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            attempt_id = self.insert_attempt(connection, work_id)
+            artifact_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO source_artifacts (
+                    artifact_id, data_domain, source_code, artifact_contract_kind,
+                    source_contract_version, locator_key, content_sha256,
+                    content_type, captured_at, created_by_attempt_id,
+                    created_by_execution_scope, content_state
+                ) VALUES (%s, 'ECONOMIC', 'BLS', 'CPI_RELEASE_HTML',
+                          'bls-cpi-source-v1', 'release:immutable', %s,
+                          'text/html', CURRENT_TIMESTAMP, %s,
+                          'ECONOMIC_COLLECT', 'NOT_RETAINED')
+                """,
+                (artifact_id, digest("original"), attempt_id),
+            )
+            with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
+                connection.execute(
+                    "UPDATE source_artifacts SET content_sha256=%s WHERE artifact_id=%s",
+                    (digest("tampered"), artifact_id),
+                )
+
+    def test_source_artifact_row_cannot_be_deleted(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            attempt_id = self.insert_attempt(connection, work_id)
+            artifact_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO source_artifacts (
+                    artifact_id, data_domain, source_code, artifact_contract_kind,
+                    source_contract_version, locator_key, content_sha256,
+                    content_type, captured_at, created_by_attempt_id,
+                    created_by_execution_scope, content_state
+                ) VALUES (%s, 'ECONOMIC', 'BLS', 'CPI_RELEASE_HTML',
+                          'bls-cpi-source-v1', 'release:delete-guard', %s,
+                          'text/html', CURRENT_TIMESTAMP, %s,
+                          'ECONOMIC_COLLECT', 'NOT_RETAINED')
+                """,
+                (artifact_id, digest("delete-guard"), attempt_id),
+            )
+            with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
+                connection.execute(
+                    "DELETE FROM source_artifacts WHERE artifact_id=%s",
+                    (artifact_id,),
+                )
+
     def test_deleted_by_policy_preserves_retained_object_metadata(self) -> None:
         with self.connection() as connection:
             run_id = self.insert_run(connection)
@@ -401,6 +453,24 @@ class CpiW1PostgresTest(unittest.TestCase):
             "INSERT INTO interpretation_subjects (subject_id, subject_type) VALUES (%s, %s)",
             (subject_id, subject_type),
         )
+
+    def test_collector_attempt_cannot_establish_canonical_event(self) -> None:
+        with self.connection() as connection:
+            collect_attempt = self.make_attempt(
+                connection,
+                "ECONOMIC_COLLECT",
+                f"collect:illegal-canonical:{uuid4()}",
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO core_event_occurrences (
+                        event_occurrence_id, event_type, reference_month,
+                        created_by_attempt_id
+                    ) VALUES (%s, 'CPI', '2026-05-01', %s)
+                    """,
+                    (uuid4(), collect_attempt),
+                )
 
     def test_cpi_reference_month_must_be_first_day(self) -> None:
         with self.connection() as connection:

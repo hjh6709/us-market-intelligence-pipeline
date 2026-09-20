@@ -115,3 +115,10 @@ DROP TRIGGER IF EXISTS official_observation_assertions_immutable
 CREATE TRIGGER official_observation_assertions_immutable
     BEFORE UPDATE OR DELETE ON official_observation_assertions
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+
+DROP TRIGGER IF EXISTS official_observation_assertions_promoter_lineage_guard
+    ON official_observation_assertions;
+CREATE TRIGGER official_observation_assertions_promoter_lineage_guard
+    BEFORE INSERT ON official_observation_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();

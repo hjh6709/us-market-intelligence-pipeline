@@ -193,6 +193,35 @@ CREATE TABLE IF NOT EXISTS disclosure_marker_assertions (
         )
 );
 
+
+CREATE OR REPLACE FUNCTION enforce_cpi_w1_promoter_attempt()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $
+DECLARE
+    lineage_attempt UUID;
+    lineage_scope TEXT;
+    lineage_domain TEXT;
+BEGIN
+    lineage_attempt := CASE TG_TABLE_NAME
+        WHEN 'core_event_occurrences' THEN NEW.created_by_attempt_id
+        WHEN 'event_disclosures' THEN NEW.established_by_attempt_id
+        ELSE NEW.accepted_by_attempt_id
+    END;
+
+    SELECT execution_scope, data_domain
+      INTO STRICT lineage_scope, lineage_domain
+      FROM ingestion_attempts
+     WHERE attempt_id = lineage_attempt;
+
+    IF lineage_scope <> 'ECONOMIC_PROMOTE' OR lineage_domain <> 'ECONOMIC' THEN
+        RAISE EXCEPTION 'canonical CPI evidence requires ECONOMIC_PROMOTE attempt lineage'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$;
+
 CREATE OR REPLACE FUNCTION enforce_cpi_w1_disclosure_artifact_source()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -263,3 +292,34 @@ DROP TRIGGER IF EXISTS disclosure_marker_assertions_immutable
 CREATE TRIGGER disclosure_marker_assertions_immutable
     BEFORE UPDATE OR DELETE ON disclosure_marker_assertions
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS core_event_occurrences_promoter_lineage_guard ON core_event_occurrences;
+CREATE TRIGGER core_event_occurrences_promoter_lineage_guard
+    BEFORE INSERT ON core_event_occurrences
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+
+DROP TRIGGER IF EXISTS event_schedule_assertions_promoter_lineage_guard ON event_schedule_assertions;
+CREATE TRIGGER event_schedule_assertions_promoter_lineage_guard
+    BEFORE INSERT ON event_schedule_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+
+DROP TRIGGER IF EXISTS event_disclosures_promoter_lineage_guard ON event_disclosures;
+CREATE TRIGGER event_disclosures_promoter_lineage_guard
+    BEFORE INSERT ON event_disclosures
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+
+DROP TRIGGER IF EXISTS event_disclosure_links_promoter_lineage_guard ON event_disclosure_links;
+CREATE TRIGGER event_disclosure_links_promoter_lineage_guard
+    BEFORE INSERT ON event_disclosure_links
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+
+DROP TRIGGER IF EXISTS event_disclosure_artifacts_promoter_lineage_guard ON event_disclosure_artifacts;
+CREATE TRIGGER event_disclosure_artifacts_promoter_lineage_guard
+    BEFORE INSERT ON event_disclosure_artifacts
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+
+DROP TRIGGER IF EXISTS disclosure_marker_assertions_promoter_lineage_guard ON disclosure_marker_assertions;
+CREATE TRIGGER disclosure_marker_assertions_promoter_lineage_guard
+    BEFORE INSERT ON disclosure_marker_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt();
+

@@ -359,3 +359,51 @@ DROP TRIGGER IF EXISTS ingestion_attempts_transition_guard ON ingestion_attempts
 CREATE TRIGGER ingestion_attempts_transition_guard
     BEFORE UPDATE ON ingestion_attempts
     FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_attempt_transition();
+
+
+CREATE OR REPLACE FUNCTION enforce_source_artifact_forensic_immutability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'source_artifacts is forensic evidence and cannot be deleted'
+            USING ERRCODE = '55000';
+    END IF;
+
+    IF NEW.artifact_id IS DISTINCT FROM OLD.artifact_id
+       OR NEW.data_domain IS DISTINCT FROM OLD.data_domain
+       OR NEW.source_code IS DISTINCT FROM OLD.source_code
+       OR NEW.artifact_contract_kind IS DISTINCT FROM OLD.artifact_contract_kind
+       OR NEW.source_contract_version IS DISTINCT FROM OLD.source_contract_version
+       OR NEW.locator_key IS DISTINCT FROM OLD.locator_key
+       OR NEW.retrieval_url IS DISTINCT FROM OLD.retrieval_url
+       OR NEW.content_sha256 IS DISTINCT FROM OLD.content_sha256
+       OR NEW.content_type IS DISTINCT FROM OLD.content_type
+       OR NEW.captured_at IS DISTINCT FROM OLD.captured_at
+       OR NEW.created_by_attempt_id IS DISTINCT FROM OLD.created_by_attempt_id
+       OR NEW.created_by_execution_scope IS DISTINCT FROM OLD.created_by_execution_scope
+       OR NEW.storage_uri IS DISTINCT FROM OLD.storage_uri
+       OR NEW.storage_generation IS DISTINCT FROM OLD.storage_generation
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    THEN
+        RAISE EXCEPTION 'source artifact forensic metadata is immutable'
+            USING ERRCODE = '55000';
+    END IF;
+
+    IF NOT (
+        OLD.content_state = 'RETAINED'
+        AND NEW.content_state = 'DELETED_BY_POLICY'
+    ) THEN
+        RAISE EXCEPTION 'only RETAINED -> DELETED_BY_POLICY is allowed for source artifacts'
+            USING ERRCODE = '55000';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS source_artifacts_forensic_immutable ON source_artifacts;
+CREATE TRIGGER source_artifacts_forensic_immutable
+    BEFORE UPDATE OR DELETE ON source_artifacts
+    FOR EACH ROW EXECUTE FUNCTION enforce_source_artifact_forensic_immutability();
