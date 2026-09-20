@@ -10,6 +10,20 @@ INSERT INTO data_sources (source_code, display_name)
 VALUES ('BLS', 'U.S. Bureau of Labor Statistics')
 ON CONFLICT (source_code) DO NOTHING;
 
+DO $
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM data_sources
+         WHERE source_code = 'BLS'
+           AND display_name = 'U.S. Bureau of Labor Statistics'
+    ) THEN
+        RAISE EXCEPTION 'BLS source registry seed mismatch'
+            USING ERRCODE = '23514';
+    END IF;
+END;
+$;
+
 CREATE TABLE IF NOT EXISTS ingestion_runs (
     run_id UUID PRIMARY KEY,
     execution_scope TEXT NOT NULL CHECK (

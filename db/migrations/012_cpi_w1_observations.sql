@@ -43,6 +43,24 @@ INSERT INTO observation_definitions (
     ('CPI_CORE_YOY', 'CPI', 'PERCENT', 'CPI core year-over-year')
 ON CONFLICT (observation_code) DO NOTHING;
 
+DO $
+BEGIN
+    IF (
+        SELECT COUNT(*)
+          FROM observation_definitions
+         WHERE (observation_code, event_type, canonical_unit, display_name) IN (
+            ('CPI_HEADLINE_MOM', 'CPI', 'PERCENT', 'CPI headline month-over-month'),
+            ('CPI_HEADLINE_YOY', 'CPI', 'PERCENT', 'CPI headline year-over-year'),
+            ('CPI_CORE_MOM', 'CPI', 'PERCENT', 'CPI core month-over-month'),
+            ('CPI_CORE_YOY', 'CPI', 'PERCENT', 'CPI core year-over-year')
+         )
+    ) <> 4 THEN
+        RAISE EXCEPTION 'CPI observation definition seed mismatch'
+            USING ERRCODE = '23514';
+    END IF;
+END;
+$;
+
 CREATE TABLE IF NOT EXISTS official_observation_assertions (
     assertion_id UUID PRIMARY KEY,
     subject_type TEXT NOT NULL DEFAULT 'OFFICIAL_OBSERVATION_ASSERTION'

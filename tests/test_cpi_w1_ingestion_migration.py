@@ -91,6 +91,9 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("VALUES ('BLS', 'U.S. Bureau of Labor Statistics')", self.sql)
         self.assertIn("ON CONFLICT (source_code) DO NOTHING", self.sql)
 
+    def test_bls_source_seed_detects_drift(self) -> None:
+        self.assertIn("BLS source registry seed mismatch", self.sql)
+
     def test_plpgsql_function_bodies_use_complete_dollar_quotes(self) -> None:
         self.assertNotIn("\nAS $\n", self.sql)
         self.assertNotIn("\n$;\n", self.sql)

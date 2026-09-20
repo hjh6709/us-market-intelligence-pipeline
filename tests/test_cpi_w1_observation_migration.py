@@ -31,6 +31,9 @@ class CpiW1ObservationMigrationTest(unittest.TestCase):
             self.assertIn(f"'{code}'", self.sql)
         self.assertIn("canonical_unit = 'PERCENT'", self.sql)
 
+    def test_core_four_seed_detects_drift(self) -> None:
+        self.assertIn("CPI observation definition seed mismatch", self.sql)
+
     def test_stored_states_are_value_or_explicit_unavailable_only(self) -> None:
         self.assertIn(
             "assertion_state IN ('VALUE', 'EXPLICIT_UNAVAILABLE')",
