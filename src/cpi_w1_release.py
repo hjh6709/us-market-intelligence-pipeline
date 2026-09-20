@@ -407,14 +407,15 @@ def _explicit_unavailable_reason(
 ) -> str | None:
     previous = _previous_month(reference_month)
     previous_name = _MONTH_NAMES[previous.month - 1]
-    period = f"{previous_name} {previous.year}"
+    full_period = f"{previous_name} {previous.year}"
+    short_period = f"{previous_name[:3]} {previous.year}"
     normalized = _semantic_text(full_text)
-    escaped_period = re.escape(period)
     patterns = (
-        rf"did not collect[^.]{0,160}{escaped_period}[^.]{0,160}"
-        rf"lapse in (?:federal )?appropriations",
-        rf"{escaped_period}[^.]{0,160}data values are not available[^.]{0,160}"
-        rf"lapse in (?:federal )?appropriations",
+        rf"\bbls did not collect survey data for {re.escape(full_period)} "
+        rf"due to a lapse in appropriations\b",
+        rf"\b(?:the )?(?:{re.escape(full_period)}|{re.escape(short_period)}) "
+        rf"data values are not available due to (?:the \d{{4}} )?"
+        rf"lapse in appropriations\b",
     )
     if not any(re.search(pattern, normalized) for pattern in patterns):
         return None
