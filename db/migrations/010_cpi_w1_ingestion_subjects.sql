@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS source_artifacts (
     captured_at TIMESTAMPTZ NOT NULL,
     created_by_attempt_id UUID NOT NULL,
     created_by_execution_scope TEXT NOT NULL CHECK (
-        created_by_execution_scope IN ('ECONOMIC_COLLECT', 'ECONOMIC_PROMOTE')
+        created_by_execution_scope = 'ECONOMIC_COLLECT'
     ),
     content_state TEXT NOT NULL CHECK (
         content_state IN ('RETAINED', 'NOT_RETAINED', 'DELETED_BY_POLICY')
@@ -148,8 +148,9 @@ CREATE TABLE IF NOT EXISTS source_artifacts (
     CONSTRAINT source_artifacts_capture_identity
         UNIQUE (created_by_attempt_id, locator_key, content_sha256),
     CONSTRAINT source_artifacts_retention_valid CHECK (
-        (content_state = 'RETAINED' AND storage_uri IS NOT NULL AND storage_generation IS NOT NULL)
-        OR (content_state IN ('NOT_RETAINED', 'DELETED_BY_POLICY')
+        (content_state IN ('RETAINED', 'DELETED_BY_POLICY')
+            AND storage_uri IS NOT NULL AND storage_generation IS NOT NULL)
+        OR (content_state = 'NOT_RETAINED'
             AND storage_uri IS NULL AND storage_generation IS NULL)
     )
 );
@@ -185,6 +186,41 @@ CREATE TABLE IF NOT EXISTS interpretation_subjects (
     CONSTRAINT interpretation_subjects_typed_identity
         UNIQUE (subject_id, subject_type)
 );
+
+
+CREATE OR REPLACE FUNCTION enforce_ingestion_initial_state()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $
+BEGIN
+    IF TG_TABLE_NAME = 'ingestion_runs' AND NEW.state <> 'CREATED' THEN
+        RAISE EXCEPTION 'new ingestion run must start CREATED'
+            USING ERRCODE = '23514';
+    ELSIF TG_TABLE_NAME = 'ingestion_work_items' AND NEW.state <> 'PENDING' THEN
+        RAISE EXCEPTION 'new ingestion work must start PENDING'
+            USING ERRCODE = '23514';
+    ELSIF TG_TABLE_NAME = 'ingestion_attempts' AND NEW.state <> 'RUNNING' THEN
+        RAISE EXCEPTION 'new ingestion attempt must start RUNNING'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS ingestion_runs_initial_state_guard ON ingestion_runs;
+CREATE TRIGGER ingestion_runs_initial_state_guard
+    BEFORE INSERT ON ingestion_runs
+    FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_initial_state();
+
+DROP TRIGGER IF EXISTS ingestion_work_items_initial_state_guard ON ingestion_work_items;
+CREATE TRIGGER ingestion_work_items_initial_state_guard
+    BEFORE INSERT ON ingestion_work_items
+    FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_initial_state();
+
+DROP TRIGGER IF EXISTS ingestion_attempts_initial_state_guard ON ingestion_attempts;
+CREATE TRIGGER ingestion_attempts_initial_state_guard
+    BEFORE INSERT ON ingestion_attempts
+    FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_initial_state();
 
 CREATE OR REPLACE FUNCTION enforce_ingestion_run_transition()
 RETURNS TRIGGER

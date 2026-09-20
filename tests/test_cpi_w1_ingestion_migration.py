@@ -50,14 +50,20 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("ingestion_work_items_state_claim_valid", self.sql)
         self.assertIn("cannot terminalize ingestion run with non-terminal work", self.sql)
         self.assertIn("terminal ingestion run cannot receive new work", self.sql)
+        self.assertIn("new ingestion run must start CREATED", self.sql)
+        self.assertIn("new ingestion work must start PENDING", self.sql)
+        self.assertIn("new ingestion attempt must start RUNNING", self.sql)
 
     def test_artifact_identity_and_retention_are_explicit(self) -> None:
         self.assertIn(
             "UNIQUE (created_by_attempt_id, locator_key, content_sha256)", self.sql
         )
         self.assertIn("source_artifacts_retention_valid", self.sql)
+        self.assertIn("content_state IN ('RETAINED', 'DELETED_BY_POLICY')", self.sql)
         self.assertIn("storage_generation IS NOT NULL", self.sql)
+        self.assertIn("content_state = 'NOT_RETAINED'", self.sql)
         self.assertIn("storage_generation IS NULL", self.sql)
+        self.assertIn("created_by_execution_scope = 'ECONOMIC_COLLECT'", self.sql)
 
     def test_replay_and_scheduled_delivery_have_durable_identity(self) -> None:
         self.assertIn("ingestion_runs_replay_reference_valid", self.sql)

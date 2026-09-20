@@ -167,6 +167,65 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (uuid4(), digest("artifact"), attempt_id),
                 )
 
+    def test_deleted_by_policy_preserves_retained_object_metadata(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            attempt_id = self.insert_attempt(connection, work_id)
+            artifact_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO source_artifacts (
+                    artifact_id, data_domain, source_code, artifact_contract_kind,
+                    source_contract_version, locator_key, content_sha256,
+                    content_type, captured_at, created_by_attempt_id,
+                    created_by_execution_scope, content_state,
+                    storage_uri, storage_generation
+                ) VALUES (%s, 'ECONOMIC', 'BLS', 'CPI_RELEASE_HTML',
+                          'bls-cpi-source-v1', 'release:2026-08', %s,
+                          'text/html', CURRENT_TIMESTAMP, %s,
+                          'ECONOMIC_COLLECT', 'RETAINED',
+                          'file:///tmp/object', 'generation-1')
+                """,
+                (artifact_id, digest("retained-body"), attempt_id),
+            )
+            connection.execute(
+                """
+                UPDATE source_artifacts
+                   SET content_state='DELETED_BY_POLICY'
+                 WHERE artifact_id=%s
+                """,
+                (artifact_id,),
+            )
+            row = connection.execute(
+                """
+                SELECT content_state, storage_uri, storage_generation
+                  FROM source_artifacts WHERE artifact_id=%s
+                """,
+                (artifact_id,),
+            ).fetchone()
+        self.assertEqual(
+            row,
+            ('DELETED_BY_POLICY', 'file:///tmp/object', 'generation-1'),
+        )
+
+    def test_new_run_cannot_bypass_created_state(self) -> None:
+        with self.connection() as connection:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_runs (
+                        run_id, execution_scope, data_domain, job_type, trigger_type,
+                        run_mode, source_revision, workload_artifact_digest,
+                        job_contract_version, config_fingerprint,
+                        state, outcome, finished_at
+                    ) VALUES (%s, 'ECONOMIC_COLLECT', 'ECONOMIC', 'CPI_W1', 'MANUAL',
+                              'LIVE', 'test-source', %s, 'cpi-w1-job-v1', %s,
+                              'TERMINAL', 'NO_WORK', CURRENT_TIMESTAMP)
+                    """,
+                    (uuid4(), digest('workload'), digest('config')),
+                )
+
     def test_same_bytes_from_different_attempts_are_distinct_capture_rows(self) -> None:
         with self.connection() as connection:
             run_id = self.insert_run(connection)
