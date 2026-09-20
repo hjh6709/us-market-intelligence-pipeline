@@ -1018,6 +1018,13 @@ git commit -m "feat: add CPI governance application boundary"
 
 ### Task 13: Build Corpus Manifest and Differential Replay Tool
 
+**Mandatory exceptional corpus coverage:** include the October 2025 CPI
+nonpublication case using explicit official BLS archive/exception evidence. Prove
+that schedule-row absence, HTTP 404, and stale current-release content cannot produce
+CANCELED/NO_RELEASE_EXPECTED, while explicit scoped BLS nonpublication evidence can
+support the governed nonpublication path.
+
+
 **Files:**
 - Create: `tests/fixtures/cpi_w1/corpus.json`
 - Create: `scripts/replay_cpi_w1_corpus.py`
