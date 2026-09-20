@@ -973,6 +973,9 @@ git commit -m "feat: add CPI source and PIT selectors"
 Test application refuses:
 - empty workforce subject;
 - proposer as approver;
+- caller-supplied proposer/approver/actor identity that differs from the
+  authenticated IdP subject;
+- display-name/email identity in place of the immutable IdP subject identifier;
 - arbitrary expiry supplied by caller;
 - arbitrary decision/control version supplied by caller.
 
@@ -981,6 +984,8 @@ Test application refuses:
 For governance policy v1, compute expiry inside the service from one constant policy duration and persist `governance_policy_version="cpi-governance-v1"`.
 
 Do not let CLI/API callers set approval count.
+Derive proposer/approver/actor subjects from authenticated workforce context; public
+method/request payloads must not accept arbitrary actor identities.
 
 - [ ] **Step 3: Implement activation wrappers**
 

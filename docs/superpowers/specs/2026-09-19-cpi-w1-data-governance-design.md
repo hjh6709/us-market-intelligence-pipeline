@@ -864,6 +864,17 @@ A single approver may not vote twice on the same request.
 
 Corporate IdP/HR remains authority for whether two subjects represent distinct authorized people.
 
+Workforce subject fields are security principals, not client-authored labels. In
+production, `proposer_subject`, `approver_subject`, serving-control
+`actor_subject`, and activation actor identity must be derived server-side from the
+authenticated corporate IdP principal using one stable immutable subject identifier.
+Display names, email aliases, request-body strings, headers supplied by untrusted
+clients, or caller-selected arbitrary text are not valid identity authority.
+
+The application boundary must ignore/reject caller attempts to choose another
+workforce subject. Identity normalization at the database layer is only defense in
+depth; it does not replace IdP-backed person identity or authorization.
+
 ### 22.4 Effective decisions
 
 interpretation_decisions is append-only.
