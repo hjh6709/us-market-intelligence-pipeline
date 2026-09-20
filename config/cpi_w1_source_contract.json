@@ -2,10 +2,12 @@
   "contract_version": "bls-cpi-source-v1",
   "transport": {
     "https_only": true,
-    "allowlisted_hosts": ["www.bls.gov"],
+    "allowlisted_hosts": [
+      "www.bls.gov"
+    ],
     "max_redirects": 3,
-    "connect_timeout_seconds": 5.0,
-    "read_timeout_seconds": 15.0,
+    "connect_timeout_seconds": 5,
+    "read_timeout_seconds": 15,
     "accept_encoding": "identity",
     "max_response_bytes": 20971520
   },
@@ -19,12 +21,14 @@
     "CPI_SCHEDULE_HTML": {
       "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
       "surface_role": "AUTHORITATIVE",
-      "artifact_contract_kind": "CPI_SCHEDULE_HTML"
+      "artifact_contract_kind": "CPI_SCHEDULE_HTML",
+      "schedule_timezone": "America/New_York"
     },
     "BLS_GLOBAL_ICS": {
       "url": "https://www.bls.gov/schedule/news_release/bls.ics",
       "surface_role": "FALLBACK_CORROBORATION",
-      "artifact_contract_kind": "BLS_GLOBAL_ICS"
+      "artifact_contract_kind": "BLS_GLOBAL_ICS",
+      "schedule_timezone": "America/New_York"
     },
     "CURRENT_CPI_RELEASE_HTML": {
       "url": "https://www.bls.gov/news.release/cpi.nr0.htm",
