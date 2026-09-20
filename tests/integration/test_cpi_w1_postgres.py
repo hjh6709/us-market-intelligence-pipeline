@@ -772,7 +772,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                     source_reason_text="Source explicitly states value unavailable.",
                 )
 
-    def test_explicit_unavailable_requires_positive_source_context(self) -> None:
+    def test_explicit_unavailable_requires_nonempty_source_reason_text(self) -> None:
         with self.connection() as connection:
             topology = self.make_observation_topology(connection)
             with self.assertRaises(psycopg.errors.CheckViolation):
@@ -896,6 +896,63 @@ class CpiW1PostgresTest(unittest.TestCase):
             topology,
             normalized_value=Decimal("2.9"),
         )
+
+    def test_interpretation_subject_without_typed_evidence_cannot_activate(self) -> None:
+        with self.connection() as connection:
+            subject_id = uuid4()
+            self.insert_subject(
+                connection,
+                subject_id,
+                "OFFICIAL_OBSERVATION_ASSERTION",
+            )
+            request_id = self.create_interpretation_request(
+                connection,
+                subject_id,
+            )
+            self.approve_interpretation_request(connection, request_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (request_id, "worker:activator"),
+                )
+
+    def test_future_dated_interpretation_request_cannot_activate(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(
+                connection,
+                subject_id,
+                requested_at="2099-01-01 00:00:00+00",
+            )
+            self.approve_interpretation_request(connection, request_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (request_id, "worker:activator"),
+                )
+
+    def test_identity_whitespace_cannot_bypass_self_approval_guard(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(connection, subject_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.approve_interpretation_request(
+                    connection,
+                    request_id,
+                    approver="worker:proposer ",
+                )
+
+    def test_blank_serving_reason_code_is_rejected(self) -> None:
+        with self.connection() as connection:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    SELECT apply_economic_serving_control(
+                        'CPI_DOMAIN', NULL, 0, 'WITHHELD', '   ',
+                        'worker:operator', 'CASE-1', NULL, NULL
+                    )
+                    """
+                )
 
     def test_interpretation_self_approval_is_structurally_rejected(self) -> None:
         with self.connection() as connection:

@@ -6,12 +6,16 @@ CREATE TABLE IF NOT EXISTS interpretation_requests (
     subject_id UUID NOT NULL REFERENCES interpretation_subjects(subject_id),
     requested_state TEXT NOT NULL CHECK (requested_state IN ('VALID', 'INVALID')),
     expected_decision_version INTEGER NOT NULL CHECK (expected_decision_version >= 0),
-    reason_code TEXT NOT NULL,
+    reason_code TEXT NOT NULL CHECK (
+        BTRIM(reason_code) <> '' AND reason_code = BTRIM(reason_code)
+    ),
     case_ref TEXT,
     governance_policy_version TEXT NOT NULL CHECK (
         governance_policy_version = 'cpi-governance-v1'
     ),
-    proposer_subject TEXT NOT NULL CHECK (BTRIM(proposer_subject) <> ''),
+    proposer_subject TEXT NOT NULL CHECK (
+        BTRIM(proposer_subject) <> '' AND proposer_subject = BTRIM(proposer_subject)
+    ),
     requested_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -47,7 +51,9 @@ CREATE TABLE IF NOT EXISTS interpretation_approvals (
     approval_id UUID PRIMARY KEY,
     request_id UUID NOT NULL,
     proposer_subject TEXT NOT NULL,
-    approver_subject TEXT NOT NULL CHECK (BTRIM(approver_subject) <> ''),
+    approver_subject TEXT NOT NULL CHECK (
+        BTRIM(approver_subject) <> '' AND approver_subject = BTRIM(approver_subject)
+    ),
     approval_decision TEXT NOT NULL CHECK (
         approval_decision IN ('APPROVE', 'REJECT')
     ),
@@ -86,9 +92,13 @@ CREATE TABLE IF NOT EXISTS economic_serving_control_decisions (
     expected_control_version INTEGER NOT NULL CHECK (expected_control_version >= 0),
     control_version INTEGER NOT NULL CHECK (control_version >= 1),
     state TEXT NOT NULL CHECK (state IN ('ENABLED', 'WITHHELD')),
-    reason_code TEXT NOT NULL,
+    reason_code TEXT NOT NULL CHECK (
+        BTRIM(reason_code) <> '' AND reason_code = BTRIM(reason_code)
+    ),
     applied_at TIMESTAMPTZ NOT NULL,
-    actor_subject TEXT NOT NULL CHECK (BTRIM(actor_subject) <> ''),
+    actor_subject TEXT NOT NULL CHECK (
+        BTRIM(actor_subject) <> '' AND actor_subject = BTRIM(actor_subject)
+    ),
     case_ref TEXT,
     verified_knowledge_fingerprint TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -172,6 +182,51 @@ BEGIN
       FROM interpretation_subjects
      WHERE subject_id = req.subject_id
      FOR UPDATE;
+
+    IF NOT EXISTS (
+        SELECT 1
+          FROM interpretation_subjects s
+         WHERE s.subject_id = req.subject_id
+           AND (
+               (s.subject_type = 'SCHEDULE_ASSERTION'
+                    AND EXISTS (
+                        SELECT 1 FROM event_schedule_assertions e
+                         WHERE e.schedule_assertion_id = s.subject_id
+                    ))
+               OR
+               (s.subject_type = 'EVENT_DISCLOSURE_LINK'
+                    AND EXISTS (
+                        SELECT 1 FROM event_disclosure_links e
+                         WHERE e.disclosure_link_id = s.subject_id
+                    ))
+               OR
+               (s.subject_type = 'DISCLOSURE_ARTIFACT_LINK'
+                    AND EXISTS (
+                        SELECT 1 FROM event_disclosure_artifacts e
+                         WHERE e.disclosure_artifact_link_id = s.subject_id
+                    ))
+               OR
+               (s.subject_type = 'DISCLOSURE_MARKER_ASSERTION'
+                    AND EXISTS (
+                        SELECT 1 FROM disclosure_marker_assertions e
+                         WHERE e.marker_assertion_id = s.subject_id
+                    ))
+               OR
+               (s.subject_type = 'OFFICIAL_OBSERVATION_ASSERTION'
+                    AND EXISTS (
+                        SELECT 1 FROM official_observation_assertions e
+                         WHERE e.assertion_id = s.subject_id
+                    ))
+           )
+    ) THEN
+        RAISE EXCEPTION 'interpretation subject has no matching typed evidence'
+            USING ERRCODE = '23514';
+    END IF;
+
+    IF CURRENT_TIMESTAMP < req.requested_at THEN
+        RAISE EXCEPTION 'interpretation request is not active yet'
+            USING ERRCODE = '23514';
+    END IF;
 
     IF CURRENT_TIMESTAMP >= req.expires_at THEN
         RAISE EXCEPTION 'interpretation request expired'
