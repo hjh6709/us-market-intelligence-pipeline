@@ -966,6 +966,17 @@ Truth correction remains the governed interpretation workflow.
 
 For W1 Internal Alpha, an authorized operator may apply WITHHELD immediately. Re-enabling an EVENT_OCCURRENCE after a prior WITHHELD requires a non-empty case_ref and the current selector knowledge fingerprint recorded as verified_knowledge_fingerprint; the application boundary must refuse re-enable while the event remains CONFLICT or UNRESOLVED. Re-enabling CPI_DOMAIN requires a non-empty case_ref plus a verification_ref recorded in the business audit because one event fingerprint cannot prove domain-wide recovery.
 
+The event-level selector knowledge fingerprint is a lowercase SHA-256 digest of canonical
+JSON owned by the selector contract. It represents the governed knowledge state before
+the serving overlay, not request time, cache state, or serving-control history. The
+payload must include the selector-contract version, event occurrence identity, release
+projection state, and each Core 4 observation's resolved state plus the sorted distinct
+eligible semantic material fingerprints that produced that state. Duplicate provenance
+that yields the same semantic material does not change the fingerprint. Request/as-of
+timestamps are excluded so an unchanged knowledge state remains stable across reads.
+Task 11 owns the exact canonical payload builder; Task 12 must recompute it immediately
+before event re-enable and compare it to the operator-verified value.
+
 These are correctness guards, not a complete production authorization model. Independent production re-enable approval, break-glass policy, and workforce role enforcement remain mandatory before Public Beta under the Runtime/Security/Readiness contract.
 
 ## 25. Selector contract

@@ -950,7 +950,19 @@ Cover:
 
 A valid envelope + quarantined observations yields DISCLOSED with observation resolution UNRESOLVED.
 
-- [ ] **Step 6: Implement serving overlay separately**
+- [ ] **Step 6: Define the selector knowledge fingerprint**
+
+Build a canonical selector-owned payload and SHA-256 fingerprint over:
+- selector contract version;
+- event occurrence identity;
+- release projection state;
+- each Core 4 resolution state;
+- sorted distinct eligible semantic material fingerprints for each Core 4 item.
+
+Exclude request/as-of time, storage timestamps, duplicate provenance, and all
+serving-control history. Add stability/change-vector tests.
+
+- [ ] **Step 7: Implement serving overlay separately**
 
 Knowledge result is unchanged by serving-control history.
 
@@ -959,7 +971,7 @@ Live governed overlay:
 - deny-overrides;
 - WITHHELD removes numeric values from governed consumer model.
 
-- [ ] **Step 7: Run and commit**
+- [ ] **Step 8: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_selector -v
@@ -1006,6 +1018,11 @@ method/request payloads must not accept arbitrary actor identities.
 - [ ] **Step 3: Implement activation wrappers**
 
 Call only the migration's guarded DB functions. Do not duplicate race-sensitive activation logic in Python.
+
+For EVENT_OCCURRENCE re-enable, recompute the current selector knowledge fingerprint
+immediately before activation, require a lowercase 64-character SHA-256 operator-
+verified fingerprint, compare the two, and refuse activation on mismatch or while
+knowledge remains CONFLICT/UNRESOLVED.
 
 - [ ] **Step 4: Add end-to-end correction test**
 
