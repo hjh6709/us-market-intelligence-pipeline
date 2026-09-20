@@ -617,6 +617,13 @@ Required concepts:
 
 accepted_at is the platform knowledge time for this topology interpretation. created_at is storage metadata and must not be substituted for PIT visibility.
 
+For every W1 governable evidence type, `accepted_at` is assigned by the guarded
+promotion transaction at the moment the platform accepts that interpretation. It is
+not a parser field, source timestamp, replay timestamp, or caller-selectable value.
+Promotion APIs must not accept arbitrary `accepted_at` input. Backfill/replay may
+accept old source evidence later, but its system-known visibility begins at the real
+acceptance time; replay never backdates platform knowledge.
+
 CPI W1 relation kinds:
 
 - EVENT_RELEASE

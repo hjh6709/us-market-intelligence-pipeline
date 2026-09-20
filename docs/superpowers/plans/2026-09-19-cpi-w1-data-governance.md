@@ -817,6 +817,8 @@ Same attempt + locator + hash must converge to one artifact row. Different attem
 
 One transaction:
 - verify current claim;
+- generate one transaction-owned `accepted_at` knowledge timestamp; callers/parsers
+  cannot supply or backdate it;
 - create/verify CPI event occurrence;
 - create/verify disclosure identity;
 - create/verify EVENT_RELEASE link;
@@ -831,6 +833,8 @@ No observations are inserted here.
 
 One transaction:
 - verify current claim;
+- generate one transaction-owned `accepted_at` knowledge timestamp; callers/parsers
+  cannot supply or backdate it;
 - verify valid EVENT_RELEASE and disclosure-artifact topology for the input artifact;
 - require all four expected observation semantics resolved as VALUE or EXPLICIT_UNAVAILABLE;
 - insert/verify all four assertions and their interpretation subjects;
@@ -850,15 +854,22 @@ Scenario:
 6. disclosure/EVENT_RELEASE/marker rows exist;
 7. zero Core 4 assertion rows exist.
 
-- [ ] **Step 7: Add stale-worker fencing test**
+- [ ] **Step 7: Add accepted-at trust-boundary tests**
+
+Verify promoter/repository public interfaces expose no caller-selected `accepted_at`.
+Insert evidence through promotion, then prove the stored knowledge time is generated
+by the promotion transaction. Replay/backfill of an older artifact must not backdate
+`accepted_at`.
+
+- [ ] **Step 8: Add stale-worker fencing test**
 
 Claim work as generation 1, expire/reclaim as generation 2, then attempt generation-1 promotion. Expected: stale mutation rejected and no evidence inserted.
 
-- [ ] **Step 8: Add conflicting official representation test**
+- [ ] **Step 9: Add conflicting official representation test**
 
 Promote HTML Core 4 value 0.3, then an eligible corroborating representation value 0.4. Both work items may SUCCEED; both evidence rows remain.
 
-- [ ] **Step 9: Run and commit**
+- [ ] **Step 10: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_repository tests.test_cpi_w1_promoter -v
