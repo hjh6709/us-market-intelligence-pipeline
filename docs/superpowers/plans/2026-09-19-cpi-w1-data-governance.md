@@ -518,28 +518,17 @@ git commit -m "feat: add CPI interpretation governance and serving controls"
 **Files:**
 - Create: `src/cpi_w1_contracts.py`
 - Create: `tests/test_cpi_w1_contracts.py`
-- Modify: `pyproject.toml`
-- Modify: `uv.lock`
+- No dependency-file changes in this task; parser dependencies are introduced just-in-time in Tasks 8/9.
 
 **Interfaces:**
 - Produces enums/dataclasses shared by collectors, promoters, selectors.
 - Produces `material_fingerprint(payload: Mapping[str, object]) -> str`.
 
-- [ ] **Step 1: Add parser dependencies**
+- [ ] **Step 1: Keep semantic contracts dependency-free**
 
-Add:
-
-```toml
-"beautifulsoup4>=4.12,<5",
-"openpyxl>=3.1,<4",
-```
-
-Run:
-
-```bash
-uv lock
-uv sync --frozen --extra airflow
-```
+Do not add HTML/XLSX parser libraries here. This module uses only the Python standard library.
+Introduce BeautifulSoup in Task 8 and openpyxl in Task 9, where their attack surface and
+lockfile changes are exercised by parser-specific tests.
 
 - [ ] **Step 2: Write failing contract tests**
 
@@ -585,7 +574,7 @@ Do not edit legacy `src/platform_contracts.py` enums.
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_contracts tests.test_platform_contracts -v
-git add pyproject.toml uv.lock src/cpi_w1_contracts.py tests/test_cpi_w1_contracts.py
+git add src/cpi_w1_contracts.py tests/test_cpi_w1_contracts.py docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md
 git commit -m "feat: define CPI W1 semantic contracts"
 ```
 
