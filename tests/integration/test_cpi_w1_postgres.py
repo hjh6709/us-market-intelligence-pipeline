@@ -627,7 +627,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                         extractor_contract_version, accepted_by_attempt_id,
                         accepted_at, material_fingerprint
                     ) VALUES (
-                        %s, %s, %s, 'RELEASE_TIME', '2026-09-11',
+                        %s, %s, %s, 'EMBARGO_LIFT', '2026-09-11',
                         '2026-09-11 12:30:00+00', 'America/New_York', 'EXACT',
                         'BLS', %s, 'release-v1', %s, CURRENT_TIMESTAMP, %s
                     )

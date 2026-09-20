@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS disclosure_marker_assertions (
         CHECK (subject_type = 'DISCLOSURE_MARKER_ASSERTION'),
     disclosure_id UUID NOT NULL REFERENCES event_disclosures(disclosure_id),
     disclosure_artifact_link_id UUID NOT NULL,
-    marker_semantics TEXT NOT NULL,
+    marker_semantics TEXT NOT NULL CHECK (marker_semantics = 'EMBARGO_LIFT'),
     marker_date DATE,
     marker_at TIMESTAMPTZ,
     marker_timezone TEXT,
@@ -211,11 +211,11 @@ CREATE TABLE IF NOT EXISTS disclosure_marker_assertions (
         (time_precision = 'EXACT'
             AND marker_date IS NOT NULL
             AND marker_at IS NOT NULL
-            AND marker_timezone IS NOT NULL)
+            AND NULLIF(BTRIM(marker_timezone), '') IS NOT NULL)
         OR (time_precision = 'DATE_ONLY'
             AND marker_date IS NOT NULL
             AND marker_at IS NULL
-            AND marker_timezone IS NOT NULL)
+            AND NULLIF(BTRIM(marker_timezone), '') IS NOT NULL)
     ),
     CONSTRAINT disclosure_marker_assertions_parse_identity
         UNIQUE (

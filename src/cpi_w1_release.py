@@ -41,6 +41,7 @@ class ObservationExtractionError(ValueError):
 class ReleaseEnvelopeCandidate:
     event_type: str
     reference_month: date
+    marker_semantics: str
     marker_date: date
     marker_at: datetime
     marker_timezone: str
@@ -498,6 +499,7 @@ def extract_release_envelope(
     return ReleaseEnvelopeCandidate(
         event_type="CPI",
         reference_month=actual_reference_month,
+        marker_semantics="EMBARGO_LIFT",
         marker_date=marker_date,
         marker_at=marker_at,
         marker_timezone=_RELEASE_TZ,

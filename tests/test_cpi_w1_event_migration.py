@@ -102,6 +102,10 @@ class CpiW1EventMigrationTest(unittest.TestCase):
             self.sql,
         )
 
+    def test_marker_semantics_are_canonical(self) -> None:
+        self.assertIn("marker_semantics = 'EMBARGO_LIFT'", self.sql)
+        self.assertIn("NULLIF(BTRIM(marker_timezone), '') IS NOT NULL", self.sql)
+
     def test_schedule_state_field_matrix_is_structural(self) -> None:
         self.assertIn("event_schedule_assertions_state_fields_valid", self.sql)
         self.assertIn("schedule_status IN ('DATE_PENDING', 'CANCELED')", self.sql)

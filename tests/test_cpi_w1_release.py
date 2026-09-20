@@ -27,6 +27,7 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
         )
         self.assertEqual(envelope.event_type, "CPI")
         self.assertEqual(envelope.reference_month, date(2026, 8, 1))
+        self.assertEqual(envelope.marker_semantics, "EMBARGO_LIFT")
         self.assertEqual(envelope.marker_date, date(2026, 9, 11))
         self.assertEqual(
             envelope.marker_at,

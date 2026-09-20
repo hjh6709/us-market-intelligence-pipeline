@@ -736,6 +736,11 @@ The marker is not artifact capture time.
 
 CPI W1 uses the official release/embargo marker as the analysis anchor when exact evidence exists.
 
+For the BLS CPI release-envelope contract v1, the source phrase "embargoed until"
+is normalized to marker_semantics = EMBARGO_LIFT. Promoters do not invent
+RELEASE_TIME or other aliases for the same source statement. Any additional marker
+semantic requires an explicit extractor-contract revision and selector review.
+
 Marker assertions are governable interpretation subjects.
 
 ## 19. Extraction, validation, and quarantine
