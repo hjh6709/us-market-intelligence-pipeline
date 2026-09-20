@@ -44,12 +44,35 @@ class ReleaseEnvelopeCandidate:
 
 
 @dataclass(frozen=True)
+class ObservationCandidate:
+    material: ObservationMaterial
+    source_value_text: str
+    source_reason_text: str | None = None
+
+    @property
+    def observation_code(self) -> str:
+        return self.material.observation_code
+
+    @property
+    def assertion_state(self) -> ObservationState:
+        return self.material.assertion_state
+
+    @property
+    def normalized_value(self) -> Decimal | None:
+        return self.material.normalized_value
+
+    @property
+    def material_fingerprint(self) -> str:
+        return self.material.fingerprint
+
+
+@dataclass(frozen=True)
 class ObservationBundleCandidate:
     reference_month: date
-    observations: tuple[ObservationMaterial, ...]
+    observations: tuple[ObservationCandidate, ...]
     extractor_contract_version: str
 
-    def by_code(self) -> dict[str, ObservationMaterial]:
+    def by_code(self) -> dict[str, ObservationCandidate]:
         return {item.observation_code: item for item in self.observations}
 
 
@@ -356,7 +379,10 @@ def _data_rows(
     return rows
 
 
-def _explicit_unavailable_context(full_text: str, reference_month: date) -> bool:
+def _explicit_unavailable_reason(
+    full_text: str,
+    reference_month: date,
+) -> str | None:
     previous = _previous_month(reference_month)
     previous_name = _MONTH_NAMES[previous.month - 1]
     normalized = _semantic_text(full_text)
@@ -370,25 +396,35 @@ def _explicit_unavailable_context(full_text: str, reference_month: date) -> bool
         "lapse in appropriations" in normalized
         or "lapse in federal appropriations" in normalized
     )
-    return has_period and has_unavailability and has_official_reason
+    if not (has_period and has_unavailability and has_official_reason):
+        return None
+    return (
+        "BLS official release states "
+        f"{_MONTH_NAMES[previous.month - 1].title()} {previous.year} CPI source data "
+        "were unavailable due to a lapse in appropriations."
+    )
 
 
-def _material_from_cell(
+def _candidate_from_cell(
     *,
     code: str,
     raw_value: str,
-    allow_explicit_unavailable: bool,
-) -> ObservationMaterial:
+    explicit_unavailable_reason: str | None,
+) -> ObservationCandidate:
     cleaned = _normalized_text(raw_value)
     if cleaned in {"-", "—", "–", ""}:
-        if not allow_explicit_unavailable:
+        if explicit_unavailable_reason is None:
             raise ObservationExtractionError(
                 f"{code} is nonnumeric without explicit official unavailability context"
             )
-        return ObservationMaterial(
-            observation_code=code,
-            assertion_state=ObservationState.EXPLICIT_UNAVAILABLE,
-            normalized_value=None,
+        return ObservationCandidate(
+            material=ObservationMaterial(
+                observation_code=code,
+                assertion_state=ObservationState.EXPLICIT_UNAVAILABLE,
+                normalized_value=None,
+            ),
+            source_value_text=cleaned,
+            source_reason_text=explicit_unavailable_reason,
         )
     try:
         value = Decimal(cleaned.replace("%", "").strip())
@@ -398,10 +434,14 @@ def _material_from_cell(
         ) from exc
     if not value.is_finite():
         raise ObservationExtractionError(f"{code} value must be finite")
-    return ObservationMaterial(
-        observation_code=code,
-        assertion_state=ObservationState.VALUE,
-        normalized_value=value,
+    return ObservationCandidate(
+        material=ObservationMaterial(
+            observation_code=code,
+            assertion_state=ObservationState.VALUE,
+            normalized_value=value,
+        ),
+        source_value_text=cleaned,
+        source_reason_text=None,
     )
 
 
@@ -472,30 +512,30 @@ def extract_core4_from_release_html(
     if len(headline) <= max_col or len(core) <= max_col:
         raise ObservationExtractionError("required CPI Core 4 cells are missing")
 
-    unavailable_context = _explicit_unavailable_context(
+    unavailable_reason = _explicit_unavailable_reason(
         full_text,
         envelope.reference_month,
     )
     observations = (
-        _material_from_cell(
+        _candidate_from_cell(
             code="CPI_HEADLINE_MOM",
             raw_value=headline[mom_col],
-            allow_explicit_unavailable=unavailable_context,
+            explicit_unavailable_reason=unavailable_reason,
         ),
-        _material_from_cell(
+        _candidate_from_cell(
             code="CPI_HEADLINE_YOY",
             raw_value=headline[yoy_col],
-            allow_explicit_unavailable=False,
+            explicit_unavailable_reason=None,
         ),
-        _material_from_cell(
+        _candidate_from_cell(
             code="CPI_CORE_MOM",
             raw_value=core[mom_col],
-            allow_explicit_unavailable=unavailable_context,
+            explicit_unavailable_reason=unavailable_reason,
         ),
-        _material_from_cell(
+        _candidate_from_cell(
             code="CPI_CORE_YOY",
             raw_value=core[yoy_col],
-            allow_explicit_unavailable=False,
+            explicit_unavailable_reason=None,
         ),
     )
     if {item.observation_code for item in observations} != {

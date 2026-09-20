@@ -67,7 +67,7 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
     def test_negative_and_zero_values_are_real_values(self) -> None:
         body = self.read("normal_aug_2026.html")
         body = body.replace(b">0.4<", b">-0.4<", 1)
-        body = body.replace(b">0.3<", b">0.0<", 1)
+        body = body.replace(b">0.3</td></tr>", b">0.0</td></tr>", 1)
         bundle = extract_core4_from_release_html(
             body,
             expected_reference_month=date(2026, 8, 1),
@@ -95,6 +95,8 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
         )
         self.assertEqual(values["CPI_HEADLINE_YOY"].normalized_value, Decimal("2.7"))
         self.assertEqual(values["CPI_CORE_YOY"].normalized_value, Decimal("2.6"))
+        self.assertIsNotNone(values["CPI_HEADLINE_MOM"].source_reason_text)
+        self.assertEqual(values["CPI_HEADLINE_MOM"].source_value_text, "-")
 
     def test_dash_without_official_unavailability_context_quarantines(self) -> None:
         body = self.read("nov_2025_explicit_unavailable.html").replace(
