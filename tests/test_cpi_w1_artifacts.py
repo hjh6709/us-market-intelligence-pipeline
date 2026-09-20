@@ -28,6 +28,16 @@ class CpiW1ArtifactStoreTest(unittest.TestCase):
             self.assertEqual(first.storage_uri, second.storage_uri)
             self.assertEqual(first.sha256, second.sha256)
 
+    def test_storage_generation_is_stable_for_idempotent_reuse(self) -> None:
+        body = b"immutable"
+        sha = hashlib.sha256(body).hexdigest()
+        artifact_id = uuid4()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = FilesystemArtifactStore(temp_dir)
+            first = store.put(artifact_id, body, sha)
+            second = store.put(artifact_id, body, sha)
+            self.assertEqual(first.storage_generation, second.storage_generation)
+
     def test_wrong_declared_hash_is_rejected_without_object(self) -> None:
         body = b"immutable"
         wrong = hashlib.sha256(b"other").hexdigest()

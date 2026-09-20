@@ -199,7 +199,7 @@ class BlsCpiSourceClient:
         for redirect_count in range(self.contract.max_redirects + 1):
             self.contract.validate_url(current_url)
             try:
-                with self._client.stream("GET", current_url) as response:
+                with self._client.stream("GET", current_url, follow_redirects=False) as response:
                     status = response.status_code
 
                     if status in (301, 302, 303, 307, 308):

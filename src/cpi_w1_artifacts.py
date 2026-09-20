@@ -44,6 +44,17 @@ class FilesystemArtifactStore:
     def _digest(body: bytes) -> str:
         return hashlib.sha256(body).hexdigest()
 
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        descriptor = os.open(path, flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
     def put(self, artifact_id: UUID, body: bytes, sha256: str) -> StoredArtifact:
         if not _SHA256_RE.fullmatch(sha256):
             raise ValueError("sha256 must be lowercase 64-character hex")
@@ -53,6 +64,7 @@ class FilesystemArtifactStore:
 
         artifact_dir = self._artifact_dir(artifact_id)
         artifact_dir.mkdir(parents=True, exist_ok=True)
+        self._fsync_directory(self._root)
         final_path = artifact_dir / f"{sha256}.bin"
         temp_path = artifact_dir / f".tmp-{uuid4()}"
 
@@ -64,6 +76,7 @@ class FilesystemArtifactStore:
 
             try:
                 os.link(temp_path, final_path)
+                self._fsync_directory(artifact_dir)
             except FileExistsError:
                 existing = final_path.read_bytes()
                 if self._digest(existing) != sha256 or existing != body:

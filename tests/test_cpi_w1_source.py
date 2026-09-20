@@ -50,6 +50,31 @@ class CpiW1SourceClientTest(unittest.TestCase):
             self.contract.validate_url("http://www.bls.gov/news.release/cpi.nr0.htm")
         self.assertEqual(caught.exception.kind, SourceFailureKind.POLICY)
 
+    def test_injected_client_cannot_enable_automatic_redirects(self) -> None:
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            if len(seen) == 1:
+                return httpx.Response(
+                    302,
+                    headers={"Location": "https://example.com/cpi"},
+                    request=request,
+                )
+            return httpx.Response(200, content=b"should-not-be-fetched", request=request)
+
+        injected = httpx.Client(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=True,
+        )
+        client = BlsCpiSourceClient(self.contract, client=injected)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.POLICY)
+        self.assertEqual(len(seen), 1)
+
     def test_redirect_to_non_bls_host_is_rejected(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -100,10 +125,12 @@ class CpiW1SourceClientTest(unittest.TestCase):
 
     def test_unexpected_compression_is_rejected(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
+            import gzip
+
             return httpx.Response(
                 200,
                 headers={"Content-Encoding": "gzip"},
-                content=b"not-relevant",
+                content=gzip.compress(b"not-relevant"),
                 request=request,
             )
 
