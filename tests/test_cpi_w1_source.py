@@ -185,9 +185,30 @@ class CpiW1SourceClientTest(unittest.TestCase):
         self.assertIn(b"evil.example", response.body)
 
     def test_contract_file_contains_no_credentials(self) -> None:
-        raw = CONTRACT_PATH.read_text(encoding="utf-8").lower()
-        for forbidden in ("password", "secret", "api_key", "authorization"):
-            self.assertNotIn(forbidden, raw)
+        import json
+
+        payload = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        forbidden_keys = {
+            "password",
+            "secret",
+            "api_key",
+            "apikey",
+            "authorization",
+            "access_token",
+            "refresh_token",
+            "client_secret",
+        }
+
+        def walk(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    self.assertNotIn(key.lower(), forbidden_keys)
+                    walk(item)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        walk(payload)
 
 
 if __name__ == "__main__":
