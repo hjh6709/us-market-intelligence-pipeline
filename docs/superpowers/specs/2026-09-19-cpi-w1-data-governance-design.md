@@ -140,6 +140,14 @@ Schedule changes are represented by new schedule assertions. No RESCHEDULED sour
 
 Cancellation requires explicit authoritative evidence. Row absence, HTTP failure, or missing publication does not imply cancellation.
 
+Explicit cancellation/nonpublication evidence is not assumed to live only in the
+regular CPI schedule table. An official CPI archive entry, program-specific
+exception notice, or other versioned BLS exception/archival source surface may
+establish nonpublication when it explicitly names the affected reference period.
+Such a surface must have its own source/extractor contract and provenance; it may not
+be synthesized from a missing schedule row, HTTP 404, stale current-release page, or
+collector failure.
+
 ### 7.2 Release surfaces
 
 Preferred live extraction surface:
