@@ -320,5 +320,293 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
 
+    def make_attempt(self, connection, scope, work_key):
+        run_id = self.insert_run(connection, execution_scope=scope)
+        work_id = self.insert_work(
+            connection,
+            run_id,
+            execution_scope=scope,
+            work_key=work_key,
+        )
+        claim_token = uuid4()
+        connection.execute(
+            """
+            UPDATE ingestion_work_items
+               SET state='CLAIMED', claim_generation=1,
+                   claim_token=%s, lease_until=CURRENT_TIMESTAMP + interval '5 minutes'
+             WHERE work_item_id=%s
+            """,
+            (claim_token, work_id),
+        )
+        return self.insert_attempt(
+            connection,
+            work_id,
+            execution_scope=scope,
+            attempt_number=1,
+        )
+
+    def make_artifact(self, connection, locator="release:2026-08"):
+        attempt_id = self.make_attempt(
+            connection, "ECONOMIC_COLLECT", f"collect:{locator}:{uuid4()}"
+        )
+        artifact_id = uuid4()
+        connection.execute(
+            """
+            INSERT INTO source_artifacts (
+                artifact_id, data_domain, source_code, artifact_contract_kind,
+                source_contract_version, locator_key, content_sha256,
+                content_type, captured_at, created_by_attempt_id,
+                created_by_execution_scope, content_state
+            ) VALUES (%s, 'ECONOMIC', 'BLS', 'CPI_RELEASE_HTML',
+                      'bls-cpi-source-v1', %s, %s, 'text/html',
+                      CURRENT_TIMESTAMP, %s, 'ECONOMIC_COLLECT', 'NOT_RETAINED')
+            """,
+            (artifact_id, locator, digest(str(artifact_id)), attempt_id),
+        )
+        return artifact_id
+
+    def make_event(self, connection, reference_month="2026-08-01"):
+        attempt_id = self.make_attempt(
+            connection, "ECONOMIC_PROMOTE", f"promote:event:{reference_month}:{uuid4()}"
+        )
+        event_id = uuid4()
+        connection.execute(
+            """
+            INSERT INTO core_event_occurrences (
+                event_occurrence_id, event_type, reference_month,
+                created_by_attempt_id
+            ) VALUES (%s, 'CPI', %s, %s)
+            """,
+            (event_id, reference_month, attempt_id),
+        )
+        return event_id, attempt_id
+
+    def make_disclosure(self, connection, attempt_id, key=None):
+        disclosure_id = uuid4()
+        connection.execute(
+            """
+            INSERT INTO event_disclosures (
+                disclosure_id, source_code, canonical_disclosure_key,
+                disclosure_kind, established_by_attempt_id
+            ) VALUES (%s, 'BLS', %s, 'DATA_RELEASE', %s)
+            """,
+            (disclosure_id, key or f"bls-cpi:{uuid4()}", attempt_id),
+        )
+        return disclosure_id
+
+    def insert_subject(self, connection, subject_id, subject_type):
+        connection.execute(
+            "INSERT INTO interpretation_subjects (subject_id, subject_type) VALUES (%s, %s)",
+            (subject_id, subject_type),
+        )
+
+    def test_cpi_reference_month_must_be_first_day(self) -> None:
+        with self.connection() as connection:
+            attempt_id = self.make_attempt(
+                connection, "ECONOMIC_PROMOTE", "promote:bad-reference-month"
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO core_event_occurrences (
+                        event_occurrence_id, event_type, reference_month,
+                        created_by_attempt_id
+                    ) VALUES (%s, 'CPI', '2026-08-02', %s)
+                    """,
+                    (uuid4(), attempt_id),
+                )
+
+    def test_schedule_can_be_absent_without_date_pending_fact(self) -> None:
+        with self.connection() as connection:
+            event_id, _ = self.make_event(connection)
+            count = connection.execute(
+                "SELECT count(*) FROM event_schedule_assertions WHERE event_occurrence_id=%s",
+                (event_id,),
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
+
+    def test_exact_and_date_only_schedule_are_distinct_evidences(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            artifact_a = self.make_artifact(connection, "schedule:exact")
+            artifact_b = self.make_artifact(connection, "schedule:date-only")
+            exact_id = uuid4()
+            date_id = uuid4()
+            self.insert_subject(connection, exact_id, "SCHEDULE_ASSERTION")
+            self.insert_subject(connection, date_id, "SCHEDULE_ASSERTION")
+            connection.execute(
+                """
+                INSERT INTO event_schedule_assertions (
+                    schedule_assertion_id, event_occurrence_id, schedule_status,
+                    scheduled_date, scheduled_at, schedule_timezone, time_precision,
+                    source_code, source_artifact_id, extractor_contract_version,
+                    accepted_by_attempt_id, accepted_at, material_fingerprint
+                ) VALUES
+                    (%s, %s, 'SCHEDULED', '2026-09-11',
+                     '2026-09-11 12:30:00+00', 'America/New_York', 'EXACT',
+                     'BLS', %s, 'schedule-v1', %s, CURRENT_TIMESTAMP, %s),
+                    (%s, %s, 'SCHEDULED', '2026-09-12',
+                     NULL, 'America/New_York', 'DATE_ONLY',
+                     'BLS', %s, 'schedule-v1', %s, CURRENT_TIMESTAMP, %s)
+                """,
+                (
+                    exact_id, event_id, artifact_a, promote_attempt, digest("exact"),
+                    date_id, event_id, artifact_b, promote_attempt, digest("date"),
+                ),
+            )
+            rows = connection.execute(
+                """
+                SELECT time_precision, scheduled_at IS NULL
+                  FROM event_schedule_assertions
+                 WHERE event_occurrence_id=%s
+                 ORDER BY time_precision
+                """,
+                (event_id,),
+            ).fetchall()
+        self.assertEqual(rows, [('DATE_ONLY', True), ('EXACT', False)])
+
+    def test_reschedule_is_two_assertions_not_rescheduled_state(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            for day in (11, 12):
+                artifact_id = self.make_artifact(connection, f"schedule:{day}")
+                assertion_id = uuid4()
+                self.insert_subject(connection, assertion_id, "SCHEDULE_ASSERTION")
+                connection.execute(
+                    """
+                    INSERT INTO event_schedule_assertions (
+                        schedule_assertion_id, event_occurrence_id, schedule_status,
+                        scheduled_date, scheduled_at, schedule_timezone, time_precision,
+                        source_code, source_artifact_id, extractor_contract_version,
+                        accepted_by_attempt_id, accepted_at, material_fingerprint
+                    ) VALUES (%s, %s, 'SCHEDULED', %s, NULL,
+                              'America/New_York', 'DATE_ONLY', 'BLS', %s,
+                              'schedule-v1', %s, CURRENT_TIMESTAMP, %s)
+                    """,
+                    (
+                        assertion_id,
+                        event_id,
+                        f"2026-09-{day:02d}",
+                        artifact_id,
+                        promote_attempt,
+                        digest(f"schedule-{day}"),
+                    ),
+                )
+            rows = connection.execute(
+                "SELECT count(*) FROM event_schedule_assertions WHERE event_occurrence_id=%s",
+                (event_id,),
+            ).fetchone()[0]
+        self.assertEqual(rows, 2)
+
+    def test_one_disclosure_can_link_multiple_events_and_relation_kinds(self) -> None:
+        with self.connection() as connection:
+            event_a, promote_attempt = self.make_event(connection, "2026-07-01")
+            event_b, _ = self.make_event(connection, "2026-08-01")
+            disclosure_id = self.make_disclosure(connection, promote_attempt)
+            links = (
+                (event_a, "EVENT_RELEASE"),
+                (event_b, "SUPPLEMENTAL_DISCLOSURE"),
+                (event_b, "EVENT_RELEASE"),
+            )
+            for event_id, kind in links:
+                link_id = uuid4()
+                self.insert_subject(connection, link_id, "EVENT_DISCLOSURE_LINK")
+                connection.execute(
+                    """
+                    INSERT INTO event_disclosure_links (
+                        disclosure_link_id, event_occurrence_id, disclosure_id,
+                        relation_kind, accepted_by_attempt_id, accepted_at
+                    ) VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    """,
+                    (link_id, event_id, disclosure_id, kind, promote_attempt),
+                )
+            count = connection.execute(
+                "SELECT count(*) FROM event_disclosure_links WHERE disclosure_id=%s",
+                (disclosure_id,),
+            ).fetchone()[0]
+        self.assertEqual(count, 3)
+
+    def test_marker_cannot_pin_unrelated_artifact_link(self) -> None:
+        with self.connection() as connection:
+            _, promote_attempt = self.make_event(connection)
+            disclosure_id = self.make_disclosure(connection, promote_attempt)
+            artifact_a = self.make_artifact(connection, "release:a")
+            artifact_b = self.make_artifact(connection, "release:b")
+            link_id = uuid4()
+            self.insert_subject(connection, link_id, "DISCLOSURE_ARTIFACT_LINK")
+            connection.execute(
+                """
+                INSERT INTO event_disclosure_artifacts (
+                    disclosure_artifact_link_id, disclosure_id, artifact_id,
+                    relation_kind, accepted_by_attempt_id, accepted_at
+                ) VALUES (%s, %s, %s, 'RELEASE_REPRESENTATION', %s, CURRENT_TIMESTAMP)
+                """,
+                (link_id, disclosure_id, artifact_a, promote_attempt),
+            )
+            marker_id = uuid4()
+            self.insert_subject(connection, marker_id, "DISCLOSURE_MARKER_ASSERTION")
+            with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+                connection.execute(
+                    """
+                    INSERT INTO disclosure_marker_assertions (
+                        marker_assertion_id, disclosure_id, disclosure_artifact_link_id,
+                        marker_semantics, marker_date, marker_at, marker_timezone,
+                        time_precision, source_code, source_artifact_id,
+                        extractor_contract_version, accepted_by_attempt_id,
+                        accepted_at, material_fingerprint
+                    ) VALUES (
+                        %s, %s, %s, 'RELEASE_TIME', '2026-09-11',
+                        '2026-09-11 12:30:00+00', 'America/New_York', 'EXACT',
+                        'BLS', %s, 'release-v1', %s, CURRENT_TIMESTAMP, %s
+                    )
+                    """,
+                    (
+                        marker_id,
+                        disclosure_id,
+                        link_id,
+                        artifact_b,
+                        promote_attempt,
+                        digest("marker"),
+                    ),
+                )
+
+    def test_disclosure_artifact_source_must_match_disclosure_source(self) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                "INSERT INTO data_sources (source_code, display_name) VALUES ('OTHER', 'Other') ON CONFLICT DO NOTHING"
+            )
+            _, promote_attempt = self.make_event(connection)
+            disclosure_id = self.make_disclosure(connection, promote_attempt)
+            collector_attempt = self.make_attempt(
+                connection, "ECONOMIC_COLLECT", f"collect:other:{uuid4()}"
+            )
+            artifact_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO source_artifacts (
+                    artifact_id, data_domain, source_code, artifact_contract_kind,
+                    source_contract_version, locator_key, content_sha256,
+                    content_type, captured_at, created_by_attempt_id,
+                    created_by_execution_scope, content_state
+                ) VALUES (%s, 'ECONOMIC', 'OTHER', 'TEST', 'v1', %s, %s,
+                          'text/plain', CURRENT_TIMESTAMP, %s,
+                          'ECONOMIC_COLLECT', 'NOT_RETAINED')
+                """,
+                (artifact_id, f"other:{artifact_id}", digest(str(artifact_id)), collector_attempt),
+            )
+            link_id = uuid4()
+            self.insert_subject(connection, link_id, "DISCLOSURE_ARTIFACT_LINK")
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO event_disclosure_artifacts (
+                        disclosure_artifact_link_id, disclosure_id, artifact_id,
+                        relation_kind, accepted_by_attempt_id, accepted_at
+                    ) VALUES (%s, %s, %s, 'RELEASE_REPRESENTATION', %s, CURRENT_TIMESTAMP)
+                    """,
+                    (link_id, disclosure_id, artifact_id, promote_attempt),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
