@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS interpretation_subjects (
 CREATE OR REPLACE FUNCTION enforce_ingestion_initial_state()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $
+AS $$
 BEGIN
     IF TG_TABLE_NAME = 'ingestion_runs' AND NEW.state <> 'CREATED' THEN
         RAISE EXCEPTION 'new ingestion run must start CREATED'
@@ -205,7 +205,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS ingestion_runs_initial_state_guard ON ingestion_runs;
 CREATE TRIGGER ingestion_runs_initial_state_guard
