@@ -10,7 +10,7 @@ INSERT INTO data_sources (source_code, display_name)
 VALUES ('BLS', 'U.S. Bureau of Labor Statistics')
 ON CONFLICT (source_code) DO NOTHING;
 
-DO $
+DO $bls_seed$
 BEGIN
     IF NOT EXISTS (
         SELECT 1
@@ -22,7 +22,7 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 END;
-$;
+$bls_seed$;
 
 CREATE TABLE IF NOT EXISTS ingestion_runs (
     run_id UUID PRIMARY KEY,
@@ -257,7 +257,7 @@ CREATE TRIGGER ingestion_attempts_initial_state_guard
 CREATE OR REPLACE FUNCTION enforce_ingestion_attempt_claim_alignment()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $
+AS $claim_alignment$
 DECLARE
     parent_state TEXT;
     parent_generation INTEGER;
@@ -279,7 +279,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$;
+$claim_alignment$;
 
 DROP TRIGGER IF EXISTS ingestion_attempts_claim_alignment_guard
     ON ingestion_attempts;

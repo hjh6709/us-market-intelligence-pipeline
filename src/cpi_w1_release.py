@@ -249,7 +249,7 @@ def _expand_table(table: _Table) -> list[list[tuple[str, bool]]]:
         col = 0
 
         def fill_active() -> None:
-            nonlocal col
+            nonlocal col, expanded_cells
             while col in active:
                 remaining, text, is_header = active[col]
                 row.append((text, is_header))

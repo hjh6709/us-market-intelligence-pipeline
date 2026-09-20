@@ -34,6 +34,12 @@ class CpiW1ObservationMigrationTest(unittest.TestCase):
     def test_core_four_seed_detects_drift(self) -> None:
         self.assertIn("CPI observation definition seed mismatch", self.sql)
 
+    def test_plpgsql_seed_guard_uses_complete_dollar_quotes(self) -> None:
+        self.assertNotIn("\nDO $\n", self.sql)
+        self.assertNotIn("\nAS $\n", self.sql)
+        self.assertNotIn("\n$;\n", self.sql)
+        self.assertIn("$observation_seed$", self.sql)
+
     def test_stored_states_are_value_or_explicit_unavailable_only(self) -> None:
         self.assertIn(
             "assertion_state IN ('VALUE', 'EXPLICIT_UNAVAILABLE')",

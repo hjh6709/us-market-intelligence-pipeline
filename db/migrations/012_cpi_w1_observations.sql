@@ -43,7 +43,7 @@ INSERT INTO observation_definitions (
     ('CPI_CORE_YOY', 'CPI', 'PERCENT', 'CPI core year-over-year')
 ON CONFLICT (observation_code) DO NOTHING;
 
-DO $
+DO $observation_seed$
 BEGIN
     IF (
         SELECT COUNT(*)
@@ -59,7 +59,7 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 END;
-$;
+$observation_seed$;
 
 CREATE TABLE IF NOT EXISTS official_observation_assertions (
     assertion_id UUID PRIMARY KEY,
