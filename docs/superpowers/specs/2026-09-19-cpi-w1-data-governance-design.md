@@ -381,6 +381,11 @@ Required concepts:
 - lease_until;
 - created_at, updated_at.
 
+updated_at is database-owned work-state metadata. Every successful UPDATE of an
+ingestion_work_items row refreshes updated_at from the database clock; callers do not
+supply or preserve an arbitrary value. It is operational metadata only and must never
+be substituted for evidence accepted_at, captured_at, or source chronology.
+
 Unique identity:
 
 - run_id + work_key.

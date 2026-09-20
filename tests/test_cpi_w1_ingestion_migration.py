@@ -111,6 +111,9 @@ if __name__ == "__main__":
 ", self.sql)
         self.assertIn("outcome = 'SUCCEEDED' AND reason_code IS NULL", self.sql)
 
+    def test_work_updated_at_is_database_owned(self) -> None:
+        self.assertIn("NEW.updated_at := CURRENT_TIMESTAMP", self.sql)
+
     def test_artifact_identity_and_retention_are_explicit(self) -> None:
         self.assertIn(
             "UNIQUE (created_by_attempt_id, locator_key, content_sha256)", self.sql

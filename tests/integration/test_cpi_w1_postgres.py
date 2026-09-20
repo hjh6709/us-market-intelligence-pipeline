@@ -1268,5 +1268,30 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
 
+    def test_work_update_refreshes_database_owned_updated_at(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            before = connection.execute(
+                "SELECT updated_at FROM ingestion_work_items WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET next_claim_at=CURRENT_TIMESTAMP + INTERVAL '1 minute',
+                       updated_at='2000-01-01 00:00:00+00'
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            after = connection.execute(
+                "SELECT updated_at FROM ingestion_work_items WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+        self.assertGreaterEqual(after, before)
+        self.assertNotEqual(after.year, 2000)
+
+
 if __name__ == "__main__":
     unittest.main()

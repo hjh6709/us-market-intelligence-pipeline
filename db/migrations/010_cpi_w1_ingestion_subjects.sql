@@ -355,6 +355,7 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
+    NEW.updated_at := CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
 $$;
