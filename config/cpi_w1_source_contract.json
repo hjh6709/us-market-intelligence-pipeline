@@ -1,0 +1,41 @@
+{
+  "contract_version": "bls-cpi-source-v1",
+  "transport": {
+    "https_only": true,
+    "allowlisted_hosts": ["www.bls.gov"],
+    "max_redirects": 3,
+    "connect_timeout_seconds": 5.0,
+    "read_timeout_seconds": 15.0,
+    "accept_encoding": "identity",
+    "max_response_bytes": 20971520
+  },
+  "artifact_limits": {
+    "CPI_SCHEDULE_HTML": 5242880,
+    "BLS_GLOBAL_ICS": 2097152,
+    "CPI_RELEASE_HTML": 8388608,
+    "CPI_TABLE1_XLSX": 20971520
+  },
+  "locators": {
+    "CPI_SCHEDULE_HTML": {
+      "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
+      "surface_role": "AUTHORITATIVE",
+      "artifact_contract_kind": "CPI_SCHEDULE_HTML"
+    },
+    "BLS_GLOBAL_ICS": {
+      "url": "https://www.bls.gov/schedule/news_release/bls.ics",
+      "surface_role": "FALLBACK_CORROBORATION",
+      "artifact_contract_kind": "BLS_GLOBAL_ICS"
+    },
+    "CURRENT_CPI_RELEASE_HTML": {
+      "url": "https://www.bls.gov/news.release/cpi.nr0.htm",
+      "surface_role": "RELEASE_EVIDENCE",
+      "artifact_contract_kind": "CPI_RELEASE_HTML"
+    }
+  },
+  "legal_operational_notes": {
+    "attribution_required": true,
+    "bls_branding_not_implied": true,
+    "api_access_date_disclaimer_if_api_used": true,
+    "legal_evidence_ref": "BLS terms/copyright review required before Public Beta"
+  }
+}

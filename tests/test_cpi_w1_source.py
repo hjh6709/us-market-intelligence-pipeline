@@ -1,0 +1,167 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import httpx
+
+from src.cpi_w1_source import (
+    BlsCpiSourceClient,
+    BlsCpiSourceContract,
+    SourceFailureKind,
+    SourceFetchError,
+    SourceLocator,
+)
+
+
+CONTRACT_PATH = Path("config/cpi_w1_source_contract.json")
+
+
+class CpiW1SourceClientTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.contract = BlsCpiSourceContract.from_json(CONTRACT_PATH)
+
+    def locator(self, url: str, max_bytes: int = 1024) -> SourceLocator:
+        return SourceLocator(
+            key="TEST",
+            url=url,
+            artifact_contract_kind="CPI_RELEASE_HTML",
+            surface_role="RELEASE_EVIDENCE",
+            max_bytes=max_bytes,
+        )
+
+    def client_for(self, handler) -> BlsCpiSourceClient:
+        transport = httpx.MockTransport(handler)
+        client = httpx.Client(
+            transport=transport,
+            follow_redirects=False,
+            headers={"Accept-Encoding": "identity"},
+        )
+        return BlsCpiSourceClient(self.contract, client=client)
+
+    def test_contract_pins_cpi_schedule_as_authoritative(self) -> None:
+        schedule = self.contract.locators["CPI_SCHEDULE_HTML"]
+        ics = self.contract.locators["BLS_GLOBAL_ICS"]
+        self.assertEqual(schedule.surface_role, "AUTHORITATIVE")
+        self.assertEqual(ics.surface_role, "FALLBACK_CORROBORATION")
+
+    def test_non_https_is_rejected_before_network(self) -> None:
+        with self.assertRaises(SourceFetchError) as caught:
+            self.contract.validate_url("http://www.bls.gov/news.release/cpi.nr0.htm")
+        self.assertEqual(caught.exception.kind, SourceFailureKind.POLICY)
+
+    def test_redirect_to_non_bls_host_is_rejected(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                302,
+                headers={"Location": "https://example.com/cpi"},
+                request=request,
+            )
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.POLICY)
+
+    def test_oversized_content_length_is_rejected(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"Content-Length": "4096"},
+                content=b"x",
+                request=request,
+            )
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator(
+                    "https://www.bls.gov/news.release/cpi.nr0.htm",
+                    max_bytes=100,
+                )
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.OVERSIZED)
+
+    def test_streamed_oversize_is_rejected(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=b"x" * 101, request=request)
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator(
+                    "https://www.bls.gov/news.release/cpi.nr0.htm",
+                    max_bytes=100,
+                )
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.OVERSIZED)
+
+    def test_unexpected_compression_is_rejected(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"Content-Encoding": "gzip"},
+                content=b"not-relevant",
+                request=request,
+            )
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.PROTOCOL)
+
+    def test_429_is_retryable_operational_failure(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, request=request)
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.RETRYABLE)
+        self.assertEqual(caught.exception.status_code, 429)
+
+    def test_404_is_not_economic_cancellation(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, request=request)
+
+        client = self.client_for(handler)
+        with self.assertRaises(SourceFetchError) as caught:
+            client.fetch(
+                self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+            )
+        self.assertEqual(caught.exception.kind, SourceFailureKind.NOT_FOUND)
+        self.assertNotIn("CANCELED", str(caught.exception))
+        self.assertNotIn("NO_RELEASE_EXPECTED", str(caught.exception))
+
+    def test_fetch_does_not_follow_html_subresources(self) -> None:
+        seen = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(
+                200,
+                content=b'<html><img src="https://evil.example/a.png"></html>',
+                request=request,
+            )
+
+        client = self.client_for(handler)
+        response = client.fetch(
+            self.locator("https://www.bls.gov/news.release/cpi.nr0.htm")
+        )
+        self.assertEqual(len(seen), 1)
+        self.assertIn(b"evil.example", response.body)
+
+    def test_contract_file_contains_no_credentials(self) -> None:
+        raw = CONTRACT_PATH.read_text(encoding="utf-8").lower()
+        for forbidden in ("password", "secret", "api_key", "authorization"):
+            self.assertNotIn(forbidden, raw)
+
+
+if __name__ == "__main__":
+    unittest.main()
