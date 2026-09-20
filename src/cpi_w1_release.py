@@ -7,13 +7,18 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
-from typing import Iterable
 from zoneinfo import ZoneInfo
 
 from src.cpi_w1_contracts import ObservationMaterial, ObservationState, TimePrecision
 
 
 _RELEASE_TZ = "America/New_York"
+_MAX_HTML_BYTES = 8 * 1024 * 1024
+_MAX_TABLES = 64
+_MAX_ROWS_PER_TABLE = 5000
+_MAX_CELLS_PER_ROW = 128
+_MAX_CELL_TEXT_CHARS = 8192
+_MAX_EXPANDED_CELLS = 250000
 _MONTH_NAMES = (
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december",
@@ -108,10 +113,14 @@ class _ReleaseHtmlParser(HTMLParser):
         if tag == "table":
             self._table_depth += 1
             if self._table_depth == 1:
+                if len(self.tables) >= _MAX_TABLES:
+                    raise ReleaseEnvelopeError("too many tables in CPI release HTML")
                 self._rows = []
         elif self._table_depth == 1 and tag == "tr":
             self._row = []
         elif self._table_depth == 1 and tag in {"th", "td"}:
+            if self._row is not None and len(self._row) >= _MAX_CELLS_PER_ROW:
+                raise ReleaseEnvelopeError("too many cells in CPI release table row")
             self._cell_parts = []
             self._cell_header = tag == "th"
             self._cell_rowspan = _positive_int(attrs_map.get("rowspan"), default=1)
@@ -127,6 +136,8 @@ class _ReleaseHtmlParser(HTMLParser):
         tag = tag.lower()
         if self._table_depth == 1 and tag in {"th", "td"} and self._cell_parts is not None:
             text = " ".join("".join(self._cell_parts).split())
+            if len(text) > _MAX_CELL_TEXT_CHARS:
+                raise ReleaseEnvelopeError("CPI release table cell exceeds text limit")
             if self._row is not None:
                 self._row.append(
                     _Cell(
@@ -139,6 +150,8 @@ class _ReleaseHtmlParser(HTMLParser):
             self._cell_parts = None
         elif self._table_depth == 1 and tag == "tr":
             if self._rows is not None and self._row:
+                if len(self._rows) >= _MAX_ROWS_PER_TABLE:
+                    raise ReleaseEnvelopeError("too many rows in CPI release table")
                 self._rows.append(tuple(self._row))
             self._row = None
         elif tag == "table" and self._table_depth:
@@ -229,6 +242,7 @@ def _expand_table(table: _Table) -> list[list[tuple[str, bool]]]:
     grid: list[list[tuple[str, bool]]] = []
     active: dict[int, tuple[int, str, bool]] = {}
 
+    expanded_cells = 0
     for source_row in table.rows:
         row: list[tuple[str, bool]] = []
         col = 0
@@ -238,6 +252,9 @@ def _expand_table(table: _Table) -> list[list[tuple[str, bool]]]:
             while col in active:
                 remaining, text, is_header = active[col]
                 row.append((text, is_header))
+                expanded_cells += 1
+                if expanded_cells > _MAX_EXPANDED_CELLS:
+                    raise ReleaseEnvelopeError("expanded CPI table exceeds cell limit")
                 if remaining <= 1:
                     del active[col]
                 else:
@@ -248,6 +265,11 @@ def _expand_table(table: _Table) -> list[list[tuple[str, bool]]]:
             fill_active()
             for offset in range(cell.colspan):
                 row.append((cell.text, cell.is_header))
+                expanded_cells += 1
+                if expanded_cells > _MAX_EXPANDED_CELLS:
+                    raise ReleaseEnvelopeError("expanded CPI table exceeds cell limit")
+                if len(row) > _MAX_CELLS_PER_ROW:
+                    raise ReleaseEnvelopeError("expanded CPI table exceeds width limit")
                 if cell.rowspan > 1:
                     active[col + offset] = (
                         cell.rowspan - 1,
@@ -385,18 +407,16 @@ def _explicit_unavailable_reason(
 ) -> str | None:
     previous = _previous_month(reference_month)
     previous_name = _MONTH_NAMES[previous.month - 1]
+    period = f"{previous_name} {previous.year}"
     normalized = _semantic_text(full_text)
-    has_period = previous_name in normalized and str(previous.year) in normalized
-    has_unavailability = (
-        "did not collect" in normalized
-        or "data values are not available" in normalized
-        or "unable to retroactively collect" in normalized
+    escaped_period = re.escape(period)
+    patterns = (
+        rf"did not collect[^.]{0,160}{escaped_period}[^.]{0,160}"
+        rf"lapse in (?:federal )?appropriations",
+        rf"{escaped_period}[^.]{0,160}data values are not available[^.]{0,160}"
+        rf"lapse in (?:federal )?appropriations",
     )
-    has_official_reason = (
-        "lapse in appropriations" in normalized
-        or "lapse in federal appropriations" in normalized
-    )
-    if not (has_period and has_unavailability and has_official_reason):
+    if not any(re.search(pattern, normalized) for pattern in patterns):
         return None
     return (
         "BLS official release states "
@@ -446,7 +466,7 @@ def _candidate_from_cell(
 
 
 def _parse(body: bytes) -> tuple[_ReleaseHtmlParser, str]:
-    if len(body) > 8 * 1024 * 1024:
+    if len(body) > _MAX_HTML_BYTES:
         raise ReleaseEnvelopeError("CPI release HTML exceeds parser byte limit")
     try:
         html = body.decode("utf-8")

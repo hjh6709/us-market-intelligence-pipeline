@@ -120,6 +120,32 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
                 expected_reference_month=date(2026, 8, 1),
             )
 
+    def test_resource_amplification_via_colspan_is_rejected(self) -> None:
+        body = self.read("normal_aug_2026.html").replace(
+            b'colspan="3"',
+            b'colspan="101"',
+            1,
+        )
+        from src.cpi_w1_release import ReleaseEnvelopeError
+
+        with self.assertRaises(ReleaseEnvelopeError):
+            extract_release_envelope(
+                body,
+                expected_reference_month=date(2026, 8, 1),
+            )
+
+    def test_unrelated_global_words_do_not_create_explicit_unavailable(self) -> None:
+        body = self.read("nov_2025_explicit_unavailable.html")
+        body = body.replace(
+            b"BLS did not collect survey data for October 2025 due to a lapse in appropriations.\nBLS was unable to retroactively collect these data.",
+            b"October 2025 is mentioned here. Elsewhere BLS discusses data values are not available. A lapse in appropriations is also mentioned.",
+        )
+        with self.assertRaises(ObservationExtractionError):
+            extract_core4_from_release_html(
+                body,
+                expected_reference_month=date(2025, 11, 1),
+            )
+
     def test_binary_float_never_enters_observation_candidate(self) -> None:
         bundle = extract_core4_from_release_html(
             self.read("normal_aug_2026.html"),
