@@ -73,6 +73,11 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("reason_code ~ '^[A-Z][A-Z0-9_]*$'", self.sql)
         self.assertIn("outcome = 'SUCCEEDED' AND reason_code IS NULL", self.sql)
 
+    def test_attempt_creation_requires_current_claim_generation(self) -> None:
+        self.assertIn("enforce_ingestion_attempt_claim_alignment", self.sql)
+        self.assertIn("ingestion attempt requires claimed work ownership", self.sql)
+        self.assertIn("attempt number must equal current claim generation", self.sql)
+
     def test_work_updated_at_is_database_owned(self) -> None:
         self.assertIn("NEW.updated_at := CURRENT_TIMESTAMP", self.sql)
 

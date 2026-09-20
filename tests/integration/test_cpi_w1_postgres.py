@@ -106,6 +106,33 @@ class CpiW1PostgresTest(unittest.TestCase):
         attempt_number=1,
     ):
         attempt_id = attempt_id or uuid4()
+        row = connection.execute(
+            """
+            SELECT state, claim_generation
+              FROM ingestion_work_items
+             WHERE work_item_id=%s
+             FOR UPDATE
+            """,
+            (work_item_id,),
+        ).fetchone()
+        if row is None:
+            raise AssertionError("work item missing")
+        state, claim_generation = row
+        if state == "PENDING":
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED',
+                       claim_generation=%s,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (attempt_number, uuid4(), work_item_id),
+            )
+            claim_generation = attempt_number
+        if state == "CLAIMED" and claim_generation != attempt_number:
+            raise AssertionError("attempt_number must match existing claim_generation")
         connection.execute(
             """
             INSERT INTO ingestion_attempts (
@@ -1379,6 +1406,46 @@ class CpiW1PostgresTest(unittest.TestCase):
                         promote_attempt,
                         digest("source-effective-invalid"),
                     ),
+                )
+
+
+    def test_attempt_requires_claimed_work_and_current_generation(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_attempts (
+                        attempt_id, work_item_id, execution_scope,
+                        data_domain, attempt_number
+                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1)
+                    """,
+                    (uuid4(), work_id),
+                )
+
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=2,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_attempts (
+                        attempt_id, work_item_id, execution_scope,
+                        data_domain, attempt_number
+                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1)
+                    """,
+                    (uuid4(), work_id),
                 )
 
 

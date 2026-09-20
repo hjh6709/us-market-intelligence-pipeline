@@ -477,7 +477,7 @@ attempts do not carry a terminal reason. The reason vocabulary is a bounded
 application/extractor contract, while the database enforces token shape and
 outcome/reason consistency.
 
-claim_generation and attempt_number advance together when a new execution ownership generation starts. A stale attempt can finish logging locally, but it cannot mutate work state or canonical evidence after losing the current claim generation. No business truth depends on attempt number.
+claim_generation and attempt_number advance together when a new execution ownership generation starts. An attempt row may be created only while its parent work item is CLAIMED, and its attempt_number must equal that work item's current claim_generation. This is database-enforced so a caller cannot manufacture an execution attempt without ownership or attach an attempt to a stale generation. A stale attempt can finish logging locally, but it cannot mutate work state or canonical evidence after losing the current claim generation. No business truth depends on attempt number.
 
 ### 11.4 Scope and domain integrity
 

@@ -106,7 +106,10 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
         OR (
             state = 'TERMINAL'
             AND outcome IN ('FAILED', 'QUARANTINED', 'DATA_NOT_AVAILABLE', 'SKIPPED')
-            AND reason_code ~ '^[A-Z][A-Z0-9_]*
+            AND reason_code ~ '^[A-Z][A-Z0-9_]*$'
+        )
+    )
+);
 
 CREATE INDEX IF NOT EXISTS ingestion_work_items_claimable_idx
     ON ingestion_work_items (data_domain, execution_scope, state, next_claim_at, lease_until);
@@ -143,7 +146,10 @@ CREATE TABLE IF NOT EXISTS ingestion_attempts (
         OR (
             state = 'TERMINAL'
             AND outcome IN ('FAILED', 'QUARANTINED', 'DATA_NOT_AVAILABLE')
-            AND reason_code ~ '^[A-Z][A-Z0-9_]*
+            AND reason_code ~ '^[A-Z][A-Z0-9_]*$'
+        )
+    )
+);
 
 CREATE TABLE IF NOT EXISTS source_artifacts (
     artifact_id UUID PRIMARY KEY,
@@ -247,6 +253,39 @@ DROP TRIGGER IF EXISTS ingestion_attempts_initial_state_guard ON ingestion_attem
 CREATE TRIGGER ingestion_attempts_initial_state_guard
     BEFORE INSERT ON ingestion_attempts
     FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_initial_state();
+
+CREATE OR REPLACE FUNCTION enforce_ingestion_attempt_claim_alignment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $
+DECLARE
+    parent_state TEXT;
+    parent_generation INTEGER;
+BEGIN
+    SELECT state, claim_generation
+      INTO STRICT parent_state, parent_generation
+      FROM ingestion_work_items
+     WHERE work_item_id = NEW.work_item_id;
+
+    IF parent_state <> 'CLAIMED' THEN
+        RAISE EXCEPTION 'ingestion attempt requires claimed work ownership'
+            USING ERRCODE = '23514';
+    END IF;
+
+    IF NEW.attempt_number <> parent_generation THEN
+        RAISE EXCEPTION 'attempt number must equal current claim generation'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS ingestion_attempts_claim_alignment_guard
+    ON ingestion_attempts;
+CREATE TRIGGER ingestion_attempts_claim_alignment_guard
+    BEFORE INSERT ON ingestion_attempts
+    FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_attempt_claim_alignment();
 
 CREATE OR REPLACE FUNCTION enforce_ingestion_run_transition()
 RETURNS TRIGGER
