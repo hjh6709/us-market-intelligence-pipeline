@@ -76,6 +76,18 @@ class CpiW1EventMigrationTest(unittest.TestCase):
         )
         self.assertIn("disclosure and artifact source mismatch", self.sql)
 
+    def test_promoter_lineage_function_has_valid_dollar_delimiter(self) -> None:
+        self.assertIn("AS $promoter$", self.sql)
+        self.assertIn("$promoter$;", self.sql)
+        self.assertNotIn("\nAS $\nDECLARE", self.sql)
+
+    def test_promoter_lineage_is_db_enforced(self) -> None:
+        self.assertIn("enforce_cpi_w1_promoter_attempt", self.sql)
+        self.assertIn(
+            "canonical CPI evidence requires ECONOMIC_PROMOTE attempt lineage",
+            self.sql,
+        )
+
     def test_evidence_is_append_only(self) -> None:
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
         for table in (

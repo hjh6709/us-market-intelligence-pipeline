@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS disclosure_marker_assertions (
 CREATE OR REPLACE FUNCTION enforce_cpi_w1_promoter_attempt()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $
+AS $promoter$
 DECLARE
     lineage_attempt UUID;
     lineage_scope TEXT;
@@ -220,7 +220,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$;
+$promoter$;
 
 CREATE OR REPLACE FUNCTION enforce_cpi_w1_disclosure_artifact_source()
 RETURNS TRIGGER
