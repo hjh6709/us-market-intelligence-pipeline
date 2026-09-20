@@ -144,7 +144,7 @@ Expected: FAIL because `AUTHORITY.md` does not exist and old specs are not yet m
 
 | Concern | Status | Authority |
 | --- | --- | --- |
-| Current executable behavior | CURRENT_IMPLEMENTATION | code + migrations + tests at deployed commit |
+| Current executable behavior | CURRENT_IMPLEMENTATION | code + migrations + tests at the commit being inspected |
 | CPI W1 data/governance target | TARGET_CANONICAL | ../superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md |
 | Legacy migration-009 event model | HISTORICAL_SUPERSEDED | data-contracts.md |
 | Current FastAPI API | CURRENT_IMPLEMENTATION | ../engineering/api-contracts.md |

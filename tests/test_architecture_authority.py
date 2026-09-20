@@ -30,6 +30,12 @@ class ArchitectureAuthorityTest(unittest.TestCase):
         self.assertIn("code + migrations + tests at the commit being inspected", authority)
         self.assertNotIn("at the deployed commit", authority)
 
+        spec = Path(
+            "docs/superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("at the deployed commit", spec)
+        self.assertIn("at the commit being inspected", spec)
+
         docs_hub = Path("docs/README.md").read_text(encoding="utf-8")
         self.assertIn("executable code + migrations + tests", docs_hub)
         self.assertIn("descriptive snapshot", docs_hub)

@@ -112,7 +112,7 @@ Concern-specific authorities:
 | current source reconstruction | CPI selector contract defined here |
 | system-known PIT | CPI selector contract defined here |
 | emergency public withholding | economic serving-control decisions defined here |
-| current implementation behavior | executable repository at the deployed commit |
+| current implementation behavior | executable repository at the commit being inspected |
 | production runtime security | separate Runtime/Security/Readiness specification |
 | public API and UI semantics | separate CPI Product Serving specification |
 
