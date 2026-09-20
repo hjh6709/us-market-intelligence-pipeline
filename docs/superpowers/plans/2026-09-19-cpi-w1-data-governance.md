@@ -709,7 +709,8 @@ git commit -m "feat: parse CPI schedule evidence"
 - Create: `src/cpi_w1_release.py`
 - Create: `tests/test_cpi_w1_release.py`
 - Create: `tests/fixtures/cpi_w1/html/`
-- Create: `tests/fixtures/cpi_w1/xlsx/`
+- Create later in Task 9B after capture of an official binary fixture:
+  `tests/fixtures/cpi_w1/xlsx/`
 
 **Interfaces:**
 - Produces:
@@ -758,22 +759,37 @@ Never implement "rightmost four cells".
 
 A dash alone fails mapping. Explicit source context can produce `EXPLICIT_UNAVAILABLE`.
 
-- [ ] **Step 5: Harden XLSX processing**
+- [ ] **Step 5: Commit Task 9A HTML extraction first**
 
-Before `openpyxl.load_workbook(..., read_only=True, data_only=True)`:
-- inspect ZIP members;
-- cap entry count and total uncompressed size;
-- reject macro-enabled workbook types;
-- reject external-link relationships outside the expected contract;
-- never execute formulas/macros.
-
-- [ ] **Step 6: Run and commit**
+Do not invent an XLSX fixture from an assumed workbook layout. Task 9A is complete when
+the official release HTML can independently establish the release envelope and safely
+resolve/quarantine the Core 4 bundle.
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_release -v
-git add src/cpi_w1_release.py tests/fixtures/cpi_w1 tests/test_cpi_w1_release.py
-git commit -m "feat: extract validated CPI release evidence"
+git add src/cpi_w1_release.py tests/fixtures/cpi_w1/html tests/test_cpi_w1_release.py
+git commit -m "feat: extract CPI release HTML evidence"
 ```
+
+- [ ] **Step 6: Task 9B — add XLSX corroboration from a captured official workbook**
+
+Before implementing the XLSX parser:
+- capture and retain at least one official BLS News Release Table 1 XLSX fixture;
+- record its source URL, capture hash, and reference month in fixture metadata;
+- inspect ZIP members and workbook relationships from the real file rather than
+  assuming worksheet names/cell coordinates.
+
+The XLSX reader must then:
+- cap ZIP entry count, per-entry size, and total uncompressed size;
+- reject macro-enabled workbook content;
+- reject external relationships;
+- reject formulas for canonical values;
+- map semantic headers/row labels, never fixed cell coordinates;
+- treat XLSX as corroborating representation, not historical release authority when
+  the file was retrieved later than the release.
+
+Run and commit Task 9B separately so an XLSX failure cannot obscure the already-tested
+HTML envelope/extractor contract.
 
 ---
 
