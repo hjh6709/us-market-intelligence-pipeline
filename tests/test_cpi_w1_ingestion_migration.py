@@ -88,6 +88,12 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("VALUES ('BLS', 'U.S. Bureau of Labor Statistics')", self.sql)
         self.assertIn("ON CONFLICT (source_code) DO NOTHING", self.sql)
 
+    def test_plpgsql_function_bodies_use_complete_dollar_quotes(self) -> None:
+        self.assertNotIn("\nAS $\n", self.sql)
+        self.assertNotIn("\n$;\n", self.sql)
+        self.assertGreaterEqual(self.sql.count("AS $"), 4)
+        self.assertGreaterEqual(self.sql.count("$;"), 4)
+
     def test_keeps_new_ingestion_model_separate_from_legacy_pipeline_telemetry(self) -> None:
         self.assertNotIn("ALTER TABLE pipeline_", self.sql)
         self.assertNotIn("UPDATE pipeline_", self.sql)
