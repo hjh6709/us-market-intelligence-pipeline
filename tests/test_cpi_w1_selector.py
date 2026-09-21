@@ -29,6 +29,10 @@ EVENT_ID = UUID("00000000-0000-0000-0000-000000000111")
 
 
 class CpiW1SelectorTest(unittest.TestCase):
+    def test_selector_allows_typed_correction_notice_observation_evidence(self) -> None:
+        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
+        self.assertIn('"CORRECTION_NOTICE"', source)
+
     def test_observation_resolution_vectors(self) -> None:
         unresolved = _resolution_from_materials("CPI_HEADLINE_MOM", [])
         self.assertEqual(unresolved.state, ObservationResolutionState.UNRESOLVED)

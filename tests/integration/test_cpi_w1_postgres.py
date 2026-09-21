@@ -3311,6 +3311,106 @@ class CpiW1PostgresTest(unittest.TestCase):
                     ObservationResolutionState.UNRESOLVED,
                 )
 
+    def test_selector_correction_notice_conflicts_with_prior_valid_material(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+
+            disclosure_id = connection.execute(
+                """
+                SELECT disclosure_id
+                  FROM event_disclosure_links
+                 WHERE disclosure_link_id=%s
+                """,
+                (promoted["disclosure_link_id"],),
+            ).fetchone()[0]
+            promote_attempt = self.make_attempt(
+                connection,
+                "ECONOMIC_PROMOTE",
+                f"promote:correction:{uuid4()}",
+            )
+            correction_artifact = self.make_artifact(
+                connection,
+                f"correction:{uuid4()}",
+                artifact_contract_kind="CPI_RELEASE_HTML",
+                content_sha256=digest("correction-material"),
+            )
+            correction_link_id = uuid4()
+            self.insert_subject(
+                connection,
+                correction_link_id,
+                "DISCLOSURE_ARTIFACT_LINK",
+            )
+            connection.execute(
+                """
+                INSERT INTO event_disclosure_artifacts (
+                    disclosure_artifact_link_id, disclosure_id, artifact_id,
+                    relation_kind, accepted_by_attempt_id, accepted_at
+                ) VALUES (
+                    %s, %s, %s, 'CORRECTION_NOTICE', %s, CURRENT_TIMESTAMP
+                )
+                """,
+                (
+                    correction_link_id,
+                    disclosure_id,
+                    correction_artifact,
+                    promote_attempt,
+                ),
+            )
+
+            material = ObservationMaterial(
+                observation_code="CPI_CORE_MOM",
+                assertion_state=ObservationState.VALUE,
+                normalized_value=Decimal("0.8"),
+            )
+            assertion_id = uuid4()
+            self.insert_subject(
+                connection,
+                assertion_id,
+                "OFFICIAL_OBSERVATION_ASSERTION",
+            )
+            connection.execute(
+                """
+                INSERT INTO official_observation_assertions (
+                    assertion_id, event_occurrence_id, event_type, disclosure_id,
+                    disclosure_link_id, disclosure_artifact_link_id,
+                    observation_code, assertion_state, normalized_value,
+                    source_value_text, source_reason_text, source_code,
+                    source_artifact_id, extractor_contract_version,
+                    accepted_by_attempt_id, accepted_at, material_fingerprint
+                ) VALUES (
+                    %s, %s, 'CPI', %s, %s, %s,
+                    'CPI_CORE_MOM', 'VALUE', 0.8,
+                    '0.8', NULL, 'BLS', %s, 'bls-cpi-correction-test-v1',
+                    %s, CURRENT_TIMESTAMP, %s
+                )
+                """,
+                (
+                    assertion_id,
+                    event_id,
+                    disclosure_id,
+                    promoted["disclosure_link_id"],
+                    correction_link_id,
+                    correction_artifact,
+                    promote_attempt,
+                    material.fingerprint,
+                ),
+            )
+
+            result = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            core = result.observation("CPI_CORE_MOM")
+            self.assertEqual(
+                core.state,
+                ObservationResolutionState.CONFLICT,
+            )
+            self.assertEqual(len(core.material_fingerprints), 2)
+            self.assertIsNone(core.normalized_value)
+
     def test_selector_supplemental_disclosure_cannot_supply_core4(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:
