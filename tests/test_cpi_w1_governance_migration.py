@@ -52,6 +52,15 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
     def test_reason_codes_are_nonblank_canonical_tokens(self) -> None:
         self.assertGreaterEqual(self.sql.count("reason_code = BTRIM(reason_code)"), 2)
 
+    def test_interpretation_and_event_control_share_event_fence(self) -> None:
+        self.assertIn("FUNCTION lock_cpi_governance_subject_events", self.sql)
+        self.assertIn(
+            "PERFORM lock_cpi_governance_subject_events(req.subject_id)",
+            self.sql,
+        )
+        self.assertIn("'CPI_EVENT:' || affected_event::TEXT", self.sql)
+        self.assertIn("'CPI_EVENT:' || p_event_occurrence_id::TEXT", self.sql)
+
     def test_atomic_activation_functions_exist(self) -> None:
         self.assertIn("FUNCTION apply_interpretation_decision", self.sql)
         self.assertIn("FUNCTION apply_economic_serving_control", self.sql)

@@ -158,6 +158,54 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
     )
 );
 
+CREATE OR REPLACE FUNCTION lock_cpi_governance_subject_events(
+    p_subject_id UUID
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    affected_event UUID;
+BEGIN
+    FOR affected_event IN
+        SELECT DISTINCT event_occurrence_id
+          FROM (
+                SELECT s.event_occurrence_id
+                  FROM event_schedule_assertions s
+                 WHERE s.schedule_assertion_id = p_subject_id
+                UNION
+                SELECT l.event_occurrence_id
+                  FROM event_disclosure_links l
+                 WHERE l.disclosure_link_id = p_subject_id
+                UNION
+                SELECT l.event_occurrence_id
+                  FROM event_disclosure_artifacts a
+                  JOIN event_disclosure_links l
+                    ON l.disclosure_id = a.disclosure_id
+                 WHERE a.disclosure_artifact_link_id = p_subject_id
+                UNION
+                SELECT l.event_occurrence_id
+                  FROM disclosure_marker_assertions m
+                  JOIN event_disclosure_artifacts a
+                    ON a.disclosure_artifact_link_id =
+                       m.disclosure_artifact_link_id
+                  JOIN event_disclosure_links l
+                    ON l.disclosure_id = a.disclosure_id
+                 WHERE m.marker_assertion_id = p_subject_id
+                UNION
+                SELECT o.event_occurrence_id
+                  FROM official_observation_assertions o
+                 WHERE o.assertion_id = p_subject_id
+          ) affected
+         ORDER BY event_occurrence_id
+    LOOP
+        PERFORM pg_advisory_xact_lock(
+            hashtextextended('CPI_EVENT:' || affected_event::TEXT, 0)
+        );
+    END LOOP;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION apply_interpretation_decision(
     p_request_id UUID,
     p_actor_subject TEXT
@@ -186,6 +234,8 @@ BEGIN
     SELECT * INTO STRICT req
       FROM interpretation_requests
      WHERE request_id = p_request_id;
+
+    PERFORM lock_cpi_governance_subject_events(req.subject_id);
 
     PERFORM 1
       FROM interpretation_subjects
@@ -355,6 +405,9 @@ BEGIN
             RAISE EXCEPTION 'event occurrence does not exist'
                 USING ERRCODE = '23503';
         END IF;
+        PERFORM pg_advisory_xact_lock(
+            hashtextextended('CPI_EVENT:' || p_event_occurrence_id::TEXT, 0)
+        );
     END IF;
 
     scope_key := p_scope_kind || ':' || COALESCE(p_event_occurrence_id::TEXT, 'DOMAIN');
