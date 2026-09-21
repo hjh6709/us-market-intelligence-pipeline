@@ -1,7 +1,7 @@
 import hashlib
 import os
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from pathlib import Path
@@ -9,7 +9,13 @@ from uuid import uuid4
 
 import psycopg
 
-from src.cpi_w1_contracts import ObservationMaterial, ObservationState, PromotionFamily
+from src.cpi_w1_contracts import (
+    KnowledgeMode,
+    ObservationMaterial,
+    ObservationState,
+    PromotionFamily,
+    ServingControlState,
+)
 from src.cpi_w1_promoter import (
     CpiW1Promoter,
     PromotionDeterminismError,
@@ -23,6 +29,7 @@ from src.cpi_w1_release import (
     extract_release_envelope,
 )
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
+from src.cpi_w1_selector import CpiW1Selector, ObservationResolutionState
 
 
 RUN_POSTGRES_INTEGRATION = os.environ.get("RUN_POSTGRES_INTEGRATION") == "1"
@@ -476,6 +483,136 @@ class CpiW1PostgresTest(unittest.TestCase):
             ),
         )
         return artifact_id
+
+    def promote_normal_release(self, connection):
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path(
+            "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
+        ).read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        bundle = extract_core4_from_release_html(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        artifact_id = self.make_artifact(
+            connection,
+            f"selector:release:{uuid4()}",
+            content_sha256=hashlib.sha256(fixture).hexdigest(),
+        )
+
+        envelope_run = self.insert_run(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+        )
+        envelope_key = promotion_work_key(
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO ingestion_work_items (
+                work_item_id, run_id, execution_scope, data_domain,
+                work_key, input_artifact_id
+            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+            """,
+            (uuid4(), envelope_run, envelope_key, artifact_id),
+        )
+        envelope_claim = repository.claim_work_item(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+            work_key_prefix=(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":"
+            ),
+        )
+        envelope_result = promoter.promote_release_envelope(
+            connection,
+            envelope_claim,
+            artifact_id=artifact_id,
+            candidate=envelope,
+        )
+
+        observation_run = self.insert_run(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+        )
+        observation_key = promotion_work_key(
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            bundle.extractor_contract_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO ingestion_work_items (
+                work_item_id, run_id, execution_scope, data_domain,
+                work_key, input_artifact_id
+            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+            """,
+            (uuid4(), observation_run, observation_key, artifact_id),
+        )
+        observation_claim = repository.claim_work_item(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+            work_key_prefix=(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":"
+            ),
+        )
+        promoter.promote_observation_bundle(
+            connection,
+            observation_claim,
+            artifact_id=artifact_id,
+            candidate=bundle,
+        )
+        return {
+            "event_id": envelope_result.event_occurrence_id,
+            "artifact_id": artifact_id,
+            "disclosure_link_id": envelope_result.disclosure_link_id,
+            "artifact_link_id": envelope_result.disclosure_artifact_link_id,
+        }
+
+    def invalidate_subject(self, connection, subject_id):
+        request_id = uuid4()
+        proposer = f"idp:proposer:{uuid4()}"
+        approver = f"idp:approver:{uuid4()}"
+        actor = f"idp:actor:{uuid4()}"
+        connection.execute(
+            """
+            INSERT INTO interpretation_requests (
+                request_id, subject_id, requested_state,
+                expected_decision_version, reason_code, case_ref,
+                governance_policy_version, proposer_subject, expires_at
+            ) VALUES (
+                %s, %s, 'INVALID', 0, 'TEST_INVALIDATION', 'CASE-TEST',
+                'cpi-governance-v1', %s, CURRENT_TIMESTAMP + INTERVAL '24 hours'
+            )
+            """,
+            (request_id, subject_id, proposer),
+        )
+        connection.execute(
+            """
+            INSERT INTO interpretation_approvals (
+                approval_id, request_id, proposer_subject,
+                approver_subject, approval_decision
+            ) VALUES (%s, %s, %s, %s, 'APPROVE')
+            """,
+            (uuid4(), request_id, proposer, approver),
+        )
+        decision_id = connection.execute(
+            "SELECT apply_interpretation_decision(%s, %s)",
+            (request_id, actor),
+        ).fetchone()[0]
+        return connection.execute(
+            """
+            SELECT applied_at
+              FROM interpretation_decisions
+             WHERE interpretation_decision_id=%s
+            """,
+            (decision_id,),
+        ).fetchone()[0]
 
     def make_event(self, connection, reference_month="2026-08-01"):
         attempt_id = self.make_attempt(
@@ -2791,6 +2928,25 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ).fetchone()[0],
                 1,
             )
+            selector_conflict = CpiW1Selector().select_event(
+                connection,
+                connection.execute(
+                    """
+                    SELECT event_occurrence_id
+                      FROM core_event_occurrences
+                     WHERE reference_month='2026-08-01'
+                    """
+                ).fetchone()[0],
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(
+                selector_conflict.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.CONFLICT,
+            )
+            self.assertEqual(
+                selector_conflict.observation("CPI_CORE_MOM").material_fingerprints.__len__(),
+                2,
+            )
 
     def test_promoter_rejects_candidate_from_different_artifact_bytes(self) -> None:
         repository = CpiW1Repository()
@@ -2905,6 +3061,168 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (run_id,),
                 ).fetchone()[0],
                 "CREATED",
+            )
+
+    def test_selector_current_and_pit_respect_artifact_relation_invalidation(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+
+            current = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(current.release_state.value, "DISCLOSED")
+            self.assertEqual(
+                current.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+            self.assertEqual(
+                current.observation("CPI_CORE_MOM").normalized_value,
+                Decimal("0.3"),
+            )
+
+            before_invalidation = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
+            connection.execute("SELECT pg_sleep(0.005)")
+            self.invalidate_subject(
+                connection,
+                promoted["artifact_link_id"],
+            )
+
+            after = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(after.release_state.value, "DISCLOSED")
+            for code in (
+                "CPI_HEADLINE_MOM",
+                "CPI_HEADLINE_YOY",
+                "CPI_CORE_MOM",
+                "CPI_CORE_YOY",
+            ):
+                self.assertEqual(
+                    after.observation(code).state,
+                    ObservationResolutionState.UNRESOLVED,
+                )
+
+            pit = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.SYSTEM_KNOWN_PIT,
+                as_of=before_invalidation,
+            )
+            self.assertEqual(
+                pit.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+            self.assertEqual(
+                pit.observation("CPI_CORE_MOM").normalized_value,
+                Decimal("0.3"),
+            )
+
+    def test_selector_pit_excludes_evidence_before_acceptance(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+            accepted_at = connection.execute(
+                """
+                SELECT MIN(accepted_at)
+                  FROM official_observation_assertions
+                 WHERE event_occurrence_id=%s
+                """,
+                (event_id,),
+            ).fetchone()[0]
+            pit = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.SYSTEM_KNOWN_PIT,
+                as_of=accepted_at - timedelta(microseconds=1),
+            )
+            for code in (
+                "CPI_HEADLINE_MOM",
+                "CPI_HEADLINE_YOY",
+                "CPI_CORE_MOM",
+                "CPI_CORE_YOY",
+            ):
+                self.assertEqual(
+                    pit.observation(code).state,
+                    ObservationResolutionState.UNRESOLVED,
+                )
+
+    def test_selector_serving_overlay_domain_withheld_overrides_event_enabled(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+            knowledge = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+
+            connection.execute(
+                """
+                SELECT apply_economic_serving_control(
+                    'EVENT_OCCURRENCE', %s, 0, 'WITHHELD',
+                    'TEST_HOLD', %s, 'CASE-HOLD', NULL, NULL
+                )
+                """,
+                (event_id, f"idp:operator:{uuid4()}"),
+            )
+            connection.execute(
+                """
+                SELECT apply_economic_serving_control(
+                    'EVENT_OCCURRENCE', %s, 1, 'ENABLED',
+                    'TEST_REENABLE', %s, 'CASE-REENABLE', %s, NULL
+                )
+                """,
+                (
+                    event_id,
+                    f"idp:operator:{uuid4()}",
+                    knowledge.knowledge_fingerprint,
+                ),
+            )
+            connection.execute(
+                """
+                SELECT apply_economic_serving_control(
+                    'CPI_DOMAIN', NULL, 0, 'WITHHELD',
+                    'DOMAIN_HOLD', %s, 'CASE-DOMAIN', NULL, NULL
+                )
+                """,
+                (f"idp:operator:{uuid4()}",),
+            )
+
+            governed = selector.apply_serving_overlay(
+                connection,
+                knowledge,
+            )
+            self.assertEqual(
+                governed.effective_control_state,
+                ServingControlState.WITHHELD,
+            )
+            self.assertEqual(
+                governed.knowledge.knowledge_fingerprint,
+                knowledge.knowledge_fingerprint,
+            )
+            self.assertTrue(
+                all(
+                    item.normalized_value is None
+                    for item in governed.observations
+                    if item.knowledge_state is ObservationResolutionState.VALUE
+                )
+            )
+            self.assertTrue(
+                all(
+                    item.withheld
+                    for item in governed.observations
+                    if item.knowledge_state is ObservationResolutionState.VALUE
+                )
             )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
