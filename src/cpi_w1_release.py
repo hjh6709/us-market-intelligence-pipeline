@@ -50,6 +50,13 @@ class ReleaseEnvelopeCandidate:
 
 
 @dataclass(frozen=True)
+class CorroboratingRepresentationCandidate:
+    event_type: str
+    reference_month: date
+    extractor_contract_version: str
+
+
+@dataclass(frozen=True)
 class ObservationCandidate:
     material: ObservationMaterial
     source_value_text: str

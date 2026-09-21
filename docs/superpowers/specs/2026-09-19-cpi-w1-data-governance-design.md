@@ -1204,6 +1204,19 @@ Two promotion families are required for the primary CPI release artifact:
 2. CPI_OBSERVATION_BUNDLE_PROMOTE
    - requires a valid, visible EVENT_RELEASE relation and matching disclosure-artifact relation for the input artifact;
    - validates and promotes the four CPI W1 observation semantics atomically;
+
+Secondary official representations require a separate topology-only family:
+
+3. CPI_CORROBORATING_REPRESENTATION_PROMOTE
+   - is used for a validated same-release secondary representation such as Table 1 XLSX;
+   - requires exactly one valid BLS EVENT_RELEASE for the same CPI reference month;
+   - links the artifact to that disclosure as CORROBORATING_REPRESENTATION;
+   - inserts no official observation assertion;
+   - may SUCCEED even if later XLSX Core 4 extraction quarantines.
+
+The separate topology family is necessary for the same reason release-envelope and
+observation promotion are split: a valid official representation relationship must
+not disappear merely because its numeric surface cannot yet be interpreted safely.
    - may QUARANTINE without rolling back already accepted release-envelope evidence.
 
 This split is a semantic boundary, not a microservice requirement. Both work families may run in the same promoter codebase and under the same economic-promoter logical writer capability.

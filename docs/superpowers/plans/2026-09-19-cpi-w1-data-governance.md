@@ -870,7 +870,21 @@ One transaction:
 
 No observations are inserted here.
 
-- [ ] **Step 5: Implement `CPI_OBSERVATION_BUNDLE_PROMOTE`**
+- [ ] **Step 5: Implement `CPI_CORROBORATING_REPRESENTATION_PROMOTE`**
+
+For a validated same-release Table 1 XLSX representation:
+- verify current claim and `CPI_TABLE1_XLSX` artifact contract;
+- require exactly one valid BLS EVENT_RELEASE for the same reference month;
+- create/verify only the `CORROBORATING_REPRESENTATION` disclosure-artifact link
+  and its interpretation subject;
+- insert no Core 4 assertion;
+- terminalize attempt/work SUCCEEDED atomically.
+
+This family remains unusable for live XLSX until Task 9B provides a validated real
+workbook candidate; tests may construct the typed candidate directly to verify the
+repository/promotion contract without pretending the XLSX parser is complete.
+
+- [ ] **Step 6: Implement `CPI_OBSERVATION_BUNDLE_PROMOTE`**
 
 One transaction:
 - verify current claim;
@@ -887,7 +901,7 @@ If typed extraction is unsafe, terminalize the current attempt `QUARANTINED` wit
 a durable reason_code and then terminalize work `QUARANTINED` with the same outcome,
 without inserting any partial Core 4 assertions.
 
-- [ ] **Step 6: Add the key split-outcome integration test**
+- [ ] **Step 7: Add the key split-outcome integration test**
 
 Scenario:
 1. enqueue envelope + observation work for one artifact;
@@ -898,22 +912,22 @@ Scenario:
 6. disclosure/EVENT_RELEASE/marker rows exist;
 7. zero Core 4 assertion rows exist.
 
-- [ ] **Step 7: Add accepted-at trust-boundary tests**
+- [ ] **Step 8: Add accepted-at trust-boundary tests**
 
 Verify promoter/repository public interfaces expose no caller-selected `accepted_at`.
 Insert evidence through promotion, then prove the stored knowledge time is generated
 by the promotion transaction. Replay/backfill of an older artifact must not backdate
 `accepted_at`.
 
-- [ ] **Step 8: Add stale-worker fencing test**
+- [ ] **Step 9: Add stale-worker fencing test**
 
 Claim work as generation 1, expire/reclaim as generation 2, then attempt generation-1 promotion. Expected: stale mutation rejected and no evidence inserted.
 
-- [ ] **Step 9: Add conflicting official representation test**
+- [ ] **Step 10: Add conflicting official representation test**
 
 Promote HTML Core 4 value 0.3, then an eligible corroborating representation value 0.4. Both work items may SUCCEED; both evidence rows remain.
 
-- [ ] **Step 10: Run and commit**
+- [ ] **Step 11: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_repository tests.test_cpi_w1_promoter -v

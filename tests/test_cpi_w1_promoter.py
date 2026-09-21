@@ -47,6 +47,17 @@ class CpiW1PromoterTest(unittest.TestCase):
         link_subject = SOURCE.index('"EVENT_DISCLOSURE_LINK"')
         self.assertLess(link_select, link_subject)
 
+    def test_corroborating_representation_has_separate_promotion_family(self) -> None:
+        self.assertIn(
+            "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
+            SOURCE,
+        )
+        start = SOURCE.index("def promote_corroborating_representation")
+        observation = SOURCE.index("def promote_observation_bundle")
+        body = SOURCE[start:observation]
+        self.assertIn("'CORROBORATING_REPRESENTATION'", body)
+        self.assertNotIn("official_observation_assertions", body)
+
     def test_envelope_and_observation_promotions_are_separate(self) -> None:
         envelope_start = SOURCE.index("def promote_release_envelope")
         observation_start = SOURCE.index("def promote_observation_bundle")

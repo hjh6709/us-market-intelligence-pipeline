@@ -16,6 +16,7 @@ from src.cpi_w1_promoter import (
     promotion_work_key,
 )
 from src.cpi_w1_release import (
+    CorroboratingRepresentationCandidate,
     ObservationBundleCandidate,
     ObservationCandidate,
     extract_core4_from_release_html,
@@ -441,7 +442,14 @@ class CpiW1PostgresTest(unittest.TestCase):
             attempt_number=1,
         )
 
-    def make_artifact(self, connection, locator="release:2026-08"):
+    def make_artifact(
+        self,
+        connection,
+        locator="release:2026-08",
+        *,
+        artifact_contract_kind="CPI_RELEASE_HTML",
+        content_type="text/html",
+    ):
         attempt_id = self.make_attempt(
             connection, "ECONOMIC_COLLECT", f"collect:{locator}:{uuid4()}"
         )
@@ -453,11 +461,18 @@ class CpiW1PostgresTest(unittest.TestCase):
                 source_contract_version, locator_key, content_sha256,
                 content_type, captured_at, created_by_attempt_id,
                 created_by_execution_scope, content_state
-            ) VALUES (%s, 'ECONOMIC', 'BLS', 'CPI_RELEASE_HTML',
-                      'bls-cpi-source-v1', %s, %s, 'text/html',
+            ) VALUES (%s, 'ECONOMIC', 'BLS', %s,
+                      'bls-cpi-source-v1', %s, %s, %s,
                       CURRENT_TIMESTAMP, %s, 'ECONOMIC_COLLECT', 'NOT_RETAINED')
             """,
-            (artifact_id, locator, digest(str(artifact_id)), attempt_id),
+            (
+                artifact_id,
+                artifact_contract_kind,
+                locator,
+                digest(str(artifact_id)),
+                content_type,
+                attempt_id,
+            ),
         )
         return artifact_id
 
@@ -2482,6 +2497,215 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (work_id,),
                 ).fetchone(),
                 ("CLAIMED", None),
+            )
+
+    def test_conflicting_official_representation_materials_are_both_retained(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path(
+            "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
+        ).read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        html_bundle = extract_core4_from_release_html(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+
+        with self.connection() as connection:
+            html_artifact = self.make_artifact(
+                connection,
+                f"release:html-conflict:{uuid4()}",
+            )
+            envelope_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            envelope_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                html_artifact,
+                envelope.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), envelope_run, envelope_key, html_artifact),
+            )
+            envelope_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":"
+                ),
+            )
+            promoter.promote_release_envelope(
+                connection,
+                envelope_claim,
+                artifact_id=html_artifact,
+                candidate=envelope,
+            )
+
+            html_obs_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            html_obs_key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                html_artifact,
+                html_bundle.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), html_obs_run, html_obs_key, html_artifact),
+            )
+            html_obs_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":"
+                ),
+            )
+            promoter.promote_observation_bundle(
+                connection,
+                html_obs_claim,
+                artifact_id=html_artifact,
+                candidate=html_bundle,
+            )
+
+            xlsx_artifact = self.make_artifact(
+                connection,
+                f"release:xlsx-conflict:{uuid4()}",
+                artifact_contract_kind="CPI_TABLE1_XLSX",
+                content_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "spreadsheetml.sheet"
+                ),
+            )
+            topology_candidate = CorroboratingRepresentationCandidate(
+                event_type="CPI",
+                reference_month=date(2026, 8, 1),
+                extractor_contract_version="bls-cpi-table1-xlsx-v1",
+            )
+            topology_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            topology_key = promotion_work_key(
+                PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE,
+                xlsx_artifact,
+                topology_candidate.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), topology_run, topology_key, xlsx_artifact),
+            )
+            topology_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE.value
+                    + ":"
+                ),
+            )
+            topology = promoter.promote_corroborating_representation(
+                connection,
+                topology_claim,
+                artifact_id=xlsx_artifact,
+                candidate=topology_candidate,
+            )
+            self.assertIsNotNone(topology.disclosure_artifact_link_id)
+
+            changed = []
+            for item in html_bundle.observations:
+                if item.observation_code == "CPI_HEADLINE_MOM":
+                    changed.append(
+                        ObservationCandidate(
+                            material=ObservationMaterial(
+                                observation_code=item.observation_code,
+                                assertion_state=ObservationState.VALUE,
+                                normalized_value=Decimal("0.4"),
+                            ),
+                            source_value_text="0.4",
+                        )
+                    )
+                else:
+                    changed.append(item)
+            xlsx_bundle = ObservationBundleCandidate(
+                reference_month=html_bundle.reference_month,
+                observations=tuple(changed),
+                extractor_contract_version="bls-cpi-table1-xlsx-v1",
+            )
+
+            xlsx_obs_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            xlsx_obs_key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                xlsx_artifact,
+                xlsx_bundle.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), xlsx_obs_run, xlsx_obs_key, xlsx_artifact),
+            )
+            xlsx_obs_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":"
+                ),
+            )
+            promoter.promote_observation_bundle(
+                connection,
+                xlsx_obs_claim,
+                artifact_id=xlsx_artifact,
+                candidate=xlsx_bundle,
+            )
+
+            rows = connection.execute(
+                """
+                SELECT normalized_value, source_artifact_id
+                  FROM official_observation_assertions
+                 WHERE observation_code='CPI_HEADLINE_MOM'
+                 ORDER BY source_artifact_id
+                """
+            ).fetchall()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                {row[0] for row in rows},
+                {Decimal("0.3"), Decimal("0.4")},
+            )
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                      FROM event_disclosure_artifacts
+                     WHERE relation_kind='CORROBORATING_REPRESENTATION'
+                    """
+                ).fetchone()[0],
+                1,
             )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:

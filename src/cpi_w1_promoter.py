@@ -13,7 +13,11 @@ from src.cpi_w1_contracts import (
     PromotionFamily,
     material_fingerprint,
 )
-from src.cpi_w1_release import ObservationBundleCandidate, ReleaseEnvelopeCandidate
+from src.cpi_w1_release import (
+    CorroboratingRepresentationCandidate,
+    ObservationBundleCandidate,
+    ReleaseEnvelopeCandidate,
+)
 from src.cpi_w1_repository import (
     Claim,
     CpiW1Repository,
@@ -416,6 +420,132 @@ class CpiW1Promoter:
                 outcome="SUCCEEDED",
             )
 
+            return PromotionResult(
+                event_occurrence_id=event_id,
+                disclosure_id=disclosure_id,
+                disclosure_link_id=disclosure_link_id,
+                disclosure_artifact_link_id=artifact_link_id,
+            )
+
+    def promote_corroborating_representation(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        artifact_id: UUID,
+        candidate: CorroboratingRepresentationCandidate,
+    ) -> PromotionResult:
+        if candidate.event_type != "CPI":
+            raise PromotionInvariantError("corroborating representation is not CPI")
+        expected_work_key = promotion_work_key(
+            PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+        )
+        if claim.work_key != expected_work_key:
+            raise PromotionInvariantError(
+                "claim is not corroborating-representation promotion work"
+            )
+
+        with connection.transaction():
+            self._verify_input_artifact(
+                connection,
+                claim,
+                artifact_id,
+                allowed_kinds={"CPI_TABLE1_XLSX"},
+            )
+
+            rows = connection.execute(
+                """
+                SELECT e.event_occurrence_id, d.disclosure_id, l.disclosure_link_id
+                  FROM core_event_occurrences e
+                  JOIN event_disclosure_links l
+                    ON l.event_occurrence_id = e.event_occurrence_id
+                   AND l.relation_kind = 'EVENT_RELEASE'
+                  JOIN event_disclosures d
+                    ON d.disclosure_id = l.disclosure_id
+                   AND d.source_code = 'BLS'
+                  LEFT JOIN LATERAL (
+                        SELECT decision_state
+                          FROM interpretation_decisions
+                         WHERE subject_id = l.disclosure_link_id
+                         ORDER BY decision_version DESC
+                         LIMIT 1
+                  ) link_decision ON TRUE
+                 WHERE e.event_type='CPI'
+                   AND e.reference_month=%s
+                   AND COALESCE(link_decision.decision_state, 'VALID')='VALID'
+                """,
+                (candidate.reference_month,),
+            ).fetchall()
+            if len(rows) != 1:
+                raise PromotionInvariantError(
+                    "corroborating representation requires one valid EVENT_RELEASE"
+                )
+
+            event_id, disclosure_id, disclosure_link_id = rows[0]
+            existing = connection.execute(
+                """
+                SELECT disclosure_artifact_link_id
+                  FROM event_disclosure_artifacts
+                 WHERE disclosure_id=%s
+                   AND artifact_id=%s
+                   AND relation_kind='CORROBORATING_REPRESENTATION'
+                """,
+                (disclosure_id, artifact_id),
+            ).fetchone()
+            if existing is None:
+                artifact_link_id = _stable_uuid(
+                    "corroborating-artifact-link",
+                    disclosure_id,
+                    artifact_id,
+                    DisclosureArtifactRelationKind.CORROBORATING_REPRESENTATION.value,
+                )
+                self._ensure_subject(
+                    connection,
+                    artifact_link_id,
+                    "DISCLOSURE_ARTIFACT_LINK",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_disclosure_artifacts (
+                        disclosure_artifact_link_id, disclosure_id, artifact_id,
+                        relation_kind, accepted_by_attempt_id, accepted_at
+                    ) VALUES (
+                        %s, %s, %s, 'CORROBORATING_REPRESENTATION',
+                        %s, CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT (disclosure_id, artifact_id, relation_kind)
+                    DO NOTHING
+                    """,
+                    (
+                        artifact_link_id,
+                        disclosure_id,
+                        artifact_id,
+                        claim.attempt_id,
+                    ),
+                )
+                existing = connection.execute(
+                    """
+                    SELECT disclosure_artifact_link_id
+                      FROM event_disclosure_artifacts
+                     WHERE disclosure_id=%s
+                       AND artifact_id=%s
+                       AND relation_kind='CORROBORATING_REPRESENTATION'
+                    """,
+                    (disclosure_id, artifact_id),
+                ).fetchone()
+            if existing is None:
+                raise PromotionInvariantError(
+                    "corroborating representation relation was not established"
+                )
+            artifact_link_id = existing[0]
+
+            self.repository.terminalize_claim_in_transaction(
+                connection,
+                claim,
+                outcome="SUCCEEDED",
+            )
             return PromotionResult(
                 event_occurrence_id=event_id,
                 disclosure_id=disclosure_id,

@@ -52,13 +52,15 @@ Current implemented foundation on the CPI W1 branch includes:
   fingerprints;
 - bounded BLS source retrieval and development/test filesystem artifact storage;
 - CPI schedule candidate parsing with authoritative HTML versus fallback ICS
-  source-role separation.
+  source-role separation;
+- BLS release-envelope and Core 4 HTML extraction;
+- fenced CPI W1 repository/promotion primitives for release-envelope, secondary
+  corroborating-representation topology, and atomic Core 4 promotion.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
 
-- release-envelope and Core 4 extraction;
-- promotion repository, claim fencing, and atomic four-observation promotion;
+- Table 1 XLSX binary parser/corpus validation and live corroboration ingestion path;
 - source-reconstruction/PIT selector and serving-control overlay;
 - application governance client and production authorization/RBAC;
 - golden-corpus differential replay and parser-change release gate;
