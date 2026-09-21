@@ -60,8 +60,15 @@ def promotion_work_key(
     artifact_id: UUID,
     extractor_contract_version: str,
 ) -> str:
-    if not extractor_contract_version or extractor_contract_version != extractor_contract_version.strip():
-        raise ValueError("extractor_contract_version must be a canonical non-empty token")
+    if (
+        not extractor_contract_version
+        or extractor_contract_version != extractor_contract_version.strip()
+        or any(
+            char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-"
+            for char in extractor_contract_version
+        )
+    ):
+        raise ValueError("extractor_contract_version must be a canonical token")
     return f"{family.value}:{artifact_id}:{extractor_contract_version}"
 
 
@@ -204,34 +211,6 @@ class CpiW1Promoter:
                 raise PromotionDeterminismError("disclosure identity did not converge")
             disclosure_id = disclosure_row[0]
 
-            disclosure_link_id = _stable_uuid(
-                "event-release-link",
-                event_id,
-                disclosure_id,
-            )
-            self._ensure_subject(
-                connection,
-                disclosure_link_id,
-                "EVENT_DISCLOSURE_LINK",
-            )
-            connection.execute(
-                """
-                INSERT INTO event_disclosure_links (
-                    disclosure_link_id, event_occurrence_id, disclosure_id,
-                    relation_kind, accepted_by_attempt_id, accepted_at
-                ) VALUES (
-                    %s, %s, %s, 'EVENT_RELEASE', %s, CURRENT_TIMESTAMP
-                )
-                ON CONFLICT (event_occurrence_id, disclosure_id, relation_kind)
-                DO NOTHING
-                """,
-                (
-                    disclosure_link_id,
-                    event_id,
-                    disclosure_id,
-                    claim.attempt_id,
-                ),
-            )
             link_row = connection.execute(
                 """
                 SELECT disclosure_link_id
@@ -243,38 +222,48 @@ class CpiW1Promoter:
                 (event_id, disclosure_id),
             ).fetchone()
             if link_row is None:
+                disclosure_link_id = _stable_uuid(
+                    "event-release-link",
+                    event_id,
+                    disclosure_id,
+                )
+                self._ensure_subject(
+                    connection,
+                    disclosure_link_id,
+                    "EVENT_DISCLOSURE_LINK",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_disclosure_links (
+                        disclosure_link_id, event_occurrence_id, disclosure_id,
+                        relation_kind, accepted_by_attempt_id, accepted_at
+                    ) VALUES (
+                        %s, %s, %s, 'EVENT_RELEASE', %s, CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT (event_occurrence_id, disclosure_id, relation_kind)
+                    DO NOTHING
+                    """,
+                    (
+                        disclosure_link_id,
+                        event_id,
+                        disclosure_id,
+                        claim.attempt_id,
+                    ),
+                )
+                link_row = connection.execute(
+                    """
+                    SELECT disclosure_link_id
+                      FROM event_disclosure_links
+                     WHERE event_occurrence_id=%s
+                       AND disclosure_id=%s
+                       AND relation_kind='EVENT_RELEASE'
+                    """,
+                    (event_id, disclosure_id),
+                ).fetchone()
+            if link_row is None:
                 raise PromotionInvariantError("EVENT_RELEASE relation was not established")
             disclosure_link_id = link_row[0]
 
-            artifact_link_id = _stable_uuid(
-                "release-artifact-link",
-                disclosure_id,
-                artifact_id,
-                DisclosureArtifactRelationKind.RELEASE_REPRESENTATION.value,
-            )
-            self._ensure_subject(
-                connection,
-                artifact_link_id,
-                "DISCLOSURE_ARTIFACT_LINK",
-            )
-            connection.execute(
-                """
-                INSERT INTO event_disclosure_artifacts (
-                    disclosure_artifact_link_id, disclosure_id, artifact_id,
-                    relation_kind, accepted_by_attempt_id, accepted_at
-                ) VALUES (
-                    %s, %s, %s, 'RELEASE_REPRESENTATION', %s, CURRENT_TIMESTAMP
-                )
-                ON CONFLICT (disclosure_id, artifact_id, relation_kind)
-                DO NOTHING
-                """,
-                (
-                    artifact_link_id,
-                    disclosure_id,
-                    artifact_id,
-                    claim.attempt_id,
-                ),
-            )
             artifact_link_row = connection.execute(
                 """
                 SELECT disclosure_artifact_link_id
@@ -285,6 +274,46 @@ class CpiW1Promoter:
                 """,
                 (disclosure_id, artifact_id),
             ).fetchone()
+            if artifact_link_row is None:
+                artifact_link_id = _stable_uuid(
+                    "release-artifact-link",
+                    disclosure_id,
+                    artifact_id,
+                    DisclosureArtifactRelationKind.RELEASE_REPRESENTATION.value,
+                )
+                self._ensure_subject(
+                    connection,
+                    artifact_link_id,
+                    "DISCLOSURE_ARTIFACT_LINK",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_disclosure_artifacts (
+                        disclosure_artifact_link_id, disclosure_id, artifact_id,
+                        relation_kind, accepted_by_attempt_id, accepted_at
+                    ) VALUES (
+                        %s, %s, %s, 'RELEASE_REPRESENTATION', %s, CURRENT_TIMESTAMP
+                    )
+                    ON CONFLICT (disclosure_id, artifact_id, relation_kind)
+                    DO NOTHING
+                    """,
+                    (
+                        artifact_link_id,
+                        disclosure_id,
+                        artifact_id,
+                        claim.attempt_id,
+                    ),
+                )
+                artifact_link_row = connection.execute(
+                    """
+                    SELECT disclosure_artifact_link_id
+                      FROM event_disclosure_artifacts
+                     WHERE disclosure_id=%s
+                       AND artifact_id=%s
+                       AND relation_kind='RELEASE_REPRESENTATION'
+                    """,
+                    (disclosure_id, artifact_id),
+                ).fetchone()
             if artifact_link_row is None:
                 raise PromotionInvariantError(
                     "release representation relation was not established"
@@ -300,51 +329,67 @@ class CpiW1Promoter:
                     "time_precision": candidate.time_precision,
                 }
             )
-            marker_id = _stable_uuid(
-                "marker",
-                artifact_link_id,
-                candidate.marker_semantics,
-                candidate.extractor_contract_version,
-            )
-            self._ensure_subject(
-                connection,
-                marker_id,
-                "DISCLOSURE_MARKER_ASSERTION",
-            )
-            connection.execute(
+            marker_row = connection.execute(
                 """
-                INSERT INTO disclosure_marker_assertions (
-                    marker_assertion_id, disclosure_id,
-                    disclosure_artifact_link_id, marker_semantics,
-                    marker_date, marker_at, marker_timezone, time_precision,
-                    source_code, source_artifact_id,
-                    extractor_contract_version, accepted_by_attempt_id,
-                    accepted_at, material_fingerprint
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s,
-                    'BLS', %s, %s, %s, CURRENT_TIMESTAMP, %s
-                )
-                ON CONFLICT (
-                    disclosure_artifact_link_id,
-                    marker_semantics,
-                    extractor_contract_version
-                ) DO NOTHING
+                SELECT marker_assertion_id, material_fingerprint, marker_date,
+                       marker_at, marker_timezone, time_precision
+                  FROM disclosure_marker_assertions
+                 WHERE disclosure_artifact_link_id=%s
+                   AND marker_semantics=%s
+                   AND extractor_contract_version=%s
                 """,
                 (
-                    marker_id,
-                    disclosure_id,
                     artifact_link_id,
                     candidate.marker_semantics,
-                    candidate.marker_date,
-                    candidate.marker_at,
-                    candidate.marker_timezone,
-                    candidate.time_precision.value,
-                    artifact_id,
                     candidate.extractor_contract_version,
-                    claim.attempt_id,
-                    marker_fp,
                 ),
-            )
+            ).fetchone()
+            if marker_row is None:
+                marker_id = _stable_uuid(
+                    "marker",
+                    artifact_link_id,
+                    candidate.marker_semantics,
+                    candidate.extractor_contract_version,
+                )
+                self._ensure_subject(
+                    connection,
+                    marker_id,
+                    "DISCLOSURE_MARKER_ASSERTION",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO disclosure_marker_assertions (
+                        marker_assertion_id, disclosure_id,
+                        disclosure_artifact_link_id, marker_semantics,
+                        marker_date, marker_at, marker_timezone, time_precision,
+                        source_code, source_artifact_id,
+                        extractor_contract_version, accepted_by_attempt_id,
+                        accepted_at, material_fingerprint
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        'BLS', %s, %s, %s, CURRENT_TIMESTAMP, %s
+                    )
+                    ON CONFLICT (
+                        disclosure_artifact_link_id,
+                        marker_semantics,
+                        extractor_contract_version
+                    ) DO NOTHING
+                    """,
+                    (
+                        marker_id,
+                        disclosure_id,
+                        artifact_link_id,
+                        candidate.marker_semantics,
+                        candidate.marker_date,
+                        candidate.marker_at,
+                        candidate.marker_timezone,
+                        candidate.time_precision.value,
+                        artifact_id,
+                        candidate.extractor_contract_version,
+                        claim.attempt_id,
+                        marker_fp,
+                    ),
+                )
             marker_row = connection.execute(
                 """
                 SELECT material_fingerprint, marker_date, marker_at,
@@ -471,18 +516,40 @@ class CpiW1Promoter:
 
             inserted = 0
             for item in candidate.observations:
-                assertion_id = _stable_uuid(
-                    "observation",
-                    disclosure_link_id,
-                    artifact_link_id,
-                    item.observation_code,
-                    candidate.extractor_contract_version,
+                existing_assertion = connection.execute(
+                    """
+                    SELECT assertion_id, material_fingerprint, assertion_state,
+                           normalized_value, source_value_text, source_reason_text
+                      FROM official_observation_assertions
+                     WHERE disclosure_link_id=%s
+                       AND disclosure_artifact_link_id=%s
+                       AND observation_code=%s
+                       AND extractor_contract_version=%s
+                    """,
+                    (
+                        disclosure_link_id,
+                        artifact_link_id,
+                        item.observation_code,
+                        candidate.extractor_contract_version,
+                    ),
+                ).fetchone()
+                assertion_id = (
+                    existing_assertion[0]
+                    if existing_assertion is not None
+                    else _stable_uuid(
+                        "observation",
+                        disclosure_link_id,
+                        artifact_link_id,
+                        item.observation_code,
+                        candidate.extractor_contract_version,
+                    )
                 )
-                self._ensure_subject(
-                    connection,
-                    assertion_id,
-                    "OFFICIAL_OBSERVATION_ASSERTION",
-                )
+                if existing_assertion is None:
+                    self._ensure_subject(
+                        connection,
+                        assertion_id,
+                        "OFFICIAL_OBSERVATION_ASSERTION",
+                    )
 
                 connection.execute(
                     """

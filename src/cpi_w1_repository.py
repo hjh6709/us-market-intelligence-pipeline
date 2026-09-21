@@ -48,7 +48,10 @@ SELECT
  WHERE w.execution_scope = %s
    AND w.data_domain = 'ECONOMIC'
    AND r.state <> 'TERMINAL'
-   AND (%s IS NULL OR w.work_key LIKE %s)
+   AND (
+        %s IS NULL
+        OR LEFT(w.work_key, CHAR_LENGTH(%s)) = %s
+   )
    AND (
         (
             w.state = 'PENDING'
@@ -117,10 +120,14 @@ class CpiW1Repository:
             raise ValueError("lease_seconds must be in [1, 3600]")
 
         with connection.transaction():
-            like_pattern = None if work_key_prefix is None else work_key_prefix + "%"
             row = connection.execute(
                 CLAIM_SELECT_SQL,
-                (execution_scope, work_key_prefix, like_pattern),
+                (
+                    execution_scope,
+                    work_key_prefix,
+                    work_key_prefix,
+                    work_key_prefix,
+                ),
             ).fetchone()
             if row is None:
                 return None

@@ -10,6 +10,11 @@ SOURCE = Path("src/cpi_w1_promoter.py").read_text(encoding="utf-8")
 
 
 class CpiW1PromoterTest(unittest.TestCase):
+    def test_claim_prefix_filter_does_not_use_sql_like(self) -> None:
+        repository_source = Path("src/cpi_w1_repository.py").read_text(encoding="utf-8")
+        self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", repository_source)
+        self.assertNotIn("w.work_key LIKE %s", repository_source)
+
     def test_release_disclosure_key_is_platform_owned_and_deterministic(self) -> None:
         self.assertEqual(
             canonical_release_disclosure_key(date(2026, 8, 1)),
@@ -36,6 +41,11 @@ class CpiW1PromoterTest(unittest.TestCase):
     def test_promotion_public_interfaces_do_not_accept_accepted_at(self) -> None:
         self.assertNotIn("accepted_at:", SOURCE)
         self.assertNotIn("accepted_at=", SOURCE)
+
+    def test_existing_natural_key_is_checked_before_subject_creation(self) -> None:
+        link_select = SOURCE.index("SELECT disclosure_link_id")
+        link_subject = SOURCE.index('"EVENT_DISCLOSURE_LINK"')
+        self.assertLess(link_select, link_subject)
 
     def test_envelope_and_observation_promotions_are_separate(self) -> None:
         envelope_start = SOURCE.index("def promote_release_envelope")

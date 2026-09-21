@@ -15,7 +15,8 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("w.lease_until <= CURRENT_TIMESTAMP", SOURCE)
 
     def test_claim_can_filter_by_work_family_prefix(self) -> None:
-        self.assertIn("w.work_key LIKE %s", SOURCE)
+        self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", SOURCE)
+        self.assertNotIn("w.work_key LIKE %s", SOURCE)
         self.assertIn("work_key_prefix", SOURCE)
 
     def test_current_claim_fencing_uses_generation_token_lease_and_attempt(self) -> None:
