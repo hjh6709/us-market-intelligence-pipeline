@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
@@ -34,6 +35,20 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
             datetime(2026, 9, 11, 8, 30, tzinfo=ZoneInfo("America/New_York")),
         )
         self.assertEqual(envelope.time_precision, TimePrecision.EXACT)
+
+    def test_candidates_are_bound_to_exact_artifact_bytes(self) -> None:
+        body = self.read("normal_aug_2026.html")
+        expected = hashlib.sha256(body).hexdigest()
+        envelope = extract_release_envelope(
+            body,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        bundle = extract_core4_from_release_html(
+            body,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        self.assertEqual(envelope.artifact_content_sha256, expected)
+        self.assertEqual(bundle.artifact_content_sha256, expected)
 
     def test_stale_current_release_is_typed_not_visible(self) -> None:
         with self.assertRaises(ExpectedReleaseNotVisible):

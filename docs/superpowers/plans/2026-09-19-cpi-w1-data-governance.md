@@ -842,6 +842,11 @@ Promotion work uses a deterministic promotion-family-prefixed work key:
 Workers claim only their family prefix, and the promoter revalidates the exact key so
 one promotion family cannot execute another family's work.
 
+Every typed promotion candidate carries `artifact_content_sha256`. The promoter
+must compare it to the durable `source_artifacts.content_sha256` for the claimed
+input artifact and reject cross-wired candidates. Artifact kind also constrains the
+allowed extractor-contract version.
+
 All later mutation methods require matching `work_item_id + claim_generation + claim_token`.
 Work terminalization requires the current generation attempt to be TERMINAL with the
 same outcome; SKIPPED is the only terminal work outcome with no attempt.

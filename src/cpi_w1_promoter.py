@@ -33,6 +33,11 @@ _CORE4 = {
     "CPI_CORE_YOY",
 }
 
+_ALLOWED_EXTRACTORS_BY_ARTIFACT = {
+    "CPI_RELEASE_HTML": {"bls-cpi-release-html-v1"},
+    "CPI_TABLE1_XLSX": {"bls-cpi-table1-xlsx-v1"},
+}
+
 
 class PromotionInvariantError(RuntimeError):
     pass
@@ -87,6 +92,8 @@ class CpiW1Promoter:
         artifact_id: UUID,
         *,
         allowed_kinds: set[str],
+        artifact_content_sha256: str,
+        extractor_contract_version: str,
     ) -> tuple[str, str]:
         _run_id, input_artifact_id = self.repository.assert_current_claim(
             connection,
@@ -99,7 +106,8 @@ class CpiW1Promoter:
 
         row = connection.execute(
             """
-            SELECT source_code, artifact_contract_kind, source_contract_version
+            SELECT source_code, artifact_contract_kind, source_contract_version,
+                   content_sha256
               FROM source_artifacts
              WHERE artifact_id=%s
                AND data_domain='ECONOMIC'
@@ -108,13 +116,22 @@ class CpiW1Promoter:
         ).fetchone()
         if row is None:
             raise PromotionInvariantError("promotion artifact does not exist")
-        source_code, artifact_kind, source_contract_version = row
+        source_code, artifact_kind, source_contract_version, content_sha256 = row
         if source_code != "BLS":
             raise PromotionInvariantError("CPI W1 promotion requires BLS artifact")
         if artifact_kind not in allowed_kinds:
             raise PromotionInvariantError("artifact contract kind is not eligible")
         if source_contract_version != "bls-cpi-source-v1":
             raise PromotionInvariantError("unsupported BLS CPI source contract version")
+        if content_sha256 != artifact_content_sha256:
+            raise PromotionInvariantError(
+                "parsed candidate does not match input artifact content hash"
+            )
+        allowed_extractors = _ALLOWED_EXTRACTORS_BY_ARTIFACT.get(artifact_kind, set())
+        if extractor_contract_version not in allowed_extractors:
+            raise PromotionInvariantError(
+                "extractor contract version is not approved for artifact kind"
+            )
         return artifact_kind, source_contract_version
 
     @staticmethod
@@ -162,6 +179,8 @@ class CpiW1Promoter:
                 claim,
                 artifact_id,
                 allowed_kinds={"CPI_RELEASE_HTML"},
+                artifact_content_sha256=candidate.artifact_content_sha256,
+                extractor_contract_version=candidate.extractor_contract_version,
             )
 
             event_id = _stable_uuid(
@@ -453,6 +472,8 @@ class CpiW1Promoter:
                 claim,
                 artifact_id,
                 allowed_kinds={"CPI_TABLE1_XLSX"},
+                artifact_content_sha256=candidate.artifact_content_sha256,
+                extractor_contract_version=candidate.extractor_contract_version,
             )
 
             rows = connection.execute(
@@ -635,6 +656,8 @@ class CpiW1Promoter:
                 claim,
                 artifact_id,
                 allowed_kinds={"CPI_RELEASE_HTML", "CPI_TABLE1_XLSX"},
+                artifact_content_sha256=candidate.artifact_content_sha256,
+                extractor_contract_version=candidate.extractor_contract_version,
             )
             event_id, disclosure_id, disclosure_link_id, artifact_link_id = (
                 self._current_valid_observation_topology(
@@ -744,6 +767,10 @@ class CpiW1Promoter:
                 if row[1] != item.assertion_state.value:
                     raise PromotionDeterminismError(
                         "observation assertion state did not converge"
+                    )
+                if row[3] != item.source_value_text or row[4] != item.source_reason_text:
+                    raise PromotionDeterminismError(
+                        "same observation parse identity changed immutable source provenance"
                     )
                 inserted += 1
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -39,6 +40,7 @@ class ObservationExtractionError(ValueError):
 
 @dataclass(frozen=True)
 class ReleaseEnvelopeCandidate:
+    artifact_content_sha256: str
     event_type: str
     reference_month: date
     marker_semantics: str
@@ -51,6 +53,7 @@ class ReleaseEnvelopeCandidate:
 
 @dataclass(frozen=True)
 class CorroboratingRepresentationCandidate:
+    artifact_content_sha256: str
     event_type: str
     reference_month: date
     extractor_contract_version: str
@@ -81,6 +84,7 @@ class ObservationCandidate:
 
 @dataclass(frozen=True)
 class ObservationBundleCandidate:
+    artifact_content_sha256: str
     reference_month: date
     observations: tuple[ObservationCandidate, ...]
     extractor_contract_version: str
@@ -504,6 +508,7 @@ def extract_release_envelope(
     marker_date, marker_at = _parse_marker(full_text)
     _find_table1(parser)
     return ReleaseEnvelopeCandidate(
+        artifact_content_sha256=hashlib.sha256(body).hexdigest(),
         event_type="CPI",
         reference_month=actual_reference_month,
         marker_semantics="EMBARGO_LIFT",
@@ -576,6 +581,7 @@ def extract_core4_from_release_html(
     }:
         raise ObservationExtractionError("Core 4 observation contract is incomplete")
     return ObservationBundleCandidate(
+        artifact_content_sha256=envelope.artifact_content_sha256,
         reference_month=envelope.reference_month,
         observations=observations,
         extractor_contract_version=extractor_contract_version,

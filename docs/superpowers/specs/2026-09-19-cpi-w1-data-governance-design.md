@@ -1192,6 +1192,13 @@ Representation identity must be derived from served semantics, not server instan
 
 Fetch, parse, and semantic validation occur outside short canonical promotion transactions.
 
+Typed parser candidates are cryptographically bound to the exact source bytes by the
+artifact content SHA-256. Promotion re-reads the durable source_artifacts hash and
+rejects a candidate whose hash does not match the claimed input artifact. Promotion
+also accepts only extractor-contract versions approved for that artifact contract kind.
+This prevents cross-wiring a valid candidate from one artifact into another same-period
+artifact.
+
 One artifact may safely establish that a release occurred even when its numeric observation surface cannot yet be interpreted. CPI W1 therefore does not use one all-or-nothing promotion outcome for release envelope and observation bundle.
 
 Two promotion families are required for the primary CPI release artifact:

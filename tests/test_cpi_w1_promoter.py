@@ -38,6 +38,11 @@ class CpiW1PromoterTest(unittest.TestCase):
             ),
         )
 
+    def test_promoter_binds_candidate_to_artifact_hash_and_approved_extractor(self) -> None:
+        self.assertIn("parsed candidate does not match input artifact content hash", SOURCE)
+        self.assertIn("extractor contract version is not approved for artifact kind", SOURCE)
+        self.assertIn("_ALLOWED_EXTRACTORS_BY_ARTIFACT", SOURCE)
+
     def test_promotion_public_interfaces_do_not_accept_accepted_at(self) -> None:
         self.assertNotIn("accepted_at:", SOURCE)
         self.assertNotIn("accepted_at=", SOURCE)
@@ -74,6 +79,12 @@ class CpiW1PromoterTest(unittest.TestCase):
     def test_promotion_result_uses_verified_not_inserted_count(self) -> None:
         self.assertIn("verified_observation_count", SOURCE)
         self.assertNotIn("inserted_observation_count", SOURCE)
+
+    def test_observation_retry_checks_immutable_source_provenance(self) -> None:
+        self.assertIn(
+            "same observation parse identity changed immutable source provenance",
+            SOURCE,
+        )
 
     def test_observation_bundle_is_exactly_four_semantics(self) -> None:
         for code in (

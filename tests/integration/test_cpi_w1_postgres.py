@@ -449,6 +449,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         *,
         artifact_contract_kind="CPI_RELEASE_HTML",
         content_type="text/html",
+        content_sha256=None,
     ):
         attempt_id = self.make_attempt(
             connection, "ECONOMIC_COLLECT", f"collect:{locator}:{uuid4()}"
@@ -469,7 +470,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 artifact_id,
                 artifact_contract_kind,
                 locator,
-                digest(str(artifact_id)),
+                content_sha256 or digest(str(artifact_id)),
                 content_type,
                 attempt_id,
             ),
@@ -1877,7 +1878,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:envelope:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:envelope:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             run_id = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -1934,7 +1935,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:split:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:split:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             run_id = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -2037,7 +2038,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:core4:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:core4:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             envelope_run = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -2126,7 +2127,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:wrong-family:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:wrong-family:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             run_id = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -2167,7 +2168,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:retry:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:retry:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             work_key = promotion_work_key(
                 PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
                 artifact_id,
@@ -2264,7 +2265,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:determinism:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:determinism:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
 
             envelope_run = self.insert_run(
                 connection,
@@ -2344,6 +2345,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 else:
                     changed.append(item)
             conflicting = ObservationBundleCandidate(
+                artifact_content_sha256=bundle.artifact_content_sha256,
                 reference_month=bundle.reference_month,
                 observations=tuple(changed),
                 extractor_contract_version=bundle.extractor_contract_version,
@@ -2407,7 +2409,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             expected_reference_month=date(2026, 8, 1),
         )
         with self.connection() as connection:
-            artifact_id = self.make_artifact(connection, f"release:rollback:{uuid4()}")
+            artifact_id = self.make_artifact(connection, f"release:rollback:{uuid4()}", content_sha256=hashlib.sha256(fixture).hexdigest())
             envelope_run = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -2450,6 +2452,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 source_reason_text=None,
             )
             invalid_bundle = ObservationBundleCandidate(
+                artifact_content_sha256=bundle.artifact_content_sha256,
                 reference_month=bundle.reference_month,
                 observations=tuple(invalid_items),
                 extractor_contract_version=bundle.extractor_contract_version,
@@ -2518,6 +2521,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             html_artifact = self.make_artifact(
                 connection,
                 f"release:html-conflict:{uuid4()}",
+                content_sha256=hashlib.sha256(fixture).hexdigest(),
             )
             envelope_run = self.insert_run(
                 connection,
@@ -2591,8 +2595,10 @@ class CpiW1PostgresTest(unittest.TestCase):
                     "application/vnd.openxmlformats-officedocument."
                     "spreadsheetml.sheet"
                 ),
+                content_sha256=digest("xlsx-conflicting-representation"),
             )
             topology_candidate = CorroboratingRepresentationCandidate(
+                artifact_content_sha256=digest("xlsx-conflicting-representation"),
                 event_type="CPI",
                 reference_month=date(2026, 8, 1),
                 extractor_contract_version="bls-cpi-table1-xlsx-v1",
@@ -2647,6 +2653,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 else:
                     changed.append(item)
             xlsx_bundle = ObservationBundleCandidate(
+                artifact_content_sha256=digest("xlsx-conflicting-representation"),
                 reference_month=html_bundle.reference_month,
                 observations=tuple(changed),
                 extractor_contract_version="bls-cpi-table1-xlsx-v1",
@@ -2706,6 +2713,61 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """
                 ).fetchone()[0],
                 1,
+            )
+
+    def test_promoter_rejects_candidate_from_different_artifact_bytes(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path(
+            "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
+        ).read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"release:cross-wire:{uuid4()}",
+                content_sha256=digest("different-bytes"),
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":"
+                ),
+            )
+            with self.assertRaises(Exception):
+                promoter.promote_release_envelope(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=envelope,
+                )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM core_event_occurrences"
+                ).fetchone()[0],
+                0,
             )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
