@@ -384,6 +384,20 @@ class CpiW1Repository:
             if work is None:
                 raise StaleClaimError("claim lost before retry work reset")
 
+    def finalize_run_if_complete(
+        self,
+        connection: Any,
+        run_id: UUID,
+    ) -> bool:
+        with connection.transaction():
+            row = connection.execute(
+                "SELECT finalize_ingestion_run_if_complete(%s)",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("run finalizer returned no result")
+            return bool(row[0])
+
     def terminalize_claim(
         self,
         connection: Any,

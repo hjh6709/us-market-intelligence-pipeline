@@ -383,6 +383,68 @@ CREATE TRIGGER ingestion_runs_transition_guard
     BEFORE UPDATE ON ingestion_runs
     FOR EACH ROW EXECUTE FUNCTION enforce_ingestion_run_transition();
 
+CREATE OR REPLACE FUNCTION finalize_ingestion_run_if_complete(
+    p_run_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $finalize_run$
+DECLARE
+    run_state TEXT;
+    total_work INTEGER;
+    non_skipped_work INTEGER;
+    successful_work INTEGER;
+    failed_work INTEGER;
+    expected_outcome TEXT;
+BEGIN
+    SELECT state
+      INTO STRICT run_state
+      FROM ingestion_runs
+     WHERE run_id = p_run_id
+     FOR UPDATE;
+
+    IF run_state = 'TERMINAL' THEN
+        RETURN FALSE;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+          FROM ingestion_work_items
+         WHERE run_id = p_run_id
+           AND state <> 'TERMINAL'
+    ) THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT
+        COUNT(*),
+        COUNT(*) FILTER (WHERE outcome <> 'SKIPPED'),
+        COUNT(*) FILTER (WHERE outcome IN ('SUCCEEDED', 'DATA_NOT_AVAILABLE')),
+        COUNT(*) FILTER (WHERE outcome = 'FAILED')
+      INTO total_work, non_skipped_work, successful_work, failed_work
+      FROM ingestion_work_items
+     WHERE run_id = p_run_id;
+
+    IF total_work = 0 OR non_skipped_work = 0 THEN
+        expected_outcome := 'NO_WORK';
+    ELSIF successful_work = non_skipped_work THEN
+        expected_outcome := 'SUCCEEDED';
+    ELSIF failed_work = non_skipped_work THEN
+        expected_outcome := 'FAILED';
+    ELSE
+        expected_outcome := 'PARTIAL';
+    END IF;
+
+    UPDATE ingestion_runs
+       SET state = 'TERMINAL',
+           outcome = expected_outcome,
+           finished_at = CURRENT_TIMESTAMP
+     WHERE run_id = p_run_id;
+
+    RETURN TRUE;
+END;
+$finalize_run$;
+
 CREATE OR REPLACE FUNCTION enforce_ingestion_work_insert_parent_open()
 RETURNS TRIGGER
 LANGUAGE plpgsql

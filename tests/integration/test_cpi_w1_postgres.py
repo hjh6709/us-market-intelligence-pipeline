@@ -2770,6 +2770,66 @@ class CpiW1PostgresTest(unittest.TestCase):
                 0,
             )
 
+    def test_repository_finalizes_run_after_all_work_is_terminal(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            repository.terminalize_claim(
+                connection,
+                claim,
+                outcome="SUCCEEDED",
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state FROM ingestion_runs WHERE run_id=%s",
+                    (run_id,),
+                ).fetchone()[0],
+                "RUNNING",
+            )
+            self.assertTrue(repository.finalize_run_if_complete(connection, run_id))
+            after = connection.execute(
+                "SELECT state, outcome, finished_at FROM ingestion_runs WHERE run_id=%s",
+                (run_id,),
+            ).fetchone()
+            self.assertEqual(after[:2], ("TERMINAL", "SUCCEEDED"))
+            self.assertIsNotNone(after[2])
+            self.assertFalse(repository.finalize_run_if_complete(connection, run_id))
+
+    def test_repository_does_not_finalize_run_with_pending_work(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            self.assertFalse(repository.finalize_run_if_complete(connection, run_id))
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state FROM ingestion_runs WHERE run_id=%s",
+                    (run_id,),
+                ).fetchone()[0],
+                "CREATED",
+            )
+
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
         with self.connection() as connection:
             event_id, promote_attempt = self.make_event(connection)

@@ -160,6 +160,15 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         ):
             self.assertIn(fragment, self.sql)
 
+    def test_run_finalizer_is_database_owned(self) -> None:
+        self.assertIn(
+            "FUNCTION finalize_ingestion_run_if_complete",
+            self.sql,
+        )
+        self.assertIn("FOR UPDATE", self.sql)
+        self.assertIn("expected_outcome := 'SUCCEEDED'", self.sql)
+        self.assertIn("expected_outcome := 'PARTIAL'", self.sql)
+
     def test_keeps_new_ingestion_model_separate_from_legacy_pipeline_telemetry(self) -> None:
         self.assertNotIn("ALTER TABLE pipeline_", self.sql)
         self.assertNotIn("UPDATE pipeline_", self.sql)

@@ -351,6 +351,11 @@ Run outcomes:
 
 A run may terminalize only after every existing work item is TERMINAL.
 
+A reconciliation path must finalize stranded non-terminal runs whose existing work
+items are all TERMINAL. The final outcome is derived from durable work outcomes under
+the same database aggregation contract; an orchestrator restart must not leave a
+completed run permanently RUNNING.
+
 Run outcome aggregation is deterministic after executable work planning:
 
 - a direct CREATED -> TERMINAL orchestration failure before any work item is created may use FAILED;

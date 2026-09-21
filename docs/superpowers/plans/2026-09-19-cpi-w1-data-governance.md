@@ -1213,7 +1213,14 @@ Do not execute promoter logic inside the collector transaction.
 
 - [ ] **Step 3: Add reconciliation command mode**
 
-`--reconcile-promotions` scans committed CPI artifacts and inserts missing deterministic promotion work only. Duplicate execution converges by work key.
+`--reconcile-promotions` scans committed CPI artifacts and inserts missing deterministic
+promotion work. Duplicate execution converges by work key.
+
+The same reconciliation pass calls repository
+`finalize_ingestion_run_if_complete` for non-terminal CPI W1 runs. This closes the
+crash window where all work items are terminal but the orchestrator died before
+terminalizing the parent run. Run outcome remains database-derived from durable work
+history; reconciliation does not invent an outcome.
 
 - [ ] **Step 4: Run and commit**
 
