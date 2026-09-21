@@ -1151,9 +1151,14 @@ class CpiW1Promoter:
         *,
         reason_code: str,
     ) -> None:
-        prefix = PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":"
-        if not claim.work_key.startswith(prefix):
-            raise PromotionInvariantError("claim is not observation-bundle promotion work")
+        allowed_prefixes = (
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
+            PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE.value + ":",
+        )
+        if not claim.work_key.startswith(allowed_prefixes):
+            raise PromotionInvariantError(
+                "claim is not an observation-family promotion work item"
+            )
         self.repository.terminalize_claim(
             connection,
             claim,

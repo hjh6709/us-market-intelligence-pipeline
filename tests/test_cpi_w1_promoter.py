@@ -121,6 +121,12 @@ class CpiW1PromoterTest(unittest.TestCase):
         self.assertIn("verified_observation_count", SOURCE)
         self.assertNotIn("inserted_observation_count", SOURCE)
 
+    def test_correction_observation_work_can_quarantine_without_notice_rollback(self) -> None:
+        body = method_source("quarantine_observation_work")
+        self.assertIn("CPI_OBSERVATION_BUNDLE_PROMOTE", body)
+        self.assertIn("CPI_CORRECTION_OBSERVATION_PROMOTE", body)
+        self.assertIn('outcome="QUARANTINED"', body)
+
     def test_observation_retry_checks_immutable_source_provenance(self) -> None:
         self.assertIn(
             "same observation parse identity changed immutable source provenance",
