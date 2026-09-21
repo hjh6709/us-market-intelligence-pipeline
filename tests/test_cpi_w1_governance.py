@@ -60,6 +60,14 @@ class CpiW1GovernanceTest(unittest.TestCase):
         self.assertNotIn("expires_at", parameters)
         self.assertIn('_POLICY_VERSION = "cpi-governance-v1"', SOURCE)
 
+    def test_event_reenable_uses_same_event_fence_as_promoter(self) -> None:
+        self.assertIn("self.repository.lock_cpi_event", SOURCE)
+        self.assertIn("_select_current_event_in_caller_transaction", SOURCE)
+        self.assertLess(
+            SOURCE.index("self.repository.lock_cpi_event"),
+            SOURCE.index("_select_current_event_in_caller_transaction"),
+        )
+
     def test_event_reenable_recomputes_and_compares_knowledge_fingerprint(self) -> None:
         self.assertIn("knowledge.knowledge_fingerprint", SOURCE)
         self.assertIn("operator-verified knowledge fingerprint is stale", SOURCE)

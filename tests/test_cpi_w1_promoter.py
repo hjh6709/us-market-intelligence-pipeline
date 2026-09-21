@@ -52,6 +52,9 @@ class CpiW1PromoterTest(unittest.TestCase):
         link_subject = SOURCE.index('"EVENT_DISCLOSURE_LINK"')
         self.assertLess(link_select, link_subject)
 
+    def test_canonical_promotion_takes_event_fence(self) -> None:
+        self.assertGreaterEqual(SOURCE.count("lock_cpi_event(connection, event_id)"), 3)
+
     def test_corroborating_representation_has_separate_promotion_family(self) -> None:
         self.assertIn(
             "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
