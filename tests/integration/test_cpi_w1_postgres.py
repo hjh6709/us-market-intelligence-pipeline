@@ -19,6 +19,7 @@ from src.cpi_w1_contracts import (
     ServingControlState,
     TimePrecision,
 )
+from src.cpi_w1_governance import CpiW1Governance, WorkforcePrincipal
 from src.cpi_w1_promoter import (
     CpiW1Promoter,
     PromotionDeterminismError,
