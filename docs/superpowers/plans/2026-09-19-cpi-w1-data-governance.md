@@ -984,7 +984,23 @@ Use `material_fingerprint` from Task 6:
 
 Different provenance rows with the same material remain one resolved semantic material.
 
-- [ ] **Step 5: Implement release projection**
+- [ ] **Step 5: Implement schedule authority-tier selection**
+
+For every visible/valid schedule assertion:
+- join its source artifact;
+- derive surface role from `source_contract_version + artifact_contract_kind`
+  using the versioned CPI source contract;
+- if any eligible AUTHORITATIVE evidence exists, FALLBACK_CORROBORATION does not
+  participate in public applicable-schedule selection;
+- within the active authority tier, first collapse identical semantic material;
+- when differing material has comparable source-effective chronology, apply the
+  later applicable source chronology;
+- when chronology is unknown/date-only and cannot be safely ordered, return
+  schedule conflict rather than using accepted_at or synthetic time;
+- use captured_at only when the source contract explicitly permits capture
+  chronology. CPI schedule HTML and global ICS v1 both set this to false.
+
+- [ ] **Step 6: Implement release projection**
 
 Cover:
 - NOT_YET_DUE;
@@ -997,7 +1013,7 @@ Cover:
 
 A valid envelope + quarantined observations yields DISCLOSED with observation resolution UNRESOLVED.
 
-- [ ] **Step 6: Define the selector knowledge fingerprint**
+- [ ] **Step 7: Define the selector knowledge fingerprint**
 
 Build a canonical selector-owned payload and SHA-256 fingerprint over:
 - selector contract version;
@@ -1009,7 +1025,7 @@ Build a canonical selector-owned payload and SHA-256 fingerprint over:
 Exclude request/as-of time, storage timestamps, duplicate provenance, and all
 serving-control history. Add stability/change-vector tests.
 
-- [ ] **Step 7: Implement serving overlay separately**
+- [ ] **Step 8: Implement serving overlay separately**
 
 Knowledge result is unchanged by serving-control history.
 
@@ -1018,7 +1034,7 @@ Live governed overlay:
 - deny-overrides;
 - WITHHELD removes numeric values from governed consumer model.
 
-- [ ] **Step 8: Run and commit**
+- [ ] **Step 9: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_selector -v

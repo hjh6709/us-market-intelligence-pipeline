@@ -134,6 +134,12 @@ Surface roles are contractual, not inferred from arrival time.
 
 An authoritative CPI-specific schedule assertion is not displaced merely because an ICS artifact is captured later.
 
+Schedule source role is derived from the versioned source contract using the evidence
+artifact's `source_contract_version + artifact_contract_kind`; it is never inferred
+from locator URL, capture order, or accepted_at. CPI W1 does not duplicate this role
+as mutable row state. For the v1 CPI schedule HTML and global ICS surfaces,
+capture-time chronology is explicitly disabled.
+
 When the authoritative schedule surface is unavailable, an approved fallback surface may be used according to the source contract. A mismatch from FALLBACK_CORROBORATION while authoritative evidence is valid is an internal corroboration mismatch, not automatically a public schedule conflict.
 
 Schedule changes are represented by new schedule assertions. No RESCHEDULED source state is invented.

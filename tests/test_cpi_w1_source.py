@@ -45,6 +45,26 @@ class CpiW1SourceClientTest(unittest.TestCase):
         self.assertEqual(schedule.surface_role, "AUTHORITATIVE")
         self.assertEqual(ics.surface_role, "FALLBACK_CORROBORATION")
 
+    def test_schedule_role_is_derived_from_versioned_artifact_contract(self) -> None:
+        self.assertEqual(
+            self.contract.surface_role_for_artifact_kind("CPI_SCHEDULE_HTML"),
+            "AUTHORITATIVE",
+        )
+        self.assertEqual(
+            self.contract.surface_role_for_artifact_kind("BLS_GLOBAL_ICS"),
+            "FALLBACK_CORROBORATION",
+        )
+        self.assertFalse(
+            self.contract.capture_chronology_allowed_for_artifact_kind(
+                "CPI_SCHEDULE_HTML"
+            )
+        )
+        self.assertFalse(
+            self.contract.capture_chronology_allowed_for_artifact_kind(
+                "BLS_GLOBAL_ICS"
+            )
+        )
+
     def test_contract_pins_current_table1_xlsx_as_corroboration_only(self) -> None:
         raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
         locator = raw["locators"]["CURRENT_CPI_TABLE1_XLSX"]

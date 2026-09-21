@@ -22,13 +22,15 @@
       "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
       "surface_role": "AUTHORITATIVE",
       "artifact_contract_kind": "CPI_SCHEDULE_HTML",
-      "schedule_timezone": "America/New_York"
+      "schedule_timezone": "America/New_York",
+      "capture_chronology_allowed": false
     },
     "BLS_GLOBAL_ICS": {
       "url": "https://www.bls.gov/schedule/news_release/bls.ics",
       "surface_role": "FALLBACK_CORROBORATION",
       "artifact_contract_kind": "BLS_GLOBAL_ICS",
-      "schedule_timezone": "America/New_York"
+      "schedule_timezone": "America/New_York",
+      "capture_chronology_allowed": false
     },
     "CURRENT_CPI_RELEASE_HTML": {
       "url": "https://www.bls.gov/news.release/cpi.nr0.htm",

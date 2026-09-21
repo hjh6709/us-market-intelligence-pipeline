@@ -41,6 +41,7 @@ class SourceLocator:
     artifact_contract_kind: str
     surface_role: str
     max_bytes: int
+    capture_chronology_allowed: bool = False
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,9 @@ class BlsCpiSourceContract:
                 artifact_contract_kind=value["artifact_contract_kind"],
                 surface_role=value["surface_role"],
                 max_bytes=int(limits[value["artifact_contract_kind"]]),
+                capture_chronology_allowed=bool(
+                    value.get("capture_chronology_allowed", False)
+                ),
             )
             for key, value in raw["locators"].items()
         }
@@ -97,6 +101,33 @@ class BlsCpiSourceContract:
         for locator in contract.locators.values():
             contract.validate_url(locator.url)
         return contract
+
+    def surface_role_for_artifact_kind(self, artifact_contract_kind: str) -> str:
+        roles = {
+            locator.surface_role
+            for locator in self.locators.values()
+            if locator.artifact_contract_kind == artifact_contract_kind
+        }
+        if len(roles) != 1:
+            raise ValueError(
+                "artifact contract kind must map to exactly one CPI source role"
+            )
+        return next(iter(roles))
+
+    def capture_chronology_allowed_for_artifact_kind(
+        self,
+        artifact_contract_kind: str,
+    ) -> bool:
+        values = {
+            locator.capture_chronology_allowed
+            for locator in self.locators.values()
+            if locator.artifact_contract_kind == artifact_contract_kind
+        }
+        if len(values) != 1:
+            raise ValueError(
+                "artifact contract kind must map to one capture chronology policy"
+            )
+        return next(iter(values))
 
     def validate_url(self, url: str) -> None:
         parsed = urlsplit(url)
