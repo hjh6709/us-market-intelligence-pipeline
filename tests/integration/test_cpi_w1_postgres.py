@@ -3788,6 +3788,141 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             self.assertIsNotNone(promoted["event_id"])
 
+    def test_correction_notice_survives_quarantined_observation_work(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            content_sha256 = digest("correction-quarantine-split")
+            artifact_id = self.make_artifact(
+                connection,
+                f"correction:quarantine:{uuid4()}",
+                artifact_contract_kind="CPI_CORRECTION_HTML",
+                content_type="text/html",
+                content_sha256=content_sha256,
+            )
+            notice = CorrectionNoticeCandidate(
+                artifact_content_sha256=content_sha256,
+                event_type="CPI",
+                reference_month=date(2026, 8, 1),
+                extractor_contract_version="bls-cpi-correction-html-v1",
+            )
+            notice_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            notice_key = promotion_work_key(
+                PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
+                artifact_id,
+                notice.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), notice_run, notice_key, artifact_id),
+            )
+            notice_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE.value + ":"
+                ),
+            )
+            notice_result = promoter.promote_correction_notice(
+                connection,
+                notice_claim,
+                artifact_id=artifact_id,
+                candidate=notice,
+            )
+            self.assertIsNotNone(notice_result.disclosure_artifact_link_id)
+
+            correction = CorrectionObservationBundleCandidate(
+                artifact_content_sha256=content_sha256,
+                reference_month=date(2026, 8, 1),
+                observations=(
+                    ObservationCandidate(
+                        material=ObservationMaterial(
+                            observation_code="CPI_HEADLINE_MOM",
+                            assertion_state=ObservationState.VALUE,
+                            normalized_value=Decimal("0.4"),
+                        ),
+                        source_value_text="0.4",
+                    ),
+                ),
+                extractor_contract_version="bls-cpi-correction-html-v1",
+            )
+            obs_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            obs_work_id = uuid4()
+            obs_key = promotion_work_key(
+                PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
+                artifact_id,
+                correction.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (obs_work_id, obs_run, obs_key, artifact_id),
+            )
+            obs_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE.value + ":"
+                ),
+            )
+            promoter.quarantine_observation_work(
+                connection,
+                obs_claim,
+                reason_code="AMBIGUOUS_CORRECTION_VALUES",
+            )
+
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                      FROM event_disclosure_artifacts
+                     WHERE artifact_id=%s
+                       AND relation_kind='CORRECTION_NOTICE'
+                    """,
+                    (artifact_id,),
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                      FROM official_observation_assertions
+                     WHERE source_artifact_id=%s
+                    """,
+                    (artifact_id,),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT state, outcome, reason_code
+                      FROM ingestion_work_items
+                     WHERE work_item_id=%s
+                    """,
+                    (obs_work_id,),
+                ).fetchone(),
+                ("TERMINAL", "QUARANTINED", "AMBIGUOUS_CORRECTION_VALUES"),
+            )
+            self.assertIsNotNone(promoted["event_id"])
+
     def test_selector_correction_notice_conflicts_with_prior_valid_material(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:
