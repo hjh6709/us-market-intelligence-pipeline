@@ -8,9 +8,18 @@ from uuid import uuid4
 
 import psycopg
 
-from src.cpi_w1_contracts import PromotionFamily
-from src.cpi_w1_promoter import CpiW1Promoter, promotion_work_key
-from src.cpi_w1_release import extract_core4_from_release_html, extract_release_envelope
+from src.cpi_w1_contracts import ObservationMaterial, ObservationState, PromotionFamily
+from src.cpi_w1_promoter import (
+    CpiW1Promoter,
+    PromotionDeterminismError,
+    promotion_work_key,
+)
+from src.cpi_w1_release import (
+    ObservationBundleCandidate,
+    ObservationCandidate,
+    extract_core4_from_release_html,
+    extract_release_envelope,
+)
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
 
 
@@ -1947,6 +1956,347 @@ class CpiW1PostgresTest(unittest.TestCase):
                     artifact_id=artifact_id,
                     candidate=envelope,
                 )
+
+    def test_release_envelope_retry_converges_without_duplicate_evidence(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        candidate = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"release:retry:{uuid4()}")
+            work_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+            )
+            for _ in range(2):
+                run_id = self.insert_run(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_work_items (
+                        work_item_id, run_id, execution_scope, data_domain,
+                        work_key, input_artifact_id
+                    ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                    """,
+                    (uuid4(), run_id, work_key, artifact_id),
+                )
+                claim = repository.claim_work_item(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                    work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
+                )
+                promoter.promote_release_envelope(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=candidate,
+                )
+
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM core_event_occurrences"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM event_disclosure_links"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM event_disclosure_artifacts"
+                ).fetchone()[0],
+                1,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM disclosure_marker_assertions"
+                ).fetchone()[0],
+                1,
+            )
+            orphan_subjects = connection.execute(
+                """
+                SELECT COUNT(*)
+                  FROM interpretation_subjects s
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM event_disclosure_links l
+                     WHERE l.disclosure_link_id=s.subject_id
+                 )
+                   AND NOT EXISTS (
+                    SELECT 1 FROM event_disclosure_artifacts a
+                     WHERE a.disclosure_artifact_link_id=s.subject_id
+                 )
+                   AND NOT EXISTS (
+                    SELECT 1 FROM disclosure_marker_assertions m
+                     WHERE m.marker_assertion_id=s.subject_id
+                 )
+                   AND NOT EXISTS (
+                    SELECT 1 FROM official_observation_assertions o
+                     WHERE o.assertion_id=s.subject_id
+                 )
+                   AND NOT EXISTS (
+                    SELECT 1 FROM event_schedule_assertions q
+                     WHERE q.schedule_assertion_id=s.subject_id
+                 )
+                """
+            ).fetchone()[0]
+            self.assertEqual(orphan_subjects, 0)
+
+    def test_same_observation_parse_identity_with_different_material_fails(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        bundle = extract_core4_from_release_html(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"release:determinism:{uuid4()}")
+
+            envelope_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            envelope_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), envelope_run, envelope_key, artifact_id),
+            )
+            envelope_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
+            )
+            promoter.promote_release_envelope(
+                connection,
+                envelope_claim,
+                artifact_id=artifact_id,
+                candidate=envelope,
+            )
+
+            def promote_bundle(candidate):
+                run_id = self.insert_run(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                )
+                key = promotion_work_key(
+                    PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                    artifact_id,
+                    candidate.extractor_contract_version,
+                )
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_work_items (
+                        work_item_id, run_id, execution_scope, data_domain,
+                        work_key, input_artifact_id
+                    ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                    """,
+                    (uuid4(), run_id, key, artifact_id),
+                )
+                claim = repository.claim_work_item(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                    work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
+                )
+                return claim, promoter.promote_observation_bundle(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=candidate,
+                )
+
+            promote_bundle(bundle)
+            changed = []
+            for item in bundle.observations:
+                if item.observation_code == "CPI_HEADLINE_MOM":
+                    changed.append(
+                        ObservationCandidate(
+                            material=ObservationMaterial(
+                                observation_code=item.observation_code,
+                                assertion_state=ObservationState.VALUE,
+                                normalized_value=Decimal("9.9"),
+                            ),
+                            source_value_text="9.9",
+                        )
+                    )
+                else:
+                    changed.append(item)
+            conflicting = ObservationBundleCandidate(
+                reference_month=bundle.reference_month,
+                observations=tuple(changed),
+                extractor_contract_version=bundle.extractor_contract_version,
+            )
+
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                artifact_id,
+                conflicting.extractor_contract_version,
+            )
+            work_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (work_id, run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
+            )
+            with self.assertRaises(PromotionDeterminismError):
+                promoter.promote_observation_bundle(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=conflicting,
+                )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM official_observation_assertions"
+                ).fetchone()[0],
+                4,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state, outcome FROM ingestion_work_items WHERE work_item_id=%s",
+                    (work_id,),
+                ).fetchone(),
+                ("CLAIMED", None),
+            )
+
+    def test_core4_db_failure_rolls_back_all_partial_assertions(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        bundle = extract_core4_from_release_html(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"release:rollback:{uuid4()}")
+            envelope_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            envelope_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), envelope_run, envelope_key, artifact_id),
+            )
+            envelope_claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
+            )
+            promoter.promote_release_envelope(
+                connection,
+                envelope_claim,
+                artifact_id=artifact_id,
+                candidate=envelope,
+            )
+
+            invalid_items = list(bundle.observations)
+            last = invalid_items[-1]
+            invalid_items[-1] = ObservationCandidate(
+                material=ObservationMaterial(
+                    observation_code=last.observation_code,
+                    assertion_state=ObservationState.EXPLICIT_UNAVAILABLE,
+                    normalized_value=None,
+                ),
+                source_value_text="-",
+                source_reason_text=None,
+            )
+            invalid_bundle = ObservationBundleCandidate(
+                reference_month=bundle.reference_month,
+                observations=tuple(invalid_items),
+                extractor_contract_version=bundle.extractor_contract_version,
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                artifact_id,
+                invalid_bundle.extractor_contract_version,
+            )
+            work_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (work_id, run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                promoter.promote_observation_bundle(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=invalid_bundle,
+                )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM official_observation_assertions"
+                ).fetchone()[0],
+                0,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state, outcome FROM ingestion_work_items WHERE work_item_id=%s",
+                    (work_id,),
+                ).fetchone(),
+                ("CLAIMED", None),
+            )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
         with self.connection() as connection:
