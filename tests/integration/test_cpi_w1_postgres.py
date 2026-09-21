@@ -838,10 +838,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 disclosure_link_id,
                 "EVENT_DISCLOSURE_LINK",
             )
-            transaction_time = connection.execute(
-                "SELECT CURRENT_TIMESTAMP"
-            ).fetchone()[0]
-            connection.execute(
+            stored, statement_transaction_time = connection.execute(
                 """
                 INSERT INTO event_disclosure_links (
                     disclosure_link_id, event_occurrence_id, disclosure_id,
@@ -850,6 +847,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                     %s, %s, %s, 'EVENT_RELEASE', %s,
                     '2000-01-01 00:00:00+00'
                 )
+                RETURNING accepted_at, CURRENT_TIMESTAMP
                 """,
                 (
                     disclosure_link_id,
@@ -857,16 +855,9 @@ class CpiW1PostgresTest(unittest.TestCase):
                     disclosure_id,
                     promote_attempt,
                 ),
-            )
-            stored = connection.execute(
-                """
-                SELECT accepted_at
-                  FROM event_disclosure_links
-                 WHERE disclosure_link_id=%s
-                """,
-                (disclosure_link_id,),
-            ).fetchone()[0]
-        self.assertEqual(stored, transaction_time)
+            ).fetchone()
+        self.assertEqual(stored, statement_transaction_time)
+        self.assertNotEqual(stored.year, 2000)
 
     def test_official_observation_decimal_round_trips_exactly(self) -> None:
         with self.connection() as connection:
@@ -1089,6 +1080,52 @@ class CpiW1PostgresTest(unittest.TestCase):
                         'worker:operator', 'CASE-1', NULL, NULL
                     )
                     """
+                )
+
+    def test_activation_actor_whitespace_is_rejected(self) -> None:
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = self.create_interpretation_request(connection, subject_id)
+            self.approve_interpretation_request(connection, request_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "SELECT apply_interpretation_decision(%s, %s)",
+                    (request_id, "worker:activator "),
+                )
+
+    def test_serving_control_actor_whitespace_is_rejected(self) -> None:
+        with self.connection() as connection:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    SELECT apply_economic_serving_control(
+                        'CPI_DOMAIN', NULL, 0, 'WITHHELD', 'TEST',
+                        'worker:operator ', NULL, NULL, NULL
+                    )
+                    """
+                )
+
+    def test_event_reenable_rejects_malformed_knowledge_fingerprint(self) -> None:
+        with self.connection() as connection:
+            event_id, _ = self.make_event(connection, "2026-05-01")
+            connection.execute(
+                """
+                SELECT apply_economic_serving_control(
+                    'EVENT_OCCURRENCE', %s, 0, 'WITHHELD', 'TEST',
+                    'worker:operator', NULL, NULL, NULL
+                )
+                """,
+                (event_id,),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    SELECT apply_economic_serving_control(
+                        'EVENT_OCCURRENCE', %s, 1, 'ENABLED', 'TEST',
+                        'worker:operator', 'CASE-3', 'not-a-sha256', NULL
+                    )
+                    """,
+                    (event_id,),
                 )
 
     def test_interpretation_self_approval_is_structurally_rejected(self) -> None:

@@ -100,7 +100,10 @@ CREATE TABLE IF NOT EXISTS economic_serving_control_decisions (
         BTRIM(actor_subject) <> '' AND actor_subject = BTRIM(actor_subject)
     ),
     case_ref TEXT,
-    verified_knowledge_fingerprint TEXT,
+    verified_knowledge_fingerprint TEXT CHECK (
+        verified_knowledge_fingerprint IS NULL
+        OR verified_knowledge_fingerprint ~ '^[0-9a-f]{64}$'
+    ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT economic_serving_control_scope_valid CHECK (
         (scope_kind = 'CPI_DOMAIN' AND event_occurrence_id IS NULL)
@@ -128,7 +131,9 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
             'ECONOMIC_SERVING_CONTROL_APPLIED'
         )
     ),
-    actor_subject TEXT NOT NULL CHECK (BTRIM(actor_subject) <> ''),
+    actor_subject TEXT NOT NULL CHECK (
+        BTRIM(actor_subject) <> '' AND actor_subject = BTRIM(actor_subject)
+    ),
     interpretation_decision_id UUID
         REFERENCES interpretation_decisions(interpretation_decision_id),
     control_decision_id UUID
@@ -171,6 +176,10 @@ DECLARE
 BEGIN
     IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = '' THEN
         RAISE EXCEPTION 'activation actor is required'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_actor_subject <> BTRIM(p_actor_subject) THEN
+        RAISE EXCEPTION 'activation actor must be canonical'
             USING ERRCODE = '23514';
     END IF;
 
@@ -333,6 +342,10 @@ BEGIN
         RAISE EXCEPTION 'serving-control actor is required'
             USING ERRCODE = '23514';
     END IF;
+    IF p_actor_subject <> BTRIM(p_actor_subject) THEN
+        RAISE EXCEPTION 'serving-control actor must be canonical'
+            USING ERRCODE = '23514';
+    END IF;
 
     IF p_scope_kind = 'EVENT_OCCURRENCE' THEN
         PERFORM 1
@@ -387,9 +400,9 @@ BEGIN
         IF p_scope_kind = 'EVENT_OCCURRENCE'
            AND (
                p_verified_knowledge_fingerprint IS NULL
-               OR BTRIM(p_verified_knowledge_fingerprint) = ''
+               OR p_verified_knowledge_fingerprint !~ '^[0-9a-f]{64}$'
            ) THEN
-            RAISE EXCEPTION 'event re-enable requires verified knowledge fingerprint'
+            RAISE EXCEPTION 'event re-enable requires lowercase SHA-256 knowledge fingerprint'
                 USING ERRCODE = '23514';
         END IF;
         IF p_scope_kind = 'CPI_DOMAIN'

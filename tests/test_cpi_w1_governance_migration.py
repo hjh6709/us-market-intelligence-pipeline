@@ -80,8 +80,23 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
             self.assertIn(f"ON {table}", self.sql)
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
 
+    def test_actor_identity_and_fingerprint_shape_are_structural(self) -> None:
+        self.assertIn("activation actor must be canonical", self.sql)
+        self.assertIn("serving-control actor must be canonical", self.sql)
+        self.assertIn(
+            "verified_knowledge_fingerprint ~ '^[0-9a-f]{64}$'",
+            self.sql,
+        )
+        self.assertIn(
+            "event re-enable requires lowercase SHA-256 knowledge fingerprint",
+            self.sql,
+        )
+
     def test_reenable_guards_are_not_optional(self) -> None:
-        self.assertIn("event re-enable requires verified knowledge fingerprint", self.sql)
+        self.assertIn(
+            "event re-enable requires lowercase SHA-256 knowledge fingerprint",
+            self.sql,
+        )
         self.assertIn("domain re-enable requires verification reference", self.sql)
 
 
