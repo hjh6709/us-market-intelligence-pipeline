@@ -1134,6 +1134,14 @@ No majority vote and no latest-wins rule exists.
 
 ### 25.5 Release selection
 
+Each selector invocation owns one PostgreSQL `REPEATABLE READ, READ ONLY` snapshot.
+All evidence, governance decisions, source-role inputs, and the projection evaluation
+clock used for one result are read within that snapshot. A selector must not silently
+join statement-level READ COMMITTED snapshots because concurrent promotion or
+invalidation could otherwise produce a knowledge result that never existed at one
+database point in time. The selector rejects reuse inside an already-active caller
+transaction in W1 rather than inheriting unknown isolation semantics.
+
 Selector projection evaluation time is distinct from evidence time and request
 observability metadata.
 

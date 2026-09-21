@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any, Iterable
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from psycopg.pq import TransactionStatus
 
 from src.cpi_w1_contracts import (
     KnowledgeMode,
@@ -118,6 +121,21 @@ class _ScheduleSelection:
 def _require_aware(value: datetime, label: str) -> None:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{label} must be timezone-aware")
+
+
+@contextmanager
+def _consistent_read_transaction(connection: Any):
+    info = getattr(connection, "info", None)
+    transaction_status = getattr(info, "transaction_status", None)
+    if transaction_status is not None and transaction_status != TransactionStatus.IDLE:
+        raise RuntimeError(
+            "CPI selector requires an idle connection so it can own a consistent read snapshot"
+        )
+    with connection.transaction():
+        connection.execute(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+        )
+        yield
 
 
 def _default_source_contract() -> BlsCpiSourceContract:
@@ -673,7 +691,7 @@ class CpiW1Selector:
                 "OFFICIAL_SOURCE_RECONSTRUCTION does not accept caller as_of"
             )
 
-        with connection.transaction():
+        with _consistent_read_transaction(connection):
             row = connection.execute(
                 """
                 SELECT event_occurrence_id, reference_month
@@ -771,7 +789,7 @@ class CpiW1Selector:
         connection: Any,
         knowledge: CpiEventKnowledge,
     ) -> GovernedCpiEvent:
-        with connection.transaction():
+        with _consistent_read_transaction(connection):
             decision_time = connection.execute(
                 "SELECT CURRENT_TIMESTAMP"
             ).fetchone()[0]

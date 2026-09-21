@@ -964,6 +964,10 @@ Create table-driven tests for every vector in spec section 31.3.
 
 - [ ] **Step 2: Implement knowledge-mode filtering and projection evaluation clock**
 
+Run each selector/serving-overlay read in a selector-owned PostgreSQL
+`REPEATABLE READ, READ ONLY` transaction. Reject invocation on an already-active
+caller transaction rather than mixing unknown statement snapshots.
+
 For `SYSTEM_KNOWN_PIT(T)`, filter every governable evidence type by its own `accepted_at <= T`, then apply only interpretation decisions with `applied_at <= T`.
 Use T as the release-projection evaluation instant.
 

@@ -3063,6 +3063,20 @@ class CpiW1PostgresTest(unittest.TestCase):
                 "CREATED",
             )
 
+    def test_selector_uses_repeatable_read_read_only_snapshot(self) -> None:
+        from src.cpi_w1_selector import _consistent_read_transaction
+
+        with self.connection() as connection:
+            with _consistent_read_transaction(connection):
+                isolation = connection.execute(
+                    "SHOW transaction_isolation"
+                ).fetchone()[0]
+                read_only = connection.execute(
+                    "SHOW transaction_read_only"
+                ).fetchone()[0]
+            self.assertEqual(isolation, "repeatable read")
+            self.assertEqual(read_only, "on")
+
     def test_selector_current_and_pit_respect_artifact_relation_invalidation(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:

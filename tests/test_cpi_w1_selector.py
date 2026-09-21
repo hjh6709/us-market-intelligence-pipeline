@@ -1,6 +1,7 @@
 import unittest
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
 from src.cpi_w1_contracts import (
@@ -272,6 +273,15 @@ class CpiW1SelectorTest(unittest.TestCase):
             (b, duplicate_provenance),
         )
         self.assertEqual(first, second)
+
+    def test_selector_requires_owned_repeatable_read_snapshot(self) -> None:
+        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+            source,
+        )
+        self.assertIn("TransactionStatus.IDLE", source)
+        self.assertIn("with _consistent_read_transaction(connection):", source)
 
     def test_live_serving_overlay_has_no_caller_selected_decision_time(self) -> None:
         import inspect
