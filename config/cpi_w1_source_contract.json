@@ -16,7 +16,8 @@
     "BLS_GLOBAL_ICS": 2097152,
     "CPI_RELEASE_HTML": 8388608,
     "CPI_TABLE1_XLSX": 20971520,
-    "CPI_CORRECTION_HTML": 8388608
+    "CPI_CORRECTION_HTML": 8388608,
+    "BLS_REVISED_RELEASE_DATES_HTML": 5242880
   },
   "locators": {
     "CPI_SCHEDULE_HTML": {
@@ -45,6 +46,15 @@
       "mutable_current_locator": true,
       "requires_reference_month_validation": true,
       "historical_as_released_authority": false
+    },
+    "BLS_REVISED_RELEASE_DATES_HTML": {
+      "url": "https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm",
+      "surface_role": "AUTHORITATIVE",
+      "artifact_contract_kind": "BLS_REVISED_RELEASE_DATES_HTML",
+      "capture_chronology_allowed": false,
+      "requires_reference_month_validation": true,
+      "requires_program_scope_validation": true,
+      "explicit_cancellation_evidence": true
     }
   },
   "legal_operational_notes": {

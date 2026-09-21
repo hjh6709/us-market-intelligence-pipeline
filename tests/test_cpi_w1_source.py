@@ -65,6 +65,24 @@ class CpiW1SourceClientTest(unittest.TestCase):
             )
         )
 
+    def test_revised_release_dates_are_explicit_authoritative_cancellation_evidence(self) -> None:
+        locator = self.contract.locators["BLS_REVISED_RELEASE_DATES_HTML"]
+        self.assertEqual(locator.surface_role, "AUTHORITATIVE")
+        self.assertEqual(
+            locator.artifact_contract_kind,
+            "BLS_REVISED_RELEASE_DATES_HTML",
+        )
+        self.assertTrue(locator.requires_reference_month_validation)
+        self.assertTrue(locator.requires_program_scope_validation)
+        self.assertTrue(locator.explicit_cancellation_evidence)
+        self.assertFalse(locator.capture_chronology_allowed)
+        self.assertEqual(
+            self.contract.surface_role_for_artifact_kind(
+                "BLS_REVISED_RELEASE_DATES_HTML"
+            ),
+            "AUTHORITATIVE",
+        )
+
     def test_contract_pins_current_table1_xlsx_as_corroboration_only(self) -> None:
         raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
         locator = raw["locators"]["CURRENT_CPI_TABLE1_XLSX"]

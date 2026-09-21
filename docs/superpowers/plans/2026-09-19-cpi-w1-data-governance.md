@@ -1215,7 +1215,12 @@ mutation boundary without inventing a source URL or parser.
 ### Task 13: Build Corpus Manifest and Differential Replay Tool
 
 **Mandatory exceptional corpus coverage:** include the October 2025 CPI
-nonpublication case using explicit official BLS archive/exception evidence. Prove
+nonpublication case using explicit official BLS archive/exception evidence.
+
+Use the frozen source-contract locator `BLS_REVISED_RELEASE_DATES_HTML` for the
+official 2025 lapse revised-release-dates page. Corpus validation must require
+program-scoped CPI + reference-month-scoped October 2025 + explicit Canceled evidence;
+generic page availability, HTTP status, or missing archive release is insufficient. Prove
 that schedule-row absence, HTTP 404, and stale current-release content cannot produce
 CANCELED/NO_RELEASE_EXPECTED, while explicit scoped BLS nonpublication evidence can
 support the governed nonpublication path.

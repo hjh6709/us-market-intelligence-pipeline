@@ -42,6 +42,9 @@ class SourceLocator:
     surface_role: str
     max_bytes: int
     capture_chronology_allowed: bool = False
+    requires_reference_month_validation: bool = False
+    requires_program_scope_validation: bool = False
+    explicit_cancellation_evidence: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,6 +97,15 @@ class BlsCpiSourceContract:
                 max_bytes=int(limits[value["artifact_contract_kind"]]),
                 capture_chronology_allowed=bool(
                     value.get("capture_chronology_allowed", False)
+                ),
+                requires_reference_month_validation=bool(
+                    value.get("requires_reference_month_validation", False)
+                ),
+                requires_program_scope_validation=bool(
+                    value.get("requires_program_scope_validation", False)
+                ),
+                explicit_cancellation_evidence=bool(
+                    value.get("explicit_cancellation_evidence", False)
                 ),
             )
             for key, value in raw["locators"].items()
