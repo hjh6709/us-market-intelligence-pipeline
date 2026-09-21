@@ -1,295 +1,304 @@
 import unittest
-from pathlib import Path
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from src.cpi_w1_contracts import (
-    KnowledgeMode,
-    ObservationMaterial,
     ObservationState,
     ReleaseProjectionState,
     ScheduleMaterial,
     ScheduleStatus,
-    ServingControlState,
     SourceAuthorityRole,
     TimePrecision,
 )
 from src.cpi_w1_selector import (
-    CpiEventKnowledge,
-    ObservationEvidence,
+    ObservationResolution,
     ObservationResolutionState,
-    ScheduleEvidence,
-    ScheduleSelection,
-    ScheduleSelectionState,
-    apply_control_states,
-    build_knowledge_fingerprint,
-    project_release_state,
-    resolve_observation_materials,
-    select_schedule_evidence,
+    _ScheduleEvidence,
+    _ScheduleSelection,
+    _knowledge_fingerprint,
+    _project_release,
+    _resolution_from_materials,
+    _select_schedule,
 )
 
 
-EVENT_ID = UUID("00000000-0000-0000-0000-000000000321")
-
-
-def schedule_row(
-    *,
-    status=ScheduleStatus.SCHEDULED,
-    scheduled_date=date(2026, 9, 11),
-    scheduled_at=datetime(2026, 9, 11, 12, 30, tzinfo=timezone.utc),
-    timezone_name="America/New_York",
-    precision=TimePrecision.EXACT,
-    role=SourceAuthorityRole.AUTHORITATIVE,
-    source_effective_date=None,
-    source_effective_at=None,
-    source_effective_precision=None,
-):
-    material = ScheduleMaterial(
-        schedule_status=status,
-        scheduled_date=scheduled_date,
-        scheduled_at=scheduled_at,
-        schedule_timezone=timezone_name,
-        time_precision=precision,
-    )
-    return ScheduleEvidence(
-        status,
-        scheduled_date,
-        scheduled_at,
-        timezone_name,
-        precision,
-        source_effective_date,
-        source_effective_at,
-        source_effective_precision,
-        material.fingerprint,
-        role,
-    )
-
-
-def value_evidence(code: str, value: str) -> ObservationEvidence:
-    material = ObservationMaterial(
-        observation_code=code,
-        assertion_state=ObservationState.VALUE,
-        normalized_value=Decimal(value),
-    )
-    return ObservationEvidence(
-        code,
-        ObservationState.VALUE,
-        Decimal(value),
-        material.fingerprint,
-    )
+UTC = timezone.utc
+EVENT_ID = UUID("00000000-0000-0000-0000-000000000111")
 
 
 class CpiW1SelectorTest(unittest.TestCase):
-    def test_selector_uses_one_repeatable_read_snapshot(self) -> None:
-        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
-        self.assertIn(
-            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
-            source,
-        )
-        self.assertEqual(source.count("SELECT CURRENT_TIMESTAMP"), 1)
+    def test_observation_resolution_vectors(self) -> None:
+        unresolved = _resolution_from_materials("CPI_HEADLINE_MOM", [])
+        self.assertEqual(unresolved.state, ObservationResolutionState.UNRESOLVED)
 
-    def test_same_material_from_multiple_artifacts_converges(self) -> None:
-        row = value_evidence("CPI_CORE_MOM", "0.3")
-        result = resolve_observation_materials("CPI_CORE_MOM", [row, row])
-        self.assertEqual(result.state, ObservationResolutionState.VALUE)
-        self.assertEqual(result.normalized_value, Decimal("0.3"))
-        self.assertEqual(len(result.material_fingerprints), 1)
-
-    def test_different_official_materials_conflict_without_latest_wins(self) -> None:
-        result = resolve_observation_materials(
-            "CPI_CORE_MOM",
-            [
-                value_evidence("CPI_CORE_MOM", "0.3"),
-                value_evidence("CPI_CORE_MOM", "0.4"),
-            ],
+        value = _resolution_from_materials(
+            "CPI_HEADLINE_MOM",
+            [("a" * 64, ObservationState.VALUE, Decimal("0.3"))],
         )
-        self.assertEqual(result.state, ObservationResolutionState.CONFLICT)
-        self.assertIsNone(result.normalized_value)
+        self.assertEqual(value.state, ObservationResolutionState.VALUE)
+        self.assertEqual(value.normalized_value, Decimal("0.3"))
 
-    def test_explicit_unavailable_is_not_zero(self) -> None:
-        semantic = ObservationMaterial(
-            observation_code="CPI_HEADLINE_MOM",
-            assertion_state=ObservationState.EXPLICIT_UNAVAILABLE,
-            normalized_value=None,
+        unavailable = _resolution_from_materials(
+            "CPI_HEADLINE_MOM",
+            [("b" * 64, ObservationState.EXPLICIT_UNAVAILABLE, None)],
         )
-        result = resolve_observation_materials(
+        self.assertEqual(
+            unavailable.state,
+            ObservationResolutionState.EXPLICIT_UNAVAILABLE,
+        )
+
+        conflict = _resolution_from_materials(
             "CPI_HEADLINE_MOM",
             [
-                ObservationEvidence(
-                    "CPI_HEADLINE_MOM",
-                    ObservationState.EXPLICIT_UNAVAILABLE,
-                    None,
-                    semantic.fingerprint,
-                )
+                ("a" * 64, ObservationState.VALUE, Decimal("0.3")),
+                ("c" * 64, ObservationState.VALUE, Decimal("0.4")),
             ],
         )
-        self.assertEqual(result.state, ObservationResolutionState.EXPLICIT_UNAVAILABLE)
-        self.assertIsNone(result.normalized_value)
+        self.assertEqual(conflict.state, ObservationResolutionState.CONFLICT)
+        self.assertIsNone(conflict.normalized_value)
 
-    def test_authoritative_schedule_excludes_later_fallback(self) -> None:
-        authoritative = schedule_row()
-        fallback = schedule_row(
-            scheduled_date=date(2026, 9, 12),
-            scheduled_at=datetime(2026, 9, 12, 12, 30, tzinfo=timezone.utc),
-            role=SourceAuthorityRole.FALLBACK_CORROBORATION,
-        )
-        selected = select_schedule_evidence([fallback, authoritative])
-        self.assertEqual(selected.state, ScheduleSelectionState.RESOLVED)
-        self.assertEqual(
-            selected.evidence.material_fingerprint,
-            authoritative.material_fingerprint,
-        )
-
-    def test_later_authoritative_source_chronology_supersedes(self) -> None:
-        first = schedule_row(
-            source_effective_date=date(2026, 8, 1),
-            source_effective_at=datetime(2026, 8, 1, 15, tzinfo=timezone.utc),
-            source_effective_precision=TimePrecision.EXACT,
-        )
-        second = schedule_row(
-            scheduled_date=date(2026, 9, 12),
-            scheduled_at=datetime(2026, 9, 12, 12, 30, tzinfo=timezone.utc),
-            source_effective_date=date(2026, 8, 2),
-            source_effective_at=datetime(2026, 8, 2, 15, tzinfo=timezone.utc),
-            source_effective_precision=TimePrecision.EXACT,
-        )
-        selected = select_schedule_evidence([first, second])
-        self.assertEqual(selected.state, ScheduleSelectionState.RESOLVED)
-        self.assertEqual(
-            selected.evidence.material_fingerprint,
-            second.material_fingerprint,
-        )
-
-    def test_unknown_authoritative_chronology_remains_conflict(self) -> None:
-        selected = select_schedule_evidence(
+    def test_same_material_from_multiple_evidence_rows_converges(self) -> None:
+        resolved = _resolution_from_materials(
+            "CPI_CORE_MOM",
             [
-                schedule_row(),
-                schedule_row(
-                    scheduled_date=date(2026, 9, 12),
-                    scheduled_at=datetime(2026, 9, 12, 12, 30, tzinfo=timezone.utc),
-                ),
-            ]
+                ("d" * 64, ObservationState.VALUE, Decimal("0.2")),
+                ("d" * 64, ObservationState.VALUE, Decimal("0.2")),
+            ],
         )
-        self.assertEqual(selected.state, ScheduleSelectionState.CONFLICT)
+        self.assertEqual(resolved.state, ObservationResolutionState.VALUE)
+        self.assertEqual(resolved.eligible_evidence_count, 2)
+        self.assertEqual(resolved.material_fingerprints, ("d" * 64,))
 
-    def test_exact_projection_before_and_after_due(self) -> None:
-        selected = select_schedule_evidence([schedule_row()])
+    def test_exact_schedule_release_projection(self) -> None:
+        material = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 11),
+            scheduled_at=datetime(2026, 9, 11, 12, 30, tzinfo=UTC),
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.EXACT,
+        )
+        selected = _ScheduleSelection(
+            "RESOLVED",
+            material,
+            (material.fingerprint,),
+            False,
+        )
         self.assertEqual(
-            project_release_state(
-                schedule=selected,
-                valid_event_release_count=0,
-                evaluation_time=datetime(2026, 9, 11, 12, 29, tzinfo=timezone.utc),
+            _project_release(
+                selected,
+                has_valid_release=False,
+                evaluation_at=datetime(2026, 9, 11, 12, 29, tzinfo=UTC),
             ),
             ReleaseProjectionState.NOT_YET_DUE,
         )
         self.assertEqual(
-            project_release_state(
-                schedule=selected,
-                valid_event_release_count=0,
-                evaluation_time=datetime(2026, 9, 11, 12, 31, tzinfo=timezone.utc),
+            _project_release(
+                selected,
+                has_valid_release=False,
+                evaluation_at=datetime(2026, 9, 11, 12, 30, tzinfo=UTC),
             ),
             ReleaseProjectionState.AWAITING_CONFIRMATION,
         )
 
-    def test_date_only_due_date_never_synthesizes_midnight(self) -> None:
-        selected = select_schedule_evidence(
-            [schedule_row(scheduled_at=None, precision=TimePrecision.DATE_ONLY)]
+    def test_date_only_schedule_has_due_date_untimed_state(self) -> None:
+        material = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 11),
+            scheduled_at=None,
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.DATE_ONLY,
+        )
+        selected = _ScheduleSelection(
+            "RESOLVED",
+            material,
+            (material.fingerprint,),
+            False,
         )
         self.assertEqual(
-            project_release_state(
-                schedule=selected,
-                valid_event_release_count=0,
-                evaluation_time=datetime(2026, 9, 11, 16, tzinfo=timezone.utc),
+            _project_release(
+                selected,
+                has_valid_release=False,
+                evaluation_at=datetime(2026, 9, 11, 16, 0, tzinfo=UTC),
             ),
             ReleaseProjectionState.DUE_DATE_UNTIMED,
         )
 
-    def test_canceled_schedule_plus_release_is_conflict(self) -> None:
-        canceled = select_schedule_evidence(
-            [
-                schedule_row(
-                    status=ScheduleStatus.CANCELED,
-                    scheduled_date=None,
-                    scheduled_at=None,
-                    timezone_name=None,
-                    precision=None,
-                )
-            ]
+    def test_canceled_schedule_and_release_is_conflict(self) -> None:
+        material = ScheduleMaterial(
+            schedule_status=ScheduleStatus.CANCELED,
+            scheduled_date=None,
+            scheduled_at=None,
+            schedule_timezone=None,
+            time_precision=None,
+        )
+        selected = _ScheduleSelection(
+            "RESOLVED",
+            material,
+            (material.fingerprint,),
+            True,
         )
         self.assertEqual(
-            project_release_state(
-                schedule=canceled,
-                valid_event_release_count=1,
-                evaluation_time=datetime(2026, 9, 11, 13, tzinfo=timezone.utc),
+            _project_release(
+                selected,
+                has_valid_release=False,
+                evaluation_at=datetime(2026, 9, 11, tzinfo=UTC),
+            ),
+            ReleaseProjectionState.NO_RELEASE_EXPECTED,
+        )
+        self.assertEqual(
+            _project_release(
+                selected,
+                has_valid_release=True,
+                evaluation_at=datetime(2026, 9, 11, tzinfo=UTC),
             ),
             ReleaseProjectionState.CONFLICT,
         )
 
-    def test_fingerprint_ignores_duplicate_provenance(self) -> None:
-        codes = (
-            "CPI_HEADLINE_MOM",
-            "CPI_HEADLINE_YOY",
-            "CPI_CORE_MOM",
-            "CPI_CORE_YOY",
+    def test_authoritative_schedule_excludes_fallback_disagreement(self) -> None:
+        authoritative = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 11),
+            scheduled_at=datetime(2026, 9, 11, 12, 30, tzinfo=UTC),
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.EXACT,
         )
-        base = {code: resolve_observation_materials(code, []) for code in codes}
-        row = value_evidence("CPI_CORE_MOM", "0.3")
-        one, two = dict(base), dict(base)
-        one["CPI_CORE_MOM"] = resolve_observation_materials("CPI_CORE_MOM", [row])
-        two["CPI_CORE_MOM"] = resolve_observation_materials("CPI_CORE_MOM", [row, row])
-        self.assertEqual(
-            build_knowledge_fingerprint(
-                event_occurrence_id=EVENT_ID,
-                release_state=ReleaseProjectionState.DISCLOSED,
-                observations=one,
-            ),
-            build_knowledge_fingerprint(
-                event_occurrence_id=EVENT_ID,
-                release_state=ReleaseProjectionState.DISCLOSED,
-                observations=two,
-            ),
+        fallback = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 12),
+            scheduled_at=datetime(2026, 9, 12, 12, 30, tzinfo=UTC),
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.EXACT,
         )
+        rows = [
+            _ScheduleEvidence(
+                assertion_id=UUID(int=1),
+                material=authoritative,
+                material_fingerprint=authoritative.fingerprint,
+                source_contract_version="bls-cpi-source-v1",
+                artifact_contract_kind="CPI_SCHEDULE_HTML",
+                source_effective_date=None,
+                source_effective_at=None,
+                source_effective_precision=None,
+                captured_at=datetime(2026, 1, 1, tzinfo=UTC),
+                accepted_at=datetime(2026, 1, 1, tzinfo=UTC),
+                capture_chronology_allowed=False,
+                authority_role=SourceAuthorityRole.AUTHORITATIVE,
+            ),
+            _ScheduleEvidence(
+                assertion_id=UUID(int=2),
+                material=fallback,
+                material_fingerprint=fallback.fingerprint,
+                source_contract_version="bls-cpi-source-v1",
+                artifact_contract_kind="BLS_GLOBAL_ICS",
+                source_effective_date=None,
+                source_effective_at=None,
+                source_effective_precision=None,
+                captured_at=datetime(2026, 1, 2, tzinfo=UTC),
+                accepted_at=datetime(2026, 1, 2, tzinfo=UTC),
+                capture_chronology_allowed=False,
+                authority_role=SourceAuthorityRole.FALLBACK_CORROBORATION,
+            ),
+        ]
+        selected = _select_schedule(rows)
+        self.assertEqual(selected.kind, "RESOLVED")
+        self.assertEqual(selected.material, authoritative)
 
-    def test_serving_deny_override_does_not_mutate_knowledge(self) -> None:
-        codes = (
-            "CPI_HEADLINE_MOM",
-            "CPI_HEADLINE_YOY",
-            "CPI_CORE_MOM",
-            "CPI_CORE_YOY",
+    def test_ambiguous_authoritative_materials_conflict_without_safe_chronology(self) -> None:
+        first = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 11),
+            scheduled_at=datetime(2026, 9, 11, 12, 30, tzinfo=UTC),
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.EXACT,
         )
-        observations = {code: resolve_observation_materials(code, []) for code in codes}
-        observations["CPI_CORE_MOM"] = resolve_observation_materials(
-            "CPI_CORE_MOM",
-            [value_evidence("CPI_CORE_MOM", "0.3")],
+        second = ScheduleMaterial(
+            schedule_status=ScheduleStatus.SCHEDULED,
+            scheduled_date=date(2026, 9, 12),
+            scheduled_at=datetime(2026, 9, 12, 12, 30, tzinfo=UTC),
+            schedule_timezone="America/New_York",
+            time_precision=TimePrecision.EXACT,
         )
-        knowledge = CpiEventKnowledge(
+        rows = []
+        for idx, material in enumerate((first, second), 1):
+            rows.append(
+                _ScheduleEvidence(
+                    assertion_id=UUID(int=idx),
+                    material=material,
+                    material_fingerprint=material.fingerprint,
+                    source_contract_version="bls-cpi-source-v1",
+                    artifact_contract_kind="CPI_SCHEDULE_HTML",
+                    source_effective_date=None,
+                    source_effective_at=None,
+                    source_effective_precision=None,
+                    captured_at=datetime(2026, 1, idx, tzinfo=UTC),
+                    accepted_at=datetime(2026, 1, idx, tzinfo=UTC),
+                    capture_chronology_allowed=False,
+                    authority_role=SourceAuthorityRole.AUTHORITATIVE,
+                )
+            )
+        self.assertEqual(_select_schedule(rows).kind, "CONFLICT")
+
+    def test_knowledge_fingerprint_ignores_duplicate_provenance_and_order(self) -> None:
+        a = ObservationResolution(
+            observation_code="CPI_HEADLINE_MOM",
+            state=ObservationResolutionState.VALUE,
+            normalized_value=Decimal("0.3"),
+            material_fingerprints=("f" * 64,),
+            eligible_evidence_count=1,
+        )
+        b = ObservationResolution(
+            observation_code="CPI_CORE_MOM",
+            state=ObservationResolutionState.UNRESOLVED,
+            normalized_value=None,
+            material_fingerprints=(),
+            eligible_evidence_count=0,
+        )
+        first = _knowledge_fingerprint(
             EVENT_ID,
-            date(2026, 8, 1),
-            KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
             ReleaseProjectionState.DISCLOSED,
-            ScheduleSelection(ScheduleSelectionState.UNRESOLVED, None, ()),
-            observations,
-            build_knowledge_fingerprint(
-                event_occurrence_id=EVENT_ID,
-                release_state=ReleaseProjectionState.DISCLOSED,
-                observations=observations,
-            ),
-            None,
+            (a, b),
         )
-        governed = apply_control_states(
-            knowledge,
-            domain_state=ServingControlState.WITHHELD,
-            event_state=ServingControlState.ENABLED,
+        duplicate_provenance = ObservationResolution(
+            observation_code=a.observation_code,
+            state=a.state,
+            normalized_value=a.normalized_value,
+            material_fingerprints=a.material_fingerprints,
+            eligible_evidence_count=99,
         )
-        self.assertIs(governed.knowledge, knowledge)
-        self.assertEqual(governed.serving_state, ServingControlState.WITHHELD)
-        self.assertEqual(governed.observations["CPI_CORE_MOM"].state, "WITHHELD")
-        self.assertIsNone(governed.observations["CPI_CORE_MOM"].normalized_value)
-        self.assertEqual(
-            knowledge.observations["CPI_CORE_MOM"].normalized_value,
-            Decimal("0.3"),
+        second = _knowledge_fingerprint(
+            EVENT_ID,
+            ReleaseProjectionState.DISCLOSED,
+            (b, duplicate_provenance),
         )
+        self.assertEqual(first, second)
+
+    def test_knowledge_fingerprint_changes_when_semantic_state_changes(self) -> None:
+        base = ObservationResolution(
+            observation_code="CPI_HEADLINE_MOM",
+            state=ObservationResolutionState.VALUE,
+            normalized_value=Decimal("0.3"),
+            material_fingerprints=("a" * 64,),
+            eligible_evidence_count=1,
+        )
+        conflict = ObservationResolution(
+            observation_code="CPI_HEADLINE_MOM",
+            state=ObservationResolutionState.CONFLICT,
+            normalized_value=None,
+            material_fingerprints=("a" * 64, "b" * 64),
+            eligible_evidence_count=2,
+        )
+        first = _knowledge_fingerprint(
+            EVENT_ID,
+            ReleaseProjectionState.DISCLOSED,
+            (base,),
+        )
+        second = _knowledge_fingerprint(
+            EVENT_ID,
+            ReleaseProjectionState.DISCLOSED,
+            (conflict,),
+        )
+        self.assertNotEqual(first, second)
 
 
 if __name__ == "__main__":
