@@ -351,9 +351,10 @@ Run outcomes:
 
 A run may terminalize only after every existing work item is TERMINAL.
 
-Run outcome aggregation is deterministic:
+Run outcome aggregation is deterministic after executable work planning:
 
-- NO_WORK when no work item exists or every work item is SKIPPED;
+- a direct CREATED -> TERMINAL orchestration failure before any work item is created may use FAILED;
+- otherwise NO_WORK when no work item exists or every work item is SKIPPED;
 - SUCCEEDED when at least one non-SKIPPED work item exists and every non-SKIPPED outcome is SUCCEEDED or DATA_NOT_AVAILABLE;
 - FAILED when every non-SKIPPED work item is FAILED;
 - PARTIAL for every other terminal mix, including any QUARANTINED outcome or a mixture of successful/DATA_NOT_AVAILABLE and FAILED outcomes.
@@ -403,6 +404,8 @@ Allowed work behavior:
 - a worker holding the current claim may terminalize CLAIMED -> TERMINAL;
 - a retryable attempt may return CLAIMED -> PENDING with next_claim_at and without changing business identity;
 - an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
+- claim_token is immutable within one ownership generation; lease renewal cannot silently replace the owner token;
+- an expired-lease reclaim must advance claim_generation and use a new claim_token;
 - the orchestrator may terminalize PENDING -> TERMINAL with outcome=SKIPPED before any attempt exists when the work is no longer applicable;
 - once a parent run is TERMINAL, no new work item may be attached to that run;
 - TERMINAL has no outgoing transition.
@@ -414,6 +417,8 @@ Work state/timestamp/claim invariants:
 - TERMINAL has outcome non-null, claim_token=NULL, lease_until=NULL;
 - SKIPPED is valid only for a PENDING -> TERMINAL orchestrator transition with no execution attempt;
 - DATA_NOT_AVAILABLE, QUARANTINED, FAILED, and SUCCEEDED require an execution attempt.
+- for an executed terminal work item, the terminal work outcome must match the current generation's terminal attempt outcome;
+- SKIPPED requires that no execution attempt exists for the work item.
 
 SKIP LOCKED or equivalent claim SQL is only a queue primitive. It does not define business-data consistency.
 
@@ -478,6 +483,11 @@ application/extractor contract, while the database enforces token shape and
 outcome/reason consistency.
 
 claim_generation and attempt_number advance together when a new execution ownership generation starts. An attempt row may be created only while its parent work item is CLAIMED, and its attempt_number must equal that work item's current claim_generation. This is database-enforced so a caller cannot manufacture an execution attempt without ownership or attach an attempt to a stale generation. A stale attempt can finish logging locally, but it cannot mutate work state or canonical evidence after losing the current claim generation. No business truth depends on attempt number.
+
+Run, work-item, and attempt identity/lineage fields are immutable after insert.
+State-machine updates may change only the explicitly mutable operational state fields;
+they may not rewrite run identity, work business identity, artifact input lineage, or
+attempt generation history.
 
 ### 11.4 Scope and domain integrity
 

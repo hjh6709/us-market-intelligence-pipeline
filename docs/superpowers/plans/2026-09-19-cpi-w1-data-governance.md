@@ -827,8 +827,12 @@ Claim:
 - increment claim_generation;
 - assign new claim_token/lease;
 - create attempt_number aligned to the new execution generation.
+- same-generation lease renewal preserves the existing claim_token;
+- expired-lease reclaim advances generation and assigns a different claim_token.
 
 All later mutation methods require matching `work_item_id + claim_generation + claim_token`.
+Work terminalization requires the current generation attempt to be TERMINAL with the
+same outcome; SKIPPED is the only terminal work outcome with no attempt.
 
 - [ ] **Step 3: Implement source-artifact recording**
 

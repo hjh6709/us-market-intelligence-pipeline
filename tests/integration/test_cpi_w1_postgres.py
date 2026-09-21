@@ -1229,6 +1229,17 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (uuid4(), work_id),
             )
+            attempt_id = self.insert_attempt(connection, work_id)
+            connection.execute(
+                """
+                UPDATE ingestion_attempts
+                   SET state='TERMINAL', outcome='FAILED',
+                       reason_code='TEST_FAILURE',
+                       finished_at=CURRENT_TIMESTAMP
+                 WHERE attempt_id=%s
+                """,
+                (attempt_id,),
+            )
             with self.assertRaises(psycopg.errors.CheckViolation):
                 connection.execute(
                     """
@@ -1254,6 +1265,16 @@ class CpiW1PostgresTest(unittest.TestCase):
                  WHERE work_item_id=%s
                 """,
                 (uuid4(), work_id),
+            )
+            attempt_id = self.insert_attempt(connection, work_id)
+            connection.execute(
+                """
+                UPDATE ingestion_attempts
+                   SET state='TERMINAL', outcome='SUCCEEDED',
+                       finished_at=CURRENT_TIMESTAMP
+                 WHERE attempt_id=%s
+                """,
+                (attempt_id,),
             )
             with self.assertRaises(psycopg.errors.CheckViolation):
                 connection.execute(
@@ -1319,6 +1340,115 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assertGreaterEqual(after, before)
         self.assertNotEqual(after.year, 2000)
 
+
+    def test_executed_work_cannot_terminalize_without_matching_attempt(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_work_items
+                       SET state='TERMINAL', outcome='FAILED',
+                           reason_code='NO_ATTEMPT',
+                           claim_token=NULL, lease_until=NULL
+                     WHERE work_item_id=%s
+                    """,
+                    (work_id,),
+                )
+
+    def test_claim_token_is_immutable_within_generation(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            token = uuid4()
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (token, work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "UPDATE ingestion_work_items SET claim_token=%s WHERE work_item_id=%s",
+                    (uuid4(), work_id),
+                )
+
+    def test_run_outcome_must_match_terminal_work_aggregation(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            attempt_id = self.insert_attempt(connection, work_id)
+            connection.execute(
+                """
+                UPDATE ingestion_attempts
+                   SET state='TERMINAL', outcome='FAILED',
+                       reason_code='TEST_FAILURE',
+                       finished_at=CURRENT_TIMESTAMP
+                 WHERE attempt_id=%s
+                """,
+                (attempt_id,),
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='TERMINAL', outcome='FAILED',
+                       reason_code='TEST_FAILURE',
+                       claim_token=NULL, lease_until=NULL
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_runs
+                       SET state='TERMINAL', outcome='SUCCEEDED',
+                           finished_at=CURRENT_TIMESTAMP
+                     WHERE run_id=%s
+                    """,
+                    (run_id,),
+                )
+
+    def test_run_work_and_attempt_identity_fields_are_immutable(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "UPDATE ingestion_runs SET job_type='CHANGED' WHERE run_id=%s",
+                    (run_id,),
+                )
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "UPDATE ingestion_work_items SET work_key='changed' WHERE work_item_id=%s",
+                    (work_id,),
+                )
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            attempt_id = self.insert_attempt(connection, work_id)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "UPDATE ingestion_attempts SET attempt_number=2 WHERE attempt_id=%s",
+                    (attempt_id,),
+                )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
         with self.connection() as connection:

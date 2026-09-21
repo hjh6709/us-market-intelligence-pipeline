@@ -131,6 +131,35 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertGreaterEqual(self.sql.count("AS $"), 4)
         self.assertGreaterEqual(self.sql.count("$;"), 4)
 
+    def test_migration_foundation_blocks_are_not_duplicated(self) -> None:
+        for marker in (
+            "CREATE TABLE IF NOT EXISTS data_sources",
+            "CREATE TABLE IF NOT EXISTS ingestion_runs",
+            "CREATE TABLE IF NOT EXISTS ingestion_work_items",
+            "CREATE TABLE IF NOT EXISTS ingestion_attempts",
+            "CREATE TABLE IF NOT EXISTS source_artifacts",
+            "CREATE TABLE IF NOT EXISTS interpretation_subjects",
+            "CREATE OR REPLACE FUNCTION enforce_ingestion_initial_state",
+            "CREATE OR REPLACE FUNCTION enforce_ingestion_run_transition",
+            "CREATE OR REPLACE FUNCTION enforce_ingestion_work_transition",
+            "CREATE OR REPLACE FUNCTION enforce_ingestion_attempt_transition",
+            "CREATE OR REPLACE FUNCTION enforce_source_artifact_forensic_immutability",
+        ):
+            self.assertEqual(self.sql.count(marker), 1, marker)
+
+    def test_claim_and_terminal_history_are_database_enforced(self) -> None:
+        for fragment in (
+            "claim token is immutable within one ownership generation",
+            "reclaimed ownership requires a new claim token",
+            "executed terminal work requires matching current terminal attempt",
+            "SKIPPED work cannot have an execution attempt",
+            "ingestion run outcome does not match terminal work aggregation",
+            "ingestion run identity and lineage are immutable",
+            "ingestion work identity and lineage are immutable",
+            "ingestion attempt identity and lineage are immutable",
+        ):
+            self.assertIn(fragment, self.sql)
+
     def test_keeps_new_ingestion_model_separate_from_legacy_pipeline_telemetry(self) -> None:
         self.assertNotIn("ALTER TABLE pipeline_", self.sql)
         self.assertNotIn("UPDATE pipeline_", self.sql)
