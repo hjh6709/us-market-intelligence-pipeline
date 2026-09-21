@@ -14,7 +14,10 @@ from src.cpi_w1_contracts import (
     ObservationMaterial,
     ObservationState,
     PromotionFamily,
+    ScheduleMaterial,
+    ScheduleStatus,
     ServingControlState,
+    TimePrecision,
 )
 from src.cpi_w1_promoter import (
     CpiW1Promoter,
@@ -3139,6 +3142,141 @@ class CpiW1PostgresTest(unittest.TestCase):
                 Decimal("0.3"),
             )
 
+    def test_selector_db_path_prefers_authoritative_schedule_over_fallback(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            authoritative_artifact = self.make_artifact(
+                connection,
+                f"schedule:authoritative:{uuid4()}",
+                artifact_contract_kind="CPI_SCHEDULE_HTML",
+            )
+            fallback_artifact = self.make_artifact(
+                connection,
+                f"schedule:fallback:{uuid4()}",
+                artifact_contract_kind="BLS_GLOBAL_ICS",
+                content_type="text/calendar",
+            )
+
+            canceled = ScheduleMaterial(
+                schedule_status=ScheduleStatus.CANCELED,
+                scheduled_date=None,
+                scheduled_at=None,
+                schedule_timezone=None,
+                time_precision=None,
+            )
+            fallback = ScheduleMaterial(
+                schedule_status=ScheduleStatus.SCHEDULED,
+                scheduled_date=date(2026, 9, 30),
+                scheduled_at=None,
+                schedule_timezone="America/New_York",
+                time_precision=TimePrecision.DATE_ONLY,
+            )
+            for artifact_id, material, extractor in (
+                (
+                    authoritative_artifact,
+                    canceled,
+                    "bls-cpi-schedule-html-v1",
+                ),
+                (
+                    fallback_artifact,
+                    fallback,
+                    "bls-global-ics-v1",
+                ),
+            ):
+                assertion_id = uuid4()
+                self.insert_subject(
+                    connection,
+                    assertion_id,
+                    "SCHEDULE_ASSERTION",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_schedule_assertions (
+                        schedule_assertion_id, event_occurrence_id, schedule_status,
+                        scheduled_date, scheduled_at, schedule_timezone,
+                        time_precision, source_code, source_artifact_id,
+                        extractor_contract_version, accepted_by_attempt_id,
+                        accepted_at, material_fingerprint
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        'BLS', %s, %s, %s, CURRENT_TIMESTAMP, %s
+                    )
+                    """,
+                    (
+                        assertion_id,
+                        event_id,
+                        material.schedule_status.value,
+                        material.scheduled_date,
+                        material.scheduled_at,
+                        material.schedule_timezone,
+                        (
+                            material.time_precision.value
+                            if material.time_precision is not None
+                            else None
+                        ),
+                        artifact_id,
+                        extractor,
+                        promote_attempt,
+                        material.fingerprint,
+                    ),
+                )
+
+            result = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(
+                result.release_state.value,
+                "NO_RELEASE_EXPECTED",
+            )
+
+    def test_selector_event_link_invalidation_is_transitive(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+            before_invalidation = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
+            connection.execute("SELECT pg_sleep(0.005)")
+            self.invalidate_subject(
+                connection,
+                promoted["disclosure_link_id"],
+            )
+
+            current = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(current.release_state.value, "UNRESOLVED")
+            self.assertTrue(
+                all(
+                    current.observation(code).state
+                    is ObservationResolutionState.UNRESOLVED
+                    for code in (
+                        "CPI_HEADLINE_MOM",
+                        "CPI_HEADLINE_YOY",
+                        "CPI_CORE_MOM",
+                        "CPI_CORE_YOY",
+                    )
+                )
+            )
+
+            pit = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.SYSTEM_KNOWN_PIT,
+                as_of=before_invalidation,
+            )
+            self.assertEqual(pit.release_state.value, "DISCLOSED")
+            self.assertEqual(
+                pit.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+
     def test_selector_pit_excludes_evidence_before_acceptance(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:
@@ -3168,6 +3306,62 @@ class CpiW1PostgresTest(unittest.TestCase):
                     pit.observation(code).state,
                     ObservationResolutionState.UNRESOLVED,
                 )
+
+    def test_selector_supplemental_disclosure_cannot_supply_core4(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            topology = self.make_observation_topology(
+                connection,
+                relation_kind="SUPPLEMENTAL_DISCLOSURE",
+            )
+            material = ObservationMaterial(
+                observation_code="CPI_CORE_MOM",
+                assertion_state=ObservationState.VALUE,
+                normalized_value=Decimal("9.9"),
+            )
+            assertion_id = uuid4()
+            self.insert_subject(
+                connection,
+                assertion_id,
+                "OFFICIAL_OBSERVATION_ASSERTION",
+            )
+            connection.execute(
+                """
+                INSERT INTO official_observation_assertions (
+                    assertion_id, event_occurrence_id, event_type, disclosure_id,
+                    disclosure_link_id, disclosure_artifact_link_id,
+                    observation_code, assertion_state, normalized_value,
+                    source_value_text, source_reason_text, source_code,
+                    source_artifact_id, extractor_contract_version,
+                    accepted_by_attempt_id, accepted_at, material_fingerprint
+                ) VALUES (
+                    %s, %s, 'CPI', %s, %s, %s,
+                    'CPI_CORE_MOM', 'VALUE', 9.9,
+                    '9.9', NULL, 'BLS', %s, 'supplemental-test-v1',
+                    %s, CURRENT_TIMESTAMP, %s
+                )
+                """,
+                (
+                    assertion_id,
+                    topology["event_id"],
+                    topology["disclosure_id"],
+                    topology["disclosure_link_id"],
+                    topology["disclosure_artifact_link_id"],
+                    topology["artifact_id"],
+                    topology["promote_attempt"],
+                    material.fingerprint,
+                ),
+            )
+            result = selector.select_event(
+                connection,
+                topology["event_id"],
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(result.release_state.value, "UNRESOLVED")
+            self.assertEqual(
+                result.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.UNRESOLVED,
+            )
 
     def test_selector_serving_overlay_domain_withheld_overrides_event_enabled(self) -> None:
         selector = CpiW1Selector()
