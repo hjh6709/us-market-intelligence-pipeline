@@ -60,6 +60,10 @@ class CpiW1PromoterTest(unittest.TestCase):
         self.assertIn("l.relation_kind = 'EVENT_RELEASE'", body)
         self.assertNotIn("l.relation_kind = 'SUPPLEMENTAL_DISCLOSURE'", body)
 
+    def test_promotion_result_uses_verified_not_inserted_count(self) -> None:
+        self.assertIn("verified_observation_count", SOURCE)
+        self.assertNotIn("inserted_observation_count", SOURCE)
+
     def test_observation_bundle_is_exactly_four_semantics(self) -> None:
         for code in (
             "CPI_HEADLINE_MOM",

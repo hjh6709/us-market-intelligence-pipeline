@@ -44,7 +44,7 @@ class PromotionResult:
     disclosure_id: UUID | None
     disclosure_link_id: UUID | None
     disclosure_artifact_link_id: UUID | None
-    inserted_observation_count: int = 0
+    verified_observation_count: int = 0
 
 
 def _stable_uuid(kind: str, *parts: object) -> UUID:
@@ -627,7 +627,7 @@ class CpiW1Promoter:
                 disclosure_id=disclosure_id,
                 disclosure_link_id=disclosure_link_id,
                 disclosure_artifact_link_id=artifact_link_id,
-                inserted_observation_count=inserted,
+                verified_observation_count=inserted,
             )
 
     def quarantine_observation_work(

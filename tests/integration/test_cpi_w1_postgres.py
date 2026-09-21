@@ -1983,7 +1983,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 artifact_id=artifact_id,
                 candidate=bundle,
             )
-            self.assertEqual(result.inserted_observation_count, 4)
+            self.assertEqual(result.verified_observation_count, 4)
             self.assertEqual(
                 connection.execute(
                     "SELECT COUNT(*) FROM official_observation_assertions"
