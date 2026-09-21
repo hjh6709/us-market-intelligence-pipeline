@@ -84,7 +84,7 @@ class CpiW1EventMigrationTest(unittest.TestCase):
     def test_promoter_lineage_is_db_enforced(self) -> None:
         self.assertIn("enforce_cpi_w1_promoter_attempt", self.sql)
         self.assertIn(
-            "canonical CPI evidence requires ECONOMIC_PROMOTE attempt lineage",
+            "canonical CPI evidence requires current ECONOMIC_PROMOTE claim ownership",
             self.sql,
         )
         self.assertIn("row_payload := to_jsonb(NEW)", self.sql)
