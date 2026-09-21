@@ -1199,6 +1199,10 @@ If the knowledge result is VALUE but the effective control is WITHHELD:
 - underlying evidence remains VALID unless separately governed;
 - the reason is a serving/governance reason, not a fabricated source state.
 
+Live W1 governed-serving APIs must not accept a caller-selected serving-control time.
+They capture the effective control cutoff from the database clock so a caller cannot
+request an earlier decision point to bypass a current WITHHELD state.
+
 Historical user-visible representation replay, if later required, must apply serving-control decisions as-of the requested representation time. That capability is not required for W1 Internal Alpha.
 
 ## 26. Representation timestamps and fingerprint

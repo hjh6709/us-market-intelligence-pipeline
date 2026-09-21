@@ -770,15 +770,11 @@ class CpiW1Selector:
         self,
         connection: Any,
         knowledge: CpiEventKnowledge,
-        decision_time: datetime | None = None,
     ) -> GovernedCpiEvent:
         with connection.transaction():
-            if decision_time is None:
-                decision_time = connection.execute(
-                    "SELECT CURRENT_TIMESTAMP"
-                ).fetchone()[0]
-            else:
-                _require_aware(decision_time, "decision_time")
+            decision_time = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
 
             domain_state = self._control_state(
                 connection,

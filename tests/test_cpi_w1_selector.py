@@ -273,6 +273,15 @@ class CpiW1SelectorTest(unittest.TestCase):
         )
         self.assertEqual(first, second)
 
+    def test_live_serving_overlay_has_no_caller_selected_decision_time(self) -> None:
+        import inspect
+        from src.cpi_w1_selector import CpiW1Selector
+
+        parameters = inspect.signature(
+            CpiW1Selector.apply_serving_overlay
+        ).parameters
+        self.assertNotIn("decision_time", parameters)
+
     def test_knowledge_fingerprint_changes_when_semantic_state_changes(self) -> None:
         base = ObservationResolution(
             observation_code="CPI_HEADLINE_MOM",
