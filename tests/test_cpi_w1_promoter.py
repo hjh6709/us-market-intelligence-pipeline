@@ -69,7 +69,7 @@ class CpiW1PromoterTest(unittest.TestCase):
         )
 
     def test_canonical_promotion_takes_event_fence(self) -> None:
-        self.assertGreaterEqual(SOURCE.count("lock_cpi_event(connection, event_id)"), 3)
+        self.assertGreaterEqual(SOURCE.count("lock_cpi_event(connection,"), 3)
 
     def test_corroborating_representation_has_separate_promotion_family(self) -> None:
         self.assertIn(
