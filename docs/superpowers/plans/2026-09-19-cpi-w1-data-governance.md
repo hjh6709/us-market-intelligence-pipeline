@@ -807,6 +807,11 @@ HTML envelope/extractor contract.
 - Create: `tests/test_cpi_w1_promoter.py`
 - Modify: `tests/integration/test_cpi_w1_postgres.py`
 
+Task 10 verification evidence: repository/promoter unit coverage plus PostgreSQL
+integration coverage is green in branch CI at commit `0df39a5680cbeae00cfa5963458da7d55e88f19f`
+or a descendant containing the same Task 10 implementation. This completion does
+not claim the live Table 1 XLSX parser from Task 9B is implemented.
+
 **Interfaces:**
 - Produces:
   - `claim_work_item(...)->Claim`
@@ -816,11 +821,11 @@ HTML envelope/extractor contract.
   - `promote_observation_bundle(...)->PromotionResult`
 - Uses short transactions and current claim-generation fencing.
 
-- [ ] **Step 1: Write repository unit tests around SQL contracts**
+- [x] **Step 1: Write repository unit tests around SQL contracts**
 
 Verify SQL always includes claim-generation predicates for canonical promotion and work terminalization.
 
-- [ ] **Step 2: Implement claim/reclaim behavior**
+- [x] **Step 2: Implement claim/reclaim behavior**
 
 Claim:
 - use transaction + `FOR UPDATE SKIP LOCKED`;
@@ -854,14 +859,14 @@ All later mutation methods require matching `work_item_id + claim_generation + c
 Work terminalization requires the current generation attempt to be TERMINAL with the
 same outcome; SKIPPED is the only terminal work outcome with no attempt.
 
-- [ ] **Step 3: Implement source-artifact recording**
+- [x] **Step 3: Implement source-artifact recording**
 
 Same attempt + locator + hash must converge to one artifact row. Different attempts may create distinct artifact rows for the same bytes.
 A metadata retry must match the full immutable capture tuple, not only the hash. Reject
 drift in source/contract/content type/retrieval URL/captured_at/retention/object
 generation. Preserve the original capture timestamp.
 
-- [ ] **Step 4: Implement `CPI_RELEASE_ENVELOPE_PROMOTE`**
+- [x] **Step 4: Implement `CPI_RELEASE_ENVELOPE_PROMOTE`**
 
 One transaction:
 - verify current claim;
@@ -878,7 +883,7 @@ One transaction:
 
 No observations are inserted here.
 
-- [ ] **Step 5: Implement `CPI_CORROBORATING_REPRESENTATION_PROMOTE`**
+- [x] **Step 5: Implement `CPI_CORROBORATING_REPRESENTATION_PROMOTE`**
 
 For a validated same-release Table 1 XLSX representation:
 - verify current claim and `CPI_TABLE1_XLSX` artifact contract;
@@ -892,7 +897,7 @@ This family remains unusable for live XLSX until Task 9B provides a validated re
 workbook candidate; tests may construct the typed candidate directly to verify the
 repository/promotion contract without pretending the XLSX parser is complete.
 
-- [ ] **Step 6: Implement `CPI_OBSERVATION_BUNDLE_PROMOTE`**
+- [x] **Step 6: Implement `CPI_OBSERVATION_BUNDLE_PROMOTE`**
 
 One transaction:
 - verify current claim;
@@ -909,7 +914,7 @@ If typed extraction is unsafe, terminalize the current attempt `QUARANTINED` wit
 a durable reason_code and then terminalize work `QUARANTINED` with the same outcome,
 without inserting any partial Core 4 assertions.
 
-- [ ] **Step 7: Add the key split-outcome integration test**
+- [x] **Step 7: Add the key split-outcome integration test**
 
 Scenario:
 1. enqueue envelope + observation work for one artifact;
@@ -920,22 +925,22 @@ Scenario:
 6. disclosure/EVENT_RELEASE/marker rows exist;
 7. zero Core 4 assertion rows exist.
 
-- [ ] **Step 8: Add accepted-at trust-boundary tests**
+- [x] **Step 8: Add accepted-at trust-boundary tests**
 
 Verify promoter/repository public interfaces expose no caller-selected `accepted_at`.
 Insert evidence through promotion, then prove the stored knowledge time is generated
 by the promotion transaction. Replay/backfill of an older artifact must not backdate
 `accepted_at`.
 
-- [ ] **Step 9: Add stale-worker fencing test**
+- [x] **Step 9: Add stale-worker fencing test**
 
 Claim work as generation 1, expire/reclaim as generation 2, then attempt generation-1 promotion. Expected: stale mutation rejected and no evidence inserted.
 
-- [ ] **Step 10: Add conflicting official representation test**
+- [x] **Step 10: Add conflicting official representation test**
 
 Promote HTML Core 4 value 0.3, then an eligible corroborating representation value 0.4. Both work items may SUCCEED; both evidence rows remain.
 
-- [ ] **Step 11: Run and commit**
+- [x] **Step 11: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_repository tests.test_cpi_w1_promoter -v
