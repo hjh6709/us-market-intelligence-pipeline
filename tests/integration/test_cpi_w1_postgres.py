@@ -1430,7 +1430,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             connection.execute(
                 """
                 UPDATE ingestion_work_items
-                   SET state='CLAIMED', claim_generation=2,
+                   SET state='CLAIMED', claim_generation=1,
                        claim_token=%s,
                        lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
                  WHERE work_item_id=%s
@@ -1443,7 +1443,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                     INSERT INTO ingestion_attempts (
                         attempt_id, work_item_id, execution_scope,
                         data_domain, attempt_number
-                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1)
+                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 2)
                     """,
                     (uuid4(), work_id),
                 )
