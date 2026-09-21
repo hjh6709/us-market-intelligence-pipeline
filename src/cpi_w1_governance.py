@@ -49,6 +49,7 @@ class WorkforcePrincipal:
                 raise GovernanceIdentityError(
                     f"{label} must be an immutable IdP identifier, not an email alias"
                 )
+
     @staticmethod
     def _encode(value: str) -> str:
         return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
@@ -66,7 +67,7 @@ def _owned_governance_transaction(connection: Any):
         raise RuntimeError(
             "CPI governance requires an idle connection so it owns the mutation transaction"
         )
-    with _owned_governance_transaction(connection):
+    with connection.transaction():
         yield
 
 

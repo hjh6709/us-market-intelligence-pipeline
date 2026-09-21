@@ -55,6 +55,16 @@ class CpiW1GovernanceTest(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, parameters)
 
+    def test_owned_transaction_helper_does_not_recurse(self) -> None:
+        helper_start = SOURCE.index("def _owned_governance_transaction")
+        helper_end = SOURCE.index("def _reason_code", helper_start)
+        helper = SOURCE[helper_start:helper_end]
+        self.assertIn("with connection.transaction():", helper)
+        self.assertNotIn(
+            "with _owned_governance_transaction(connection):",
+            helper,
+        )
+
     def test_governance_owns_mutation_transaction(self) -> None:
         self.assertIn("TransactionStatus.IDLE", SOURCE)
         self.assertIn("_owned_governance_transaction", SOURCE)
