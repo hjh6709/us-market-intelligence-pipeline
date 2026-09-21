@@ -962,9 +962,14 @@ git commit -m "feat: add fenced CPI W1 promotion workflow"
 
 Create table-driven tests for every vector in spec section 31.3.
 
-- [ ] **Step 2: Implement knowledge-mode filtering**
+- [ ] **Step 2: Implement knowledge-mode filtering and projection evaluation clock**
 
 For `SYSTEM_KNOWN_PIT(T)`, filter every governable evidence type by its own `accepted_at <= T`, then apply only interpretation decisions with `applied_at <= T`.
+Use T as the release-projection evaluation instant.
+
+For `OFFICIAL_SOURCE_RECONSTRUCTION`, capture one PostgreSQL transaction timestamp at
+selection start and use it only for due-state projection. Do not call wall-clock time
+repeatedly during one selection.
 
 Never use storage `created_at` as PIT knowledge time.
 

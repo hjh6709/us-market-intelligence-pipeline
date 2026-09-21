@@ -1134,6 +1134,20 @@ No majority vote and no latest-wins rule exists.
 
 ### 25.5 Release selection
 
+Selector projection evaluation time is distinct from evidence time and request
+observability metadata.
+
+- For SYSTEM_KNOWN_PIT(T), T is both the knowledge cutoff and the release-projection
+  evaluation instant. This preserves deterministic historical reconstruction.
+- For OFFICIAL_SOURCE_RECONSTRUCTION, the selector captures one PostgreSQL transaction
+  timestamp at the start of the selection and uses that single instant only to decide
+  whether an exact/date-only schedule is before, on, or after due.
+- The evaluation instant is not accepted_at, captured_at, source chronology,
+  knowledge.asOf, or representationAsOf, and is not inserted into evidence.
+- The evaluation instant is excluded from the knowledge fingerprint directly. If time
+  passage changes the derived release projection state, the fingerprint may change
+  because the semantic release state changed, not because a timestamp was hashed.
+
 CPI release selection considers valid EVENT_RELEASE links only.
 
 SUPPLEMENTAL_DISCLOSURE never becomes the release anchor.
