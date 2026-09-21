@@ -341,7 +341,7 @@ def build_report(
         replay_conformance_fixture(fixture, repo_root)
         for fixture in manifest.get("conformance_fixtures", [])
     ]
-    release_gate_ready = all(
+    official_corpus_ready = all(
         (not entry.get("replay_required", False))
         or (
             result.inventory_status == "MATERIALIZED_PINNED"
@@ -349,9 +349,16 @@ def build_report(
         )
         for entry, result in zip(manifest["entries"], results, strict=True)
     )
+    conformance_ready = all(
+        result.semantic_status in _PASS_SEMANTIC
+        for result in conformance_results
+    )
+    release_gate_ready = official_corpus_ready and conformance_ready
     return {
         "schema_version": _SCHEMA_VERSION,
         "baseline": manifest["baseline"],
+        "official_corpus_ready": official_corpus_ready,
+        "conformance_ready": conformance_ready,
         "release_gate_ready": release_gate_ready,
         "counts": {
             "entries": len(results),

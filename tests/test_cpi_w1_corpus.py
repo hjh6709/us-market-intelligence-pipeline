@@ -127,6 +127,12 @@ class CpiW1CorpusTest(unittest.TestCase):
         self.assertEqual(report["counts"]["remote_only"], 56)
         self.assertEqual(report["counts"]["synthetic_conformance"], 2)
 
+    def test_release_gate_requires_conformance_as_well_as_official_corpus(self) -> None:
+        report = build_report(self.manifest, repo_root=ROOT)
+        self.assertTrue(report["conformance_ready"])
+        self.assertFalse(report["official_corpus_ready"])
+        self.assertFalse(report["release_gate_ready"])
+
     def test_replay_tool_has_no_database_dependency(self) -> None:
         source = (
             ROOT / "scripts/replay_cpi_w1_corpus.py"
