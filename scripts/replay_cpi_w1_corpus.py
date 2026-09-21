@@ -20,6 +20,7 @@ _RELEASE_EXTRACTOR = "bls-cpi-release-html-v1"
 _CANCELLATION_EXTRACTOR = "bls-cpi-revised-release-dates-v1"
 _ALLOWED_MATERIALIZATION = {"MATERIALIZED", "REMOTE_ONLY"}
 _PASS_SEMANTIC = {"SEMANTIC_UNCHANGED", "EXPECTED_CHANGED"}
+_EXPECTED_DIFF_SCHEMA = "cpi-w1-expected-diffs-v1"
 
 
 class CorpusValidationError(ValueError):
@@ -54,6 +55,63 @@ def _months(start: str, end: str) -> list[str]:
             y += 1
             m = 1
     return result
+
+
+def _semantic_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def load_expected_diffs(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != _EXPECTED_DIFF_SCHEMA:
+        raise CorpusValidationError("unsupported expected-diff schema_version")
+    approvals = payload.get("approvals")
+    if not isinstance(approvals, list):
+        raise CorpusValidationError("expected-diff approvals must be a list")
+    return approvals
+
+
+def _approved_semantic_change(
+    *,
+    approvals: list[dict[str, Any]],
+    entry: dict[str, Any],
+    expected: Any,
+    actual: Any,
+) -> bool:
+    required = {
+        "corpus_id": entry["corpus_id"],
+        "artifact_sha256": entry.get("expected_sha256"),
+        "extractor_contract_version": entry.get("extractor_contract_version"),
+        "expected_semantics_sha256": _semantic_digest(expected),
+        "actual_semantics_sha256": _semantic_digest(actual),
+    }
+    matches = []
+    for approval in approvals:
+        if all(approval.get(key) == value for key, value in required.items()):
+            reason = approval.get("reason_code")
+            review_ref = approval.get("review_ref")
+            if (
+                isinstance(reason, str)
+                and reason
+                and reason == reason.strip()
+                and isinstance(review_ref, str)
+                and review_ref
+                and review_ref == review_ref.strip()
+            ):
+                matches.append(approval)
+    if len(matches) > 1:
+        raise CorpusValidationError(
+            f"duplicate expected-diff approvals for {entry['corpus_id']}"
+        )
+    return len(matches) == 1
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -244,8 +302,14 @@ def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
     return actual
 
 
-def replay_entry(entry: dict[str, Any], repo_root: Path) -> ReplayEntryResult:
+def replay_entry(
+    entry: dict[str, Any],
+    repo_root: Path,
+    *,
+    expected_diff_approvals: list[dict[str, Any]] | None = None,
+) -> ReplayEntryResult:
     status = inventory_status(entry)
+    approvals = expected_diff_approvals or []
     if status != "MATERIALIZED_PINNED":
         return ReplayEntryResult(entry["corpus_id"], status, "NOT_RUN")
 
@@ -317,10 +381,20 @@ def replay_entry(entry: dict[str, Any], repo_root: Path) -> ReplayEntryResult:
             status,
             "SEMANTIC_UNCHANGED",
         )
+    changed_status = (
+        "EXPECTED_CHANGED"
+        if _approved_semantic_change(
+            approvals=approvals,
+            entry=entry,
+            expected=expected_values,
+            actual=actual,
+        )
+        else "UNEXPECTED_CHANGED"
+    )
     return ReplayEntryResult(
         entry["corpus_id"],
         status,
-        "UNEXPECTED_CHANGED",
+        changed_status,
         json.dumps(
             {"expected": expected_values, "actual": actual},
             sort_keys=True,
@@ -333,10 +407,18 @@ def build_report(
     manifest: dict[str, Any],
     *,
     repo_root: Path,
+    expected_diff_approvals: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     validate_manifest(manifest, repo_root)
     validate_conformance_fixtures(manifest, repo_root)
-    results = [replay_entry(entry, repo_root) for entry in manifest["entries"]]
+    results = [
+        replay_entry(
+            entry,
+            repo_root,
+            expected_diff_approvals=expected_diff_approvals,
+        )
+        for entry in manifest["entries"]
+    ]
     conformance_results = [
         replay_conformance_fixture(fixture, repo_root)
         for fixture in manifest.get("conformance_fixtures", [])
@@ -392,6 +474,11 @@ def main() -> int:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--expected-diffs",
+        type=Path,
+        default=Path("tests/fixtures/cpi_w1/expected-diffs.json"),
+    )
+    parser.add_argument(
         "--inventory-only",
         action="store_true",
         help="report incomplete materialization without enforcing release readiness",
@@ -400,7 +487,12 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     manifest = load_manifest(args.manifest)
-    report = build_report(manifest, repo_root=repo_root)
+    approvals = load_expected_diffs(args.expected_diffs)
+    report = build_report(
+        manifest,
+        repo_root=repo_root,
+        expected_diff_approvals=approvals,
+    )
     args.output.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

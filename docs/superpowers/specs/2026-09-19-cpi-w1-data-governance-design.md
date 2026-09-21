@@ -1457,6 +1457,12 @@ schedule/exception surfaces, and correction evidence do not share one parser ide
 
 A candidate extractor version is run against the entire approved corpus.
 
+Expected-diff approval is cryptographically scoped to the exact corpus artifact hash,
+extractor-contract version, prior expected semantic digest, and new actual semantic
+digest, plus a durable review reference. A broad "expected change" flag is forbidden.
+Parser failures remain hard-blocking in W1 because free-text exception identity is not
+a stable semantic contract.
+
 The diff classifies:
 
 - semantic unchanged;

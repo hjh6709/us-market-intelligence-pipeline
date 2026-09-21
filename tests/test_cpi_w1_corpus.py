@@ -4,7 +4,10 @@ import unittest
 from pathlib import Path
 
 from scripts.replay_cpi_w1_corpus import (
+    _approved_semantic_change,
+    _semantic_digest,
     build_report,
+    load_expected_diffs,
     load_manifest,
     validate_conformance_fixtures,
     validate_manifest,
@@ -132,6 +135,56 @@ class CpiW1CorpusTest(unittest.TestCase):
         self.assertTrue(report["conformance_ready"])
         self.assertFalse(report["official_corpus_ready"])
         self.assertFalse(report["release_gate_ready"])
+
+    def test_expected_change_approval_is_bound_to_exact_artifact_extractor_and_semantics(self) -> None:
+        entry = {
+            "corpus_id": "cpi:test",
+            "expected_sha256": "a" * 64,
+            "extractor_contract_version": "extractor-v2",
+        }
+        expected = {"CPI_HEADLINE_MOM": "0.3"}
+        actual = {"CPI_HEADLINE_MOM": "0.4"}
+        approval = {
+            "corpus_id": "cpi:test",
+            "artifact_sha256": "a" * 64,
+            "extractor_contract_version": "extractor-v2",
+            "expected_semantics_sha256": _semantic_digest(expected),
+            "actual_semantics_sha256": _semantic_digest(actual),
+            "reason_code": "INTENTIONAL_PARSER_CHANGE",
+            "review_ref": "REVIEW-123",
+        }
+        self.assertTrue(
+            _approved_semantic_change(
+                approvals=[approval],
+                entry=entry,
+                expected=expected,
+                actual=actual,
+            )
+        )
+        changed_artifact = dict(entry)
+        changed_artifact["expected_sha256"] = "b" * 64
+        self.assertFalse(
+            _approved_semantic_change(
+                approvals=[approval],
+                entry=changed_artifact,
+                expected=expected,
+                actual=actual,
+            )
+        )
+        self.assertFalse(
+            _approved_semantic_change(
+                approvals=[approval],
+                entry=entry,
+                expected=expected,
+                actual={"CPI_HEADLINE_MOM": "0.5"},
+            )
+        )
+
+    def test_checked_in_expected_diff_file_starts_empty(self) -> None:
+        approvals = load_expected_diffs(
+            ROOT / "tests/fixtures/cpi_w1/expected-diffs.json"
+        )
+        self.assertEqual(approvals, [])
 
     def test_replay_tool_has_no_database_dependency(self) -> None:
         source = (
