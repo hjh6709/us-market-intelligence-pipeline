@@ -850,7 +850,8 @@ One transaction:
 - create/verify RELEASE_REPRESENTATION link;
 - create/verify marker assertion;
 - create required interpretation_subject rows using the evidence UUIDs;
-- terminalize work SUCCEEDED.
+- terminalize the current attempt SUCCEEDED;
+- terminalize work SUCCEEDED with the same outcome.
 
 No observations are inserted here.
 
@@ -864,9 +865,12 @@ One transaction:
 - require all four expected observation semantics resolved as VALUE or EXPLICIT_UNAVAILABLE;
 - insert/verify all four assertions and their interpretation subjects;
 - never accept SUPPLEMENTAL_DISCLOSURE for Core 4;
-- terminalize SUCCEEDED.
+- terminalize the current attempt SUCCEEDED;
+- terminalize work SUCCEEDED with the same outcome.
 
-If typed extraction is unsafe, terminalize work `QUARANTINED` without inserting any partial Core 4 assertions.
+If typed extraction is unsafe, terminalize the current attempt `QUARANTINED` with
+a durable reason_code and then terminalize work `QUARANTINED` with the same outcome,
+without inserting any partial Core 4 assertions.
 
 - [ ] **Step 6: Add the key split-outcome integration test**
 
