@@ -1438,6 +1438,17 @@ Each corpus entry pins artifact provenance such as source URL/locator, captured_
 
 ### 31.2 Parser differential replay
 
+URL inventory is not equivalent to a golden replay corpus. Each replay-required
+baseline artifact must be materialized as exact bytes, pinned by SHA-256, and bound to
+the extractor contract that interprets that artifact kind before the parser release
+gate can be considered complete. An entry may remain REMOTE_ONLY during corpus
+construction, but such an entry keeps the release gate incomplete rather than being
+silently skipped as success.
+
+Extractor contract version is entry-scoped because CPI release HTML, Table 1 XLSX,
+schedule/exception surfaces, and correction evidence do not share one parser identity.
+
+
 A candidate extractor version is run against the entire approved corpus.
 
 The diff classifies:

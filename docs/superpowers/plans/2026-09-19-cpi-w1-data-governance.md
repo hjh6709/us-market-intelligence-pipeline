@@ -1243,10 +1243,18 @@ Each entry contains:
 - artifact_contract_kind;
 - source_contract_version;
 - official locator;
+- extractor_contract_version owned by the entry, not one global CLI version;
 - expected SHA-256 when pinned;
 - local materialized path when present;
+- materialization_status (MATERIALIZED or REMOTE_ONLY);
+- replay_required;
 - expected semantic summary;
 - exceptional-case tags.
+
+A URL inventory is not golden-corpus proof. Release-gate readiness requires every
+replay_required baseline entry to be locally materialized, SHA-256 pinned, and bound
+to an implemented extractor contract. REMOTE_ONLY entries are useful inventory but
+must keep the release gate incomplete.
 
 Baseline reference-month window: 2022-01 through 2026-08.
 
@@ -1266,17 +1274,31 @@ Require explicit entries/tags for:
 Command:
 
 ```bash
-.venv/bin/python scripts/replay_cpi_w1_corpus.py   --manifest tests/fixtures/cpi_w1/corpus.json   --extractor-version bls-cpi-extractor-v1   --output /tmp/cpi-replay.json
+.venv/bin/python scripts/replay_cpi_w1_corpus.py \
+  --manifest tests/fixtures/cpi_w1/corpus.json \
+  --output /tmp/cpi-replay.json
 ```
 
-Report statuses:
+Report inventory status separately from semantic replay status.
+
+Inventory status:
+- MATERIALIZED_PINNED
+- REMOTE_ONLY
+- BLOCKED_NO_EXTRACTOR
+
+Semantic replay status for entries that can actually run:
 - SEMANTIC_UNCHANGED
 - EXPECTED_CHANGED
 - UNEXPECTED_CHANGED
 - NEWLY_FAILED
 - NEWLY_ACCEPTED
+- NOT_RUN
 
-Exit non-zero for unexpected changes/new failures unless explicitly approved in a checked-in expected-diff file.
+Release-gate mode exits non-zero for any replay_required entry that is not
+materialized+SHA256-pinned+extractor-bound, as well as unexpected semantic changes or
+new failures unless explicitly approved in a checked-in expected-diff file.
+An inventory-only mode may report incomplete materialization without claiming replay
+readiness.
 
 - [ ] **Step 4: Ensure corpus replay never writes canonical DB**
 
