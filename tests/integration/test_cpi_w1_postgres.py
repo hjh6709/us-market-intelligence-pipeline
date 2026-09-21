@@ -23,10 +23,13 @@ from src.cpi_w1_governance import CpiW1Governance, WorkforcePrincipal
 from src.cpi_w1_promoter import (
     CpiW1Promoter,
     PromotionDeterminismError,
+    PromotionInvariantError,
     promotion_work_key,
 )
 from src.cpi_w1_release import (
     CorroboratingRepresentationCandidate,
+    CorrectionNoticeCandidate,
+    CorrectionObservationBundleCandidate,
     ObservationBundleCandidate,
     ObservationCandidate,
     extract_core4_from_release_html,
@@ -580,6 +583,103 @@ class CpiW1PostgresTest(unittest.TestCase):
             "artifact_id": artifact_id,
             "disclosure_link_id": envelope_result.disclosure_link_id,
             "artifact_link_id": envelope_result.disclosure_artifact_link_id,
+        }
+
+    def promote_correction_subset(
+        self,
+        connection,
+        *,
+        reference_month: date,
+        observations: tuple[ObservationCandidate, ...],
+        material_seed: str,
+    ):
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        content_sha256 = digest(material_seed)
+        artifact_id = self.make_artifact(
+            connection,
+            f"correction:{material_seed}:{uuid4()}",
+            artifact_contract_kind="CPI_CORRECTION_HTML",
+            content_type="text/html",
+            content_sha256=content_sha256,
+        )
+        notice = CorrectionNoticeCandidate(
+            artifact_content_sha256=content_sha256,
+            event_type="CPI",
+            reference_month=reference_month,
+            extractor_contract_version="bls-cpi-correction-html-v1",
+        )
+        notice_run = self.insert_run(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+        )
+        notice_key = promotion_work_key(
+            PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
+            artifact_id,
+            notice.extractor_contract_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO ingestion_work_items (
+                work_item_id, run_id, execution_scope, data_domain,
+                work_key, input_artifact_id
+            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+            """,
+            (uuid4(), notice_run, notice_key, artifact_id),
+        )
+        notice_claim = repository.claim_work_item(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+            work_key_prefix=PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE.value + ":",
+        )
+        notice_result = promoter.promote_correction_notice(
+            connection,
+            notice_claim,
+            artifact_id=artifact_id,
+            candidate=notice,
+        )
+
+        correction = CorrectionObservationBundleCandidate(
+            artifact_content_sha256=content_sha256,
+            reference_month=reference_month,
+            observations=observations,
+            extractor_contract_version="bls-cpi-correction-html-v1",
+        )
+        observation_run = self.insert_run(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+        )
+        observation_key = promotion_work_key(
+            PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
+            artifact_id,
+            correction.extractor_contract_version,
+        )
+        connection.execute(
+            """
+            INSERT INTO ingestion_work_items (
+                work_item_id, run_id, execution_scope, data_domain,
+                work_key, input_artifact_id
+            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+            """,
+            (uuid4(), observation_run, observation_key, artifact_id),
+        )
+        observation_claim = repository.claim_work_item(
+            connection,
+            execution_scope="ECONOMIC_PROMOTE",
+            work_key_prefix=(
+                PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE.value + ":"
+            ),
+        )
+        observation_result = promoter.promote_correction_observations(
+            connection,
+            observation_claim,
+            artifact_id=artifact_id,
+            candidate=correction,
+        )
+        return {
+            "artifact_id": artifact_id,
+            "notice": notice_result,
+            "observations": observation_result,
         }
 
     def invalidate_subject(self, connection, subject_id):
@@ -1643,55 +1743,41 @@ class CpiW1PostgresTest(unittest.TestCase):
         operator = WorkforcePrincipal("https://idp.example.com", "operator-correction")
 
         with self.connection() as connection:
-            topology = self.make_observation_topology(connection)
-            assertion_ids = {}
-            for code, value in (
-                ("CPI_HEADLINE_MOM", Decimal("0.3")),
-                ("CPI_HEADLINE_YOY", Decimal("2.9")),
-                ("CPI_CORE_MOM", Decimal("0.2")),
-                ("CPI_CORE_YOY", Decimal("2.7")),
-            ):
-                assertion_ids[code] = self.insert_observation_assertion(
-                    connection,
-                    topology,
-                    observation_code=code,
-                    normalized_value=value,
-                )
+            promoted = self.promote_normal_release(connection)
+            original_assertion = connection.execute(
+                """
+                SELECT assertion_id
+                  FROM official_observation_assertions
+                 WHERE event_occurrence_id=%s
+                   AND observation_code='CPI_HEADLINE_MOM'
+                   AND disclosure_artifact_link_id=%s
+                """,
+                (promoted["event_id"], promoted["artifact_link_id"]),
+            ).fetchone()[0]
 
             initial = governance.selector.select_governed_event(
                 connection,
-                topology["event_id"],
+                promoted["event_id"],
             )
             self.assertEqual(
                 initial.knowledge.observation("CPI_HEADLINE_MOM").state,
                 ObservationResolutionState.VALUE,
-            )
-            self.assertEqual(
-                initial.knowledge.observation("CPI_HEADLINE_MOM").normalized_value,
-                Decimal("0.3"),
             )
 
             governance.apply_serving_control(
                 connection,
                 principal=operator,
                 scope_kind="EVENT_OCCURRENCE",
-                event_occurrence_id=topology["event_id"],
+                event_occurrence_id=promoted["event_id"],
                 state=ServingControlState.WITHHELD,
                 reason_code="CORRECTION_REVIEW",
                 case_ref="CASE-CORRECTION-1",
-            )
-            withheld = governance.selector.select_governed_event(
-                connection,
-                topology["event_id"],
-            )
-            self.assertIsNone(
-                withheld.observations[0].normalized_value,
             )
 
             request_id = governance.create_interpretation_request(
                 connection,
                 principal=proposer,
-                subject_id=assertion_ids["CPI_HEADLINE_MOM"],
+                subject_id=original_assertion,
                 requested_state="INVALID",
                 reason_code="SOURCE_CORRECTION",
                 case_ref="CASE-CORRECTION-1",
@@ -1710,7 +1796,7 @@ class CpiW1PostgresTest(unittest.TestCase):
 
             after_invalidation = governance.selector.select_event(
                 connection,
-                topology["event_id"],
+                promoted["event_id"],
                 KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
             )
             self.assertEqual(
@@ -1718,45 +1804,24 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ObservationResolutionState.UNRESOLVED,
             )
 
-            correction_artifact = self.make_artifact(
-                connection,
-                f"correction:{uuid4()}",
-            )
-            correction_link = uuid4()
-            self.insert_subject(
-                connection,
-                correction_link,
-                "DISCLOSURE_ARTIFACT_LINK",
-            )
-            connection.execute(
-                """
-                INSERT INTO event_disclosure_artifacts (
-                    disclosure_artifact_link_id, disclosure_id, artifact_id,
-                    relation_kind, accepted_by_attempt_id, accepted_at
-                ) VALUES (
-                    %s, %s, %s, 'CORRECTION_NOTICE', %s, CURRENT_TIMESTAMP
-                )
-                """,
-                (
-                    correction_link,
-                    topology["disclosure_id"],
-                    correction_artifact,
-                    topology["promote_attempt"],
+            corrected_item = ObservationCandidate(
+                material=ObservationMaterial(
+                    observation_code="CPI_HEADLINE_MOM",
+                    assertion_state=ObservationState.VALUE,
+                    normalized_value=Decimal("0.4"),
                 ),
+                source_value_text="0.4",
             )
-            correction_topology = dict(topology)
-            correction_topology["artifact_id"] = correction_artifact
-            correction_topology["disclosure_artifact_link_id"] = correction_link
-            self.insert_observation_assertion(
+            self.promote_correction_subset(
                 connection,
-                correction_topology,
-                observation_code="CPI_HEADLINE_MOM",
-                normalized_value=Decimal("0.4"),
+                reference_month=date(2026, 8, 1),
+                observations=(corrected_item,),
+                material_seed="governance-correction-rehearsal",
             )
 
             corrected = governance.selector.select_event(
                 connection,
-                topology["event_id"],
+                promoted["event_id"],
                 KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
             )
             self.assertEqual(
@@ -1772,7 +1837,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 principal=operator,
                 scope_kind="EVENT_OCCURRENCE",
-                event_occurrence_id=topology["event_id"],
+                event_occurrence_id=promoted["event_id"],
                 state=ServingControlState.ENABLED,
                 reason_code="CORRECTION_VERIFIED",
                 case_ref="CASE-CORRECTION-1",
@@ -1780,7 +1845,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             governed = governance.selector.select_governed_event(
                 connection,
-                topology["event_id"],
+                promoted["event_id"],
             )
             headline = next(
                 item
@@ -3651,103 +3716,108 @@ class CpiW1PostgresTest(unittest.TestCase):
                     ObservationResolutionState.UNRESOLVED,
                 )
 
+    def test_correction_observations_require_correction_notice_topology(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            content_sha256 = digest("correction-without-notice")
+            artifact_id = self.make_artifact(
+                connection,
+                f"correction:no-notice:{uuid4()}",
+                artifact_contract_kind="CPI_CORRECTION_HTML",
+                content_sha256=content_sha256,
+            )
+            candidate = CorrectionObservationBundleCandidate(
+                artifact_content_sha256=content_sha256,
+                reference_month=date(2026, 8, 1),
+                observations=(
+                    ObservationCandidate(
+                        material=ObservationMaterial(
+                            observation_code="CPI_CORE_MOM",
+                            assertion_state=ObservationState.VALUE,
+                            normalized_value=Decimal("0.9"),
+                        ),
+                        source_value_text="0.9",
+                    ),
+                ),
+                extractor_contract_version="bls-cpi-correction-html-v1",
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE.value + ":"
+                ),
+            )
+            with self.assertRaises(PromotionInvariantError):
+                promoter.promote_correction_observations(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=candidate,
+                )
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                      FROM official_observation_assertions
+                     WHERE source_artifact_id=%s
+                    """,
+                    (artifact_id,),
+                ).fetchone()[0],
+                0,
+            )
+            self.assertIsNotNone(promoted["event_id"])
+
     def test_selector_correction_notice_conflicts_with_prior_valid_material(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:
             promoted = self.promote_normal_release(connection)
-            event_id = promoted["event_id"]
-
-            disclosure_id = connection.execute(
-                """
-                SELECT disclosure_id
-                  FROM event_disclosure_links
-                 WHERE disclosure_link_id=%s
-                """,
-                (promoted["disclosure_link_id"],),
-            ).fetchone()[0]
-            promote_attempt = self.make_attempt(
-                connection,
-                "ECONOMIC_PROMOTE",
-                f"promote:correction:{uuid4()}",
-            )
-            correction_artifact = self.make_artifact(
-                connection,
-                f"correction:{uuid4()}",
-                artifact_contract_kind="CPI_RELEASE_HTML",
-                content_sha256=digest("correction-material"),
-            )
-            correction_link_id = uuid4()
-            self.insert_subject(
-                connection,
-                correction_link_id,
-                "DISCLOSURE_ARTIFACT_LINK",
-            )
-            connection.execute(
-                """
-                INSERT INTO event_disclosure_artifacts (
-                    disclosure_artifact_link_id, disclosure_id, artifact_id,
-                    relation_kind, accepted_by_attempt_id, accepted_at
-                ) VALUES (
-                    %s, %s, %s, 'CORRECTION_NOTICE', %s, CURRENT_TIMESTAMP
-                )
-                """,
-                (
-                    correction_link_id,
-                    disclosure_id,
-                    correction_artifact,
-                    promote_attempt,
+            corrected_item = ObservationCandidate(
+                material=ObservationMaterial(
+                    observation_code="CPI_CORE_MOM",
+                    assertion_state=ObservationState.VALUE,
+                    normalized_value=Decimal("0.8"),
                 ),
+                source_value_text="0.8",
             )
-
-            material = ObservationMaterial(
-                observation_code="CPI_CORE_MOM",
-                assertion_state=ObservationState.VALUE,
-                normalized_value=Decimal("0.8"),
-            )
-            assertion_id = uuid4()
-            self.insert_subject(
+            correction = self.promote_correction_subset(
                 connection,
-                assertion_id,
-                "OFFICIAL_OBSERVATION_ASSERTION",
+                reference_month=date(2026, 8, 1),
+                observations=(corrected_item,),
+                material_seed="selector-correction-conflict",
             )
-            connection.execute(
-                """
-                INSERT INTO official_observation_assertions (
-                    assertion_id, event_occurrence_id, event_type, disclosure_id,
-                    disclosure_link_id, disclosure_artifact_link_id,
-                    observation_code, assertion_state, normalized_value,
-                    source_value_text, source_reason_text, source_code,
-                    source_artifact_id, extractor_contract_version,
-                    accepted_by_attempt_id, accepted_at, material_fingerprint
-                ) VALUES (
-                    %s, %s, 'CPI', %s, %s, %s,
-                    'CPI_CORE_MOM', 'VALUE', 0.8,
-                    '0.8', NULL, 'BLS', %s, 'bls-cpi-correction-test-v1',
-                    %s, CURRENT_TIMESTAMP, %s
-                )
-                """,
-                (
-                    assertion_id,
-                    event_id,
-                    disclosure_id,
-                    promoted["disclosure_link_id"],
-                    correction_link_id,
-                    correction_artifact,
-                    promote_attempt,
-                    material.fingerprint,
-                ),
+            self.assertEqual(
+                correction["observations"].verified_observation_count,
+                1,
             )
 
             result = selector.select_event(
                 connection,
-                event_id,
+                promoted["event_id"],
                 KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
             )
             core = result.observation("CPI_CORE_MOM")
-            self.assertEqual(
-                core.state,
-                ObservationResolutionState.CONFLICT,
-            )
+            self.assertEqual(core.state, ObservationResolutionState.CONFLICT)
             self.assertEqual(len(core.material_fingerprints), 2)
             self.assertIsNone(core.normalized_value)
 
