@@ -109,6 +109,13 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    @staticmethod
+    def lock_cpi_event(connection: Any, event_occurrence_id: UUID) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"CPI_EVENT:{event_occurrence_id}",),
+        )
+
     def claim_work_item(
         self,
         connection: Any,

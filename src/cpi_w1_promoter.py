@@ -209,6 +209,7 @@ class CpiW1Promoter:
             if event_row is None:
                 raise PromotionInvariantError("CPI event occurrence was not established")
             event_id = event_row[0]
+            self.repository.lock_cpi_event(connection, event_id)
 
             disclosure_key = canonical_release_disclosure_key(candidate.reference_month)
             disclosure_id = _stable_uuid("disclosure", disclosure_key)
@@ -505,6 +506,7 @@ class CpiW1Promoter:
                 )
 
             event_id, disclosure_id, disclosure_link_id = rows[0]
+            self.repository.lock_cpi_event(connection, event_id)
             existing = connection.execute(
                 """
                 SELECT disclosure_artifact_link_id
@@ -666,6 +668,7 @@ class CpiW1Promoter:
                     reference_month=candidate.reference_month,
                 )
             )
+            self.repository.lock_cpi_event(connection, event_id)
 
             inserted = 0
             for item in candidate.observations:
