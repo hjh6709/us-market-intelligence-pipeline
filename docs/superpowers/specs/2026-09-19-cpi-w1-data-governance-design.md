@@ -1207,6 +1207,16 @@ If the knowledge result is VALUE but the effective control is WITHHELD:
 - underlying evidence remains VALID unless separately governed;
 - the reason is a serving/governance reason, not a fabricated source state.
 
+A live governed consumer must not combine knowledge and control snapshots from
+different database states. The canonical live path selects current knowledge and
+effective serving controls inside one selector-owned REPEATABLE READ snapshot.
+
+If a lower-level caller supplies a previously selected knowledge object for overlay,
+the selector recomputes the current knowledge fingerprint inside the serving snapshot
+and rejects the request if the fingerprint changed. This prevents stale VALUE
+knowledge from being served after newly accepted conflicting evidence or governance
+invalidation.
+
 Live W1 governed-serving APIs must not accept a caller-selected serving-control time.
 They capture the effective control cutoff from the database clock so a caller cannot
 request an earlier decision point to bypass a current WITHHELD state.

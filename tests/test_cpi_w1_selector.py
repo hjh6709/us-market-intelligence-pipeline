@@ -283,6 +283,15 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertIn("TransactionStatus.IDLE", source)
         self.assertIn("with _consistent_read_transaction(connection):", source)
 
+    def test_live_governed_selector_has_atomic_entrypoint(self) -> None:
+        import inspect
+        from src.cpi_w1_selector import CpiW1Selector
+
+        parameters = inspect.signature(
+            CpiW1Selector.select_governed_event
+        ).parameters
+        self.assertEqual(tuple(parameters), ("self", "connection", "event_id"))
+
     def test_live_serving_overlay_has_no_caller_selected_decision_time(self) -> None:
         import inspect
         from src.cpi_w1_selector import CpiW1Selector
@@ -291,6 +300,11 @@ class CpiW1SelectorTest(unittest.TestCase):
             CpiW1Selector.apply_serving_overlay
         ).parameters
         self.assertNotIn("decision_time", parameters)
+
+    def test_live_overlay_revalidates_knowledge_fingerprint(self) -> None:
+        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
+        self.assertIn("knowledge changed before live serving overlay", source)
+        self.assertIn("current.knowledge_fingerprint", source)
 
     def test_knowledge_fingerprint_changes_when_semantic_state_changes(self) -> None:
         base = ObservationResolution(

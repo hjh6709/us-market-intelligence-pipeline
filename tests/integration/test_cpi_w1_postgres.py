@@ -32,7 +32,11 @@ from src.cpi_w1_release import (
     extract_release_envelope,
 )
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
-from src.cpi_w1_selector import CpiW1Selector, ObservationResolutionState
+from src.cpi_w1_selector import (
+    CpiW1Selector,
+    ObservationResolutionState,
+    StaleKnowledgeError,
+)
 
 
 RUN_POSTGRES_INTEGRATION = os.environ.get("RUN_POSTGRES_INTEGRATION") == "1"
@@ -3361,6 +3365,36 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(
                 result.observation("CPI_CORE_MOM").state,
                 ObservationResolutionState.UNRESOLVED,
+            )
+
+    def test_live_overlay_rejects_stale_knowledge_after_invalidation(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            stale = selector.select_event(
+                connection,
+                promoted["event_id"],
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.invalidate_subject(
+                connection,
+                promoted["artifact_link_id"],
+            )
+            with self.assertRaises(StaleKnowledgeError):
+                selector.apply_serving_overlay(
+                    connection,
+                    stale,
+                )
+
+            governed = selector.select_governed_event(
+                connection,
+                promoted["event_id"],
+            )
+            self.assertTrue(
+                all(
+                    item.knowledge_state is ObservationResolutionState.UNRESOLVED
+                    for item in governed.observations
+                )
             )
 
     def test_selector_serving_overlay_domain_withheld_overrides_event_enabled(self) -> None:

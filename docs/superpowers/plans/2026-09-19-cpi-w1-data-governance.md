@@ -955,7 +955,8 @@ git commit -m "feat: add fenced CPI W1 promotion workflow"
 
 **Interfaces:**
 - Produces:
-  - `select_event(event_id, mode, as_of=None) -> CpiEventKnowledge`
+  - `select_event(connection, event_id, mode, as_of=None) -> CpiEventKnowledge`
+  - `select_governed_event(connection, event_id) -> GovernedCpiEvent`
   - `apply_serving_overlay(connection, knowledge) -> GovernedCpiEvent`
 
 - [ ] **Step 1: Encode canonical selector vectors as tests**
@@ -1046,7 +1047,10 @@ Live governed overlay:
 - do not accept a caller-selected historical serving-control cutoff in W1;
 - calculate latest CPI_DOMAIN and EVENT_OCCURRENCE control states;
 - deny-overrides;
-- WITHHELD removes numeric values from governed consumer model.
+- WITHHELD removes numeric values from governed consumer model;
+- canonical live serving selects knowledge and controls from one snapshot;
+- lower-level overlay rejects a stale supplied knowledge fingerprint rather than
+  serving a prior VALUE after new conflict/invalidation.
 
 - [ ] **Step 9: Run and commit**
 

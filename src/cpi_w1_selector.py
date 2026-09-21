@@ -54,6 +54,10 @@ class SelectorDataIntegrityError(RuntimeError):
     """Durable evidence contradicts the selector contract."""
 
 
+class StaleKnowledgeError(RuntimeError):
+    """A live governed consumer attempted to reuse stale knowledge."""
+
+
 @dataclass(frozen=True)
 class ObservationResolution:
     observation_code: str
@@ -673,6 +677,59 @@ class CpiW1Selector:
             for code in _CORE4
         )
 
+    def _select_event_in_snapshot(
+        self,
+        connection: Any,
+        event_id: UUID,
+        mode: KnowledgeMode,
+        as_of: datetime | None,
+        evaluation_at: datetime,
+    ) -> CpiEventKnowledge:
+        row = connection.execute(
+            """
+            SELECT event_occurrence_id, reference_month
+              FROM core_event_occurrences
+             WHERE event_occurrence_id=%s
+               AND event_type='CPI'
+            """,
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"CPI event occurrence not found: {event_id}")
+
+        cutoff = as_of if mode is KnowledgeMode.SYSTEM_KNOWN_PIT else None
+        schedule = _select_schedule(
+            self._schedule_evidence(connection, event_id, cutoff)
+        )
+        release_ids = self._valid_release_links(
+            connection,
+            event_id,
+            cutoff,
+        )
+        observations = self._observation_resolutions(
+            connection,
+            event_id,
+            cutoff,
+        )
+        release_state = _project_release(
+            schedule,
+            has_valid_release=bool(release_ids),
+            evaluation_at=evaluation_at,
+        )
+        fingerprint = _knowledge_fingerprint(
+            event_id,
+            release_state,
+            observations,
+        )
+        return CpiEventKnowledge(
+            event_occurrence_id=row[0],
+            reference_month=row[1],
+            mode=mode,
+            release_state=release_state,
+            observations=observations,
+            knowledge_fingerprint=fingerprint,
+        )
+
     def select_event(
         self,
         connection: Any,
@@ -692,57 +749,17 @@ class CpiW1Selector:
             )
 
         with _consistent_read_transaction(connection):
-            row = connection.execute(
-                """
-                SELECT event_occurrence_id, reference_month
-                  FROM core_event_occurrences
-                 WHERE event_occurrence_id=%s
-                   AND event_type='CPI'
-                """,
-                (event_id,),
-            ).fetchone()
-            if row is None:
-                raise KeyError(f"CPI event occurrence not found: {event_id}")
-
-            if mode is KnowledgeMode.SYSTEM_KNOWN_PIT:
-                cutoff = as_of
-                evaluation_at = as_of
-            else:
-                cutoff = None
-                evaluation_at = connection.execute(
-                    "SELECT CURRENT_TIMESTAMP"
-                ).fetchone()[0]
-
-            schedule = _select_schedule(
-                self._schedule_evidence(connection, event_id, cutoff)
+            evaluation_at = (
+                as_of
+                if mode is KnowledgeMode.SYSTEM_KNOWN_PIT
+                else connection.execute("SELECT CURRENT_TIMESTAMP").fetchone()[0]
             )
-            release_ids = self._valid_release_links(
+            return self._select_event_in_snapshot(
                 connection,
                 event_id,
-                cutoff,
-            )
-            observations = self._observation_resolutions(
-                connection,
-                event_id,
-                cutoff,
-            )
-            release_state = _project_release(
-                schedule,
-                has_valid_release=bool(release_ids),
-                evaluation_at=evaluation_at,
-            )
-            fingerprint = _knowledge_fingerprint(
-                event_id,
-                release_state,
-                observations,
-            )
-            return CpiEventKnowledge(
-                event_occurrence_id=row[0],
-                reference_month=row[1],
-                mode=mode,
-                release_state=release_state,
-                observations=observations,
-                knowledge_fingerprint=fingerprint,
+                mode,
+                as_of,
+                evaluation_at,
             )
 
     @staticmethod
@@ -784,58 +801,108 @@ class CpiW1Selector:
             else ServingControlState.ENABLED
         )
 
+    def _apply_controls_in_snapshot(
+        self,
+        connection: Any,
+        knowledge: CpiEventKnowledge,
+        decision_time: datetime,
+    ) -> GovernedCpiEvent:
+        domain_state = self._control_state(
+            connection,
+            scope_kind="CPI_DOMAIN",
+            event_id=None,
+            decision_time=decision_time,
+        )
+        event_state = self._control_state(
+            connection,
+            scope_kind="EVENT_OCCURRENCE",
+            event_id=knowledge.event_occurrence_id,
+            decision_time=decision_time,
+        )
+        effective = (
+            ServingControlState.WITHHELD
+            if (
+                domain_state is ServingControlState.WITHHELD
+                or event_state is ServingControlState.WITHHELD
+            )
+            else ServingControlState.ENABLED
+        )
+        observations = tuple(
+            GovernedObservation(
+                observation_code=item.observation_code,
+                knowledge_state=item.state,
+                normalized_value=(
+                    None
+                    if (
+                        effective is ServingControlState.WITHHELD
+                        and item.state is ObservationResolutionState.VALUE
+                    )
+                    else item.normalized_value
+                ),
+                withheld=(
+                    effective is ServingControlState.WITHHELD
+                    and item.state is ObservationResolutionState.VALUE
+                ),
+            )
+            for item in knowledge.observations
+        )
+        return GovernedCpiEvent(
+            knowledge=knowledge,
+            effective_control_state=effective,
+            observations=observations,
+        )
+
+    def select_governed_event(
+        self,
+        connection: Any,
+        event_id: UUID,
+    ) -> GovernedCpiEvent:
+        """Select current knowledge and live controls from one database snapshot."""
+
+        with _consistent_read_transaction(connection):
+            snapshot_time = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
+            knowledge = self._select_event_in_snapshot(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+                None,
+                snapshot_time,
+            )
+            return self._apply_controls_in_snapshot(
+                connection,
+                knowledge,
+                snapshot_time,
+            )
+
     def apply_serving_overlay(
         self,
         connection: Any,
         knowledge: CpiEventKnowledge,
     ) -> GovernedCpiEvent:
+        """Apply live controls only if supplied knowledge is still current."""
+
+        if knowledge.mode is not KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION:
+            raise ValueError("live serving overlay accepts current source reconstruction only")
+
         with _consistent_read_transaction(connection):
-            decision_time = connection.execute(
+            snapshot_time = connection.execute(
                 "SELECT CURRENT_TIMESTAMP"
             ).fetchone()[0]
-
-            domain_state = self._control_state(
+            current = self._select_event_in_snapshot(
                 connection,
-                scope_kind="CPI_DOMAIN",
-                event_id=None,
-                decision_time=decision_time,
+                knowledge.event_occurrence_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+                None,
+                snapshot_time,
             )
-            event_state = self._control_state(
+            if current.knowledge_fingerprint != knowledge.knowledge_fingerprint:
+                raise StaleKnowledgeError(
+                    "knowledge changed before live serving overlay"
+                )
+            return self._apply_controls_in_snapshot(
                 connection,
-                scope_kind="EVENT_OCCURRENCE",
-                event_id=knowledge.event_occurrence_id,
-                decision_time=decision_time,
-            )
-            effective = (
-                ServingControlState.WITHHELD
-                if (
-                    domain_state is ServingControlState.WITHHELD
-                    or event_state is ServingControlState.WITHHELD
-                )
-                else ServingControlState.ENABLED
-            )
-
-            observations = tuple(
-                GovernedObservation(
-                    observation_code=item.observation_code,
-                    knowledge_state=item.state,
-                    normalized_value=(
-                        None
-                        if (
-                            effective is ServingControlState.WITHHELD
-                            and item.state is ObservationResolutionState.VALUE
-                        )
-                        else item.normalized_value
-                    ),
-                    withheld=(
-                        effective is ServingControlState.WITHHELD
-                        and item.state is ObservationResolutionState.VALUE
-                    ),
-                )
-                for item in knowledge.observations
-            )
-            return GovernedCpiEvent(
-                knowledge=knowledge,
-                effective_control_state=effective,
-                observations=observations,
+                current,
+                snapshot_time,
             )
