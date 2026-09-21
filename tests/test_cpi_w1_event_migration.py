@@ -123,6 +123,16 @@ class CpiW1EventMigrationTest(unittest.TestCase):
         ):
             self.assertIn(f"{table}_accepted_at_guard", self.sql)
 
+    def test_promoter_lineage_requires_current_claim_ownership(self) -> None:
+        self.assertIn("a.state = 'RUNNING'", self.sql)
+        self.assertIn("w.state = 'CLAIMED'", self.sql)
+        self.assertIn("w.claim_generation = a.attempt_number", self.sql)
+        self.assertIn("w.lease_until > CURRENT_TIMESTAMP", self.sql)
+        self.assertIn(
+            "canonical CPI evidence requires current ECONOMIC_PROMOTE claim ownership",
+            self.sql,
+        )
+
     def test_evidence_is_append_only(self) -> None:
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
         for table in (

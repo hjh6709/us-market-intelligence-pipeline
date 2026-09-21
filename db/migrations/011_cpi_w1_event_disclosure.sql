@@ -265,13 +265,22 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
-    SELECT execution_scope, data_domain
+    SELECT a.execution_scope, a.data_domain
       INTO STRICT lineage_scope, lineage_domain
-      FROM ingestion_attempts
-     WHERE attempt_id = lineage_attempt;
+      FROM ingestion_attempts a
+      JOIN ingestion_work_items w
+        ON w.work_item_id = a.work_item_id
+       AND w.execution_scope = a.execution_scope
+       AND w.data_domain = a.data_domain
+     WHERE a.attempt_id = lineage_attempt
+       AND a.state = 'RUNNING'
+       AND w.state = 'CLAIMED'
+       AND w.claim_generation = a.attempt_number
+       AND w.claim_token IS NOT NULL
+       AND w.lease_until > CURRENT_TIMESTAMP;
 
     IF lineage_scope <> 'ECONOMIC_PROMOTE' OR lineage_domain <> 'ECONOMIC' THEN
-        RAISE EXCEPTION 'canonical CPI evidence requires ECONOMIC_PROMOTE attempt lineage'
+        RAISE EXCEPTION 'canonical CPI evidence requires current ECONOMIC_PROMOTE claim ownership'
             USING ERRCODE = '23514';
     END IF;
     RETURN NEW;

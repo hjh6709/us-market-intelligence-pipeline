@@ -499,6 +499,56 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (uuid4(), collect_attempt),
                 )
 
+    def test_stale_promoter_attempt_cannot_insert_canonical_event(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"promote:stale:{uuid4()}",
+            )
+            first_token = uuid4()
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (first_token, work_id),
+            )
+            stale_attempt = self.insert_attempt(
+                connection,
+                work_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                attempt_number=1,
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET claim_generation=2,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.NoDataFound):
+                connection.execute(
+                    """
+                    INSERT INTO core_event_occurrences (
+                        event_occurrence_id, event_type, reference_month,
+                        created_by_attempt_id
+                    ) VALUES (%s, 'CPI', '2026-04-01', %s)
+                    """,
+                    (uuid4(), stale_attempt),
+                )
+
     def test_cpi_reference_month_must_be_first_day(self) -> None:
         with self.connection() as connection:
             attempt_id = self.make_attempt(
