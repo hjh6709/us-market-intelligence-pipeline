@@ -60,6 +60,14 @@ class CorroboratingRepresentationCandidate:
 
 
 @dataclass(frozen=True)
+class CorrectionNoticeCandidate:
+    artifact_content_sha256: str
+    event_type: str
+    reference_month: date
+    extractor_contract_version: str
+
+
+@dataclass(frozen=True)
 class ObservationCandidate:
     material: ObservationMaterial
     source_value_text: str
@@ -91,6 +99,29 @@ class ObservationBundleCandidate:
 
     def by_code(self) -> dict[str, ObservationCandidate]:
         return {item.observation_code: item for item in self.observations}
+
+
+@dataclass(frozen=True)
+class CorrectionObservationBundleCandidate:
+    artifact_content_sha256: str
+    reference_month: date
+    observations: tuple[ObservationCandidate, ...]
+    extractor_contract_version: str
+
+    def __post_init__(self) -> None:
+        codes = [item.observation_code for item in self.observations]
+        allowed = {
+            "CPI_HEADLINE_MOM",
+            "CPI_HEADLINE_YOY",
+            "CPI_CORE_MOM",
+            "CPI_CORE_YOY",
+        }
+        if not codes:
+            raise ValueError("correction observation bundle must not be empty")
+        if len(codes) != len(set(codes)):
+            raise ValueError("correction observation bundle contains duplicate semantics")
+        if not set(codes).issubset(allowed):
+            raise ValueError("correction observation bundle contains non-Core-4 semantics")
 
 
 @dataclass(frozen=True)

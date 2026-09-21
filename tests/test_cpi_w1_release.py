@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from src.cpi_w1_contracts import ObservationState, TimePrecision
 from src.cpi_w1_release import (
+    CorrectionObservationBundleCandidate,
     ExpectedReleaseNotVisible,
     ObservationExtractionError,
     extract_core4_from_release_html,
@@ -49,6 +50,34 @@ class CpiW1ReleaseHtmlTest(unittest.TestCase):
         )
         self.assertEqual(envelope.artifact_content_sha256, expected)
         self.assertEqual(bundle.artifact_content_sha256, expected)
+
+    def test_correction_bundle_requires_unique_nonempty_core4_subset(self) -> None:
+        bundle = extract_core4_from_release_html(
+            self.read("normal_aug_2026.html"),
+            expected_reference_month=date(2026, 8, 1),
+        )
+        one = (bundle.observations[0],)
+        candidate = CorrectionObservationBundleCandidate(
+            artifact_content_sha256="a" * 64,
+            reference_month=date(2026, 8, 1),
+            observations=one,
+            extractor_contract_version="bls-cpi-correction-html-v1",
+        )
+        self.assertEqual(len(candidate.observations), 1)
+        with self.assertRaises(ValueError):
+            CorrectionObservationBundleCandidate(
+                artifact_content_sha256="a" * 64,
+                reference_month=date(2026, 8, 1),
+                observations=(),
+                extractor_contract_version="bls-cpi-correction-html-v1",
+            )
+        with self.assertRaises(ValueError):
+            CorrectionObservationBundleCandidate(
+                artifact_content_sha256="a" * 64,
+                reference_month=date(2026, 8, 1),
+                observations=(one[0], one[0]),
+                extractor_contract_version="bls-cpi-correction-html-v1",
+            )
 
     def test_stale_current_release_is_typed_not_visible(self) -> None:
         with self.assertRaises(ExpectedReleaseNotVisible):

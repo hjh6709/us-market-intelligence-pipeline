@@ -15,7 +15,8 @@
     "CPI_SCHEDULE_HTML": 5242880,
     "BLS_GLOBAL_ICS": 2097152,
     "CPI_RELEASE_HTML": 8388608,
-    "CPI_TABLE1_XLSX": 20971520
+    "CPI_TABLE1_XLSX": 20971520,
+    "CPI_CORRECTION_HTML": 8388608
   },
   "locators": {
     "CPI_SCHEDULE_HTML": {
@@ -57,5 +58,15 @@
       "https://www.bls.gov/opub/copyright-information.htm",
       "https://www.bls.gov/developers/termsOfService.htm"
     ]
+  },
+  "dynamic_artifact_contracts": {
+    "CPI_CORRECTION_HTML": {
+      "surface_role": "CORRECTION_EVIDENCE",
+      "artifact_contract_kind": "CPI_CORRECTION_HTML",
+      "capture_chronology_allowed": false,
+      "requires_reference_month_validation": true,
+      "requires_explicit_disclosure_scope": true,
+      "locator_status": "NOT_YET_FROZEN"
+    }
   }
 }

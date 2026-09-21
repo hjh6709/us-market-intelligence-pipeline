@@ -45,6 +45,17 @@ class SourceLocator:
 
 
 @dataclass(frozen=True)
+class DynamicArtifactContract:
+    artifact_contract_kind: str
+    surface_role: str
+    max_bytes: int
+    capture_chronology_allowed: bool
+    requires_reference_month_validation: bool
+    requires_explicit_disclosure_scope: bool
+    locator_status: str
+
+
+@dataclass(frozen=True)
 class CapturedResponse:
     locator_key: str
     requested_url: str
@@ -65,6 +76,7 @@ class BlsCpiSourceContract:
     accept_encoding: str
     max_response_bytes: int
     locators: Mapping[str, SourceLocator]
+    dynamic_artifact_contracts: Mapping[str, DynamicArtifactContract]
 
     @classmethod
     def from_json(cls, path: str | Path) -> "BlsCpiSourceContract":
@@ -86,6 +98,24 @@ class BlsCpiSourceContract:
             )
             for key, value in raw["locators"].items()
         }
+        dynamic_artifact_contracts = {
+            key: DynamicArtifactContract(
+                artifact_contract_kind=value["artifact_contract_kind"],
+                surface_role=value["surface_role"],
+                max_bytes=int(limits[value["artifact_contract_kind"]]),
+                capture_chronology_allowed=bool(
+                    value.get("capture_chronology_allowed", False)
+                ),
+                requires_reference_month_validation=bool(
+                    value.get("requires_reference_month_validation", False)
+                ),
+                requires_explicit_disclosure_scope=bool(
+                    value.get("requires_explicit_disclosure_scope", False)
+                ),
+                locator_status=str(value.get("locator_status", "FROZEN")),
+            )
+            for key, value in raw.get("dynamic_artifact_contracts", {}).items()
+        }
         contract = cls(
             contract_version=raw["contract_version"],
             allowlisted_hosts=frozenset(transport["allowlisted_hosts"]),
@@ -95,6 +125,7 @@ class BlsCpiSourceContract:
             accept_encoding=str(transport["accept_encoding"]),
             max_response_bytes=int(transport["max_response_bytes"]),
             locators=locators,
+            dynamic_artifact_contracts=dynamic_artifact_contracts,
         )
         if contract.contract_version != "bls-cpi-source-v1":
             raise ValueError("unsupported CPI source contract version")
@@ -108,6 +139,11 @@ class BlsCpiSourceContract:
             for locator in self.locators.values()
             if locator.artifact_contract_kind == artifact_contract_kind
         }
+        roles.update(
+            contract.surface_role
+            for contract in self.dynamic_artifact_contracts.values()
+            if contract.artifact_contract_kind == artifact_contract_kind
+        )
         if len(roles) != 1:
             raise ValueError(
                 "artifact contract kind must map to exactly one CPI source role"
@@ -123,6 +159,11 @@ class BlsCpiSourceContract:
             for locator in self.locators.values()
             if locator.artifact_contract_kind == artifact_contract_kind
         }
+        values.update(
+            contract.capture_chronology_allowed
+            for contract in self.dynamic_artifact_contracts.values()
+            if contract.artifact_contract_kind == artifact_contract_kind
+        )
         if len(values) != 1:
             raise ValueError(
                 "artifact contract kind must map to one capture chronology policy"

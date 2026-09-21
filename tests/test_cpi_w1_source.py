@@ -80,6 +80,19 @@ class CpiW1SourceClientTest(unittest.TestCase):
         self.assertTrue(locator["requires_reference_month_validation"])
         self.assertFalse(locator["historical_as_released_authority"])
 
+    def test_dynamic_correction_contract_has_no_invented_locator(self) -> None:
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        correction = raw["dynamic_artifact_contracts"]["CPI_CORRECTION_HTML"]
+        self.assertEqual(correction["surface_role"], "CORRECTION_EVIDENCE")
+        self.assertEqual(correction["locator_status"], "NOT_YET_FROZEN")
+        self.assertTrue(correction["requires_reference_month_validation"])
+        self.assertTrue(correction["requires_explicit_disclosure_scope"])
+        self.assertNotIn("url", correction)
+        self.assertEqual(
+            self.contract.surface_role_for_artifact_kind("CPI_CORRECTION_HTML"),
+            "CORRECTION_EVIDENCE",
+        )
+
     def test_non_https_is_rejected_before_network(self) -> None:
         with self.assertRaises(SourceFetchError) as caught:
             self.contract.validate_url("http://www.bls.gov/news.release/cpi.nr0.htm")
