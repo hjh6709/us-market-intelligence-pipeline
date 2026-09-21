@@ -10,6 +10,7 @@ from src.cpi_w1_contracts import (
 )
 from src.cpi_w1_schedule import (
     ScheduleParseError,
+    parse_bls_revised_release_dates_html,
     parse_cpi_schedule_html,
     parse_cpi_schedule_ics,
 )
@@ -88,6 +89,84 @@ class CpiW1ScheduleTest(unittest.TestCase):
                 self.read("absent.html"),
                 expected_reference_month=REFERENCE_MONTH,
                 contract_version="bls-cpi-source-v1",
+            )
+
+    def test_revised_release_dates_require_exact_cpi_cancellation_row(self) -> None:
+        body = b"""<table>
+        <tr>
+          <th>Release</th><th>Reference period</th>
+          <th>Previously scheduled release date</th>
+          <th>Revised release date</th><th>Time</th>
+        </tr>
+        <tr>
+          <td>Employment Situation</td><td>October 2025</td>
+          <td>Friday, November 7, 2025</td><td>Canceled</td><td></td>
+        </tr>
+        <tr>
+          <td>Consumer Price Index</td><td>October 2025</td>
+          <td>Thursday, November 13, 2025</td><td>Canceled (See CPI note)</td><td></td>
+        </tr>
+        </table>"""
+        candidate = parse_bls_revised_release_dates_html(
+            body,
+            expected_reference_month=date(2025, 10, 1),
+        )
+        self.assertEqual(candidate.schedule_status, ScheduleStatus.CANCELED)
+        self.assertEqual(candidate.reference_month, date(2025, 10, 1))
+        self.assertEqual(candidate.source_role, SourceAuthorityRole.AUTHORITATIVE)
+        self.assertIsNone(candidate.scheduled_at)
+
+    def test_other_program_cancellation_cannot_cancel_cpi(self) -> None:
+        body = b"""<table>
+        <tr>
+          <th>Release</th><th>Reference period</th>
+          <th>Previously scheduled release date</th>
+          <th>Revised release date</th><th>Time</th>
+        </tr>
+        <tr>
+          <td>Employment Situation</td><td>October 2025</td>
+          <td>Friday, November 7, 2025</td><td>Canceled</td><td></td>
+        </tr>
+        </table>"""
+        with self.assertRaises(ScheduleParseError):
+            parse_bls_revised_release_dates_html(
+                body,
+                expected_reference_month=date(2025, 10, 1),
+            )
+
+    def test_matching_cpi_row_without_explicit_canceled_marker_is_rejected(self) -> None:
+        body = b"""<table>
+        <tr>
+          <th>Release</th><th>Reference period</th>
+          <th>Previously scheduled release date</th>
+          <th>Revised release date</th><th>Time</th>
+        </tr>
+        <tr>
+          <td>Consumer Price Index</td><td>October 2025</td>
+          <td>Thursday, November 13, 2025</td>
+          <td>Thursday, December 18, 2025</td><td>8:30 AM ET</td>
+        </tr>
+        </table>"""
+        with self.assertRaises(ScheduleParseError):
+            parse_bls_revised_release_dates_html(
+                body,
+                expected_reference_month=date(2025, 10, 1),
+            )
+
+    def test_duplicate_cpi_cancellation_rows_are_ambiguous(self) -> None:
+        body = b"""<table>
+        <tr>
+          <th>Release</th><th>Reference period</th>
+          <th>Previously scheduled release date</th>
+          <th>Revised release date</th><th>Time</th>
+        </tr>
+        <tr><td>Consumer Price Index</td><td>October 2025</td><td>A</td><td>Canceled</td><td></td></tr>
+        <tr><td>Consumer Price Index</td><td>October 2025</td><td>B</td><td>Canceled</td><td></td></tr>
+        </table>"""
+        with self.assertRaises(ScheduleParseError):
+            parse_bls_revised_release_dates_html(
+                body,
+                expected_reference_month=date(2025, 10, 1),
             )
 
     def test_stale_ics_is_fallback_not_authoritative(self) -> None:

@@ -12,10 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from src.cpi_w1_release import extract_core4_from_release_html
+from src.cpi_w1_schedule import parse_bls_revised_release_dates_html
 
 
 _SCHEMA_VERSION = "cpi-w1-corpus-v1"
 _RELEASE_EXTRACTOR = "bls-cpi-release-html-v1"
+_CANCELLATION_EXTRACTOR = "bls-cpi-revised-release-dates-v1"
 _ALLOWED_MATERIALIZATION = {"MATERIALIZED", "REMOTE_ONLY"}
 _PASS_SEMANTIC = {"SEMANTIC_UNCHANGED", "EXPECTED_CHANGED"}
 
@@ -248,6 +250,38 @@ def replay_entry(entry: dict[str, Any], repo_root: Path) -> ReplayEntryResult:
         return ReplayEntryResult(entry["corpus_id"], status, "NOT_RUN")
 
     extractor = entry["extractor_contract_version"]
+    expected = entry.get("expected_semantics") or {}
+    if extractor == _CANCELLATION_EXTRACTOR:
+        year, month = map(int, entry["reference_month"].split("-"))
+        try:
+            candidate = parse_bls_revised_release_dates_html(
+                (repo_root / entry["local_path"]).read_bytes(),
+                expected_reference_month=date(year, month, 1),
+                extractor_contract_version=extractor,
+            )
+        except Exception as exc:
+            return ReplayEntryResult(
+                entry["corpus_id"],
+                status,
+                "NEWLY_FAILED",
+                f"{type(exc).__name__}: {exc}",
+            )
+        if (
+            expected.get("kind") == "CANCELLATION"
+            and candidate.schedule_status.value == expected.get("schedule_status")
+        ):
+            return ReplayEntryResult(
+                entry["corpus_id"],
+                status,
+                "SEMANTIC_UNCHANGED",
+            )
+        return ReplayEntryResult(
+            entry["corpus_id"],
+            status,
+            "UNEXPECTED_CHANGED",
+            "cancellation semantics differ from pinned expectation",
+        )
+
     if extractor != _RELEASE_EXTRACTOR:
         return ReplayEntryResult(
             entry["corpus_id"],
@@ -255,8 +289,6 @@ def replay_entry(entry: dict[str, Any], repo_root: Path) -> ReplayEntryResult:
             "NOT_RUN",
             f"extractor not implemented by replay tool: {extractor}",
         )
-
-    expected = entry.get("expected_semantics") or {}
     if expected.get("kind") != "CORE4":
         return ReplayEntryResult(
             entry["corpus_id"],

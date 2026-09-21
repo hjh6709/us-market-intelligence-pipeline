@@ -756,7 +756,7 @@
         "EXPLICIT_CANCELLATION",
         "2025_LAPSE_IN_APPROPRIATIONS"
       ],
-      "extractor_contract_version": null
+      "extractor_contract_version": "bls-cpi-revised-release-dates-v1"
     },
     {
       "corpus_id": "cpi:2025-11:release-html",

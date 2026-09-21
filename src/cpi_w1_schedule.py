@@ -282,6 +282,89 @@ def parse_cpi_schedule_html(
     return candidates[0]
 
 
+def _is_explicit_canceled_cell(value: str) -> bool:
+    normalized = " ".join(value.split()).lower()
+    return re.fullmatch(
+        r"cancell?ed(?:\s*\(see\s+.*\s+note\))?",
+        normalized,
+    ) is not None
+
+
+def parse_bls_revised_release_dates_html(
+    body: bytes,
+    *,
+    expected_reference_month: date,
+    extractor_contract_version: str = "bls-cpi-revised-release-dates-v1",
+) -> ScheduleCandidate:
+    """Parse explicit CPI cancellation from the BLS lapse revised-dates surface."""
+
+    if expected_reference_month.day != 1:
+        raise ValueError("expected_reference_month must be the first day of the month")
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ScheduleParseError(
+            "BLS revised release dates HTML must be UTF-8"
+        ) from exc
+
+    parser = _SemanticTableParser()
+    parser.feed(text)
+    required = (
+        "release",
+        "reference period",
+        "previously scheduled release date",
+        "revised release date",
+        "time",
+    )
+    matches: list[ScheduleCandidate] = []
+
+    for rows in parser.tables:
+        if not rows:
+            continue
+        headers = [_normalize_header(cell) for cell in rows[0]]
+        if not all(header in headers for header in required):
+            continue
+        indexes = {header: headers.index(header) for header in required}
+        needed = max(indexes.values())
+
+        for row in rows[1:]:
+            if len(row) <= needed:
+                continue
+            if _normalize_header(row[indexes["release"]]) != "consumer price index":
+                continue
+            try:
+                reference_month = _parse_reference_month(
+                    row[indexes["reference period"]]
+                )
+            except ScheduleParseError:
+                continue
+            if reference_month != expected_reference_month:
+                continue
+            revised = row[indexes["revised release date"]]
+            if not _is_explicit_canceled_cell(revised):
+                raise ScheduleParseError(
+                    "matching CPI exception row is not explicitly canceled"
+                )
+            matches.append(
+                ScheduleCandidate(
+                    reference_month=reference_month,
+                    schedule_status=ScheduleStatus.CANCELED,
+                    scheduled_date=None,
+                    scheduled_at=None,
+                    schedule_timezone=None,
+                    time_precision=None,
+                    source_role=SourceAuthorityRole.AUTHORITATIVE,
+                    extractor_contract_version=extractor_contract_version,
+                )
+            )
+
+    if len(matches) != 1:
+        raise ScheduleParseError(
+            "expected exactly one explicitly canceled CPI exception row"
+        )
+    return matches[0]
+
+
 def _unfold_ics_lines(text: str) -> list[str]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     unfolded: list[str] = []
