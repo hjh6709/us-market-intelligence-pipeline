@@ -2639,7 +2639,7 @@ class CpiW1PostgresTest(unittest.TestCase):
 
             changed = []
             for item in html_bundle.observations:
-                if item.observation_code == "CPI_HEADLINE_MOM":
+                if item.observation_code == "CPI_CORE_MOM":
                     changed.append(
                         ObservationCandidate(
                             material=ObservationMaterial(
@@ -2695,7 +2695,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """
                 SELECT normalized_value, source_artifact_id
                   FROM official_observation_assertions
-                 WHERE observation_code='CPI_HEADLINE_MOM'
+                 WHERE observation_code='CPI_CORE_MOM'
                  ORDER BY source_artifact_id
                 """
             ).fetchall()
