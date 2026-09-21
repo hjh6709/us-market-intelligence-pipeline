@@ -52,6 +52,22 @@ class CpiW1PromoterTest(unittest.TestCase):
         link_subject = SOURCE.index('"EVENT_DISCLOSURE_LINK"')
         self.assertLess(link_select, link_subject)
 
+    def test_event_fence_precedes_secondary_topology_validation(self) -> None:
+        corroborating = SOURCE.index("def promote_corroborating_representation")
+        observation = SOURCE.index("def _current_valid_observation_topology")
+        corroborating_body = SOURCE[corroborating:observation]
+        self.assertLess(
+            corroborating_body.index("lock_cpi_event"),
+            corroborating_body.index("SELECT e.event_occurrence_id"),
+        )
+
+        observation_promote = SOURCE.index("def promote_observation_bundle")
+        observation_body = SOURCE[observation_promote:]
+        self.assertLess(
+            observation_body.index("lock_cpi_event"),
+            observation_body.index("_current_valid_observation_topology"),
+        )
+
     def test_canonical_promotion_takes_event_fence(self) -> None:
         self.assertGreaterEqual(SOURCE.count("lock_cpi_event(connection, event_id)"), 3)
 

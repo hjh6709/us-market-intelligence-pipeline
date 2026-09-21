@@ -477,6 +477,21 @@ class CpiW1Promoter:
                 extractor_contract_version=candidate.extractor_contract_version,
             )
 
+            event_row = connection.execute(
+                """
+                SELECT event_occurrence_id
+                  FROM core_event_occurrences
+                 WHERE event_type='CPI' AND reference_month=%s
+                """,
+                (candidate.reference_month,),
+            ).fetchone()
+            if event_row is None:
+                raise PromotionInvariantError(
+                    "corroborating representation requires existing CPI occurrence"
+                )
+            expected_event_id = event_row[0]
+            self.repository.lock_cpi_event(connection, expected_event_id)
+
             rows = connection.execute(
                 """
                 SELECT e.event_occurrence_id, d.disclosure_id, l.disclosure_link_id
@@ -506,7 +521,10 @@ class CpiW1Promoter:
                 )
 
             event_id, disclosure_id, disclosure_link_id = rows[0]
-            self.repository.lock_cpi_event(connection, event_id)
+            if event_id != expected_event_id:
+                raise PromotionInvariantError(
+                    "corroborating topology resolved to unexpected CPI occurrence"
+                )
             existing = connection.execute(
                 """
                 SELECT disclosure_artifact_link_id
@@ -661,6 +679,21 @@ class CpiW1Promoter:
                 artifact_content_sha256=candidate.artifact_content_sha256,
                 extractor_contract_version=candidate.extractor_contract_version,
             )
+            event_row = connection.execute(
+                """
+                SELECT event_occurrence_id
+                  FROM core_event_occurrences
+                 WHERE event_type='CPI' AND reference_month=%s
+                """,
+                (candidate.reference_month,),
+            ).fetchone()
+            if event_row is None:
+                raise PromotionInvariantError(
+                    "observation promotion requires existing CPI occurrence"
+                )
+            expected_event_id = event_row[0]
+            self.repository.lock_cpi_event(connection, expected_event_id)
+
             event_id, disclosure_id, disclosure_link_id, artifact_link_id = (
                 self._current_valid_observation_topology(
                     connection,
@@ -668,7 +701,10 @@ class CpiW1Promoter:
                     reference_month=candidate.reference_month,
                 )
             )
-            self.repository.lock_cpi_event(connection, event_id)
+            if event_id != expected_event_id:
+                raise PromotionInvariantError(
+                    "observation topology resolved to unexpected CPI occurrence"
+                )
 
             inserted = 0
             for item in candidate.observations:
