@@ -406,6 +406,10 @@ Allowed work behavior:
 - that retry transition first terminalizes the current attempt with a durable
   operational failure reason, then clears claim ownership and returns the work to
   PENDING; attempt history is never rewritten;
+- W1 retry scheduling uses a policy-owned relative delay against the database clock,
+  not a caller-selected absolute timestamp. The initial operational policy bounds one
+  retry delay to 1 second through 24 hours; longer deferral requires explicit
+  orchestration rather than silently parking one work item.
 - an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
 - reclaim closes the previous still-RUNNING attempt as FAILED with durable
   `LEASE_EXPIRED_RECLAIM` operational reason before creating the new generation, so a
@@ -531,6 +535,12 @@ Required concepts:
 - created_at.
 
 A source_artifact row represents one successful capture event, not a globally deduplicated content object. Its durable idempotency identity is scoped to the collector attempt and captured locator/content, for example created_by_attempt_id + locator_key + content_sha256. Repeated captures by different attempts may therefore create distinct artifact rows even when bytes are identical.
+
+Within that same capture identity, an idempotent metadata retry must match all immutable
+capture metadata: source, artifact/source contract kinds and versions, locator/URL,
+content hash/type, captured_at, retention state, and retained-object identity. The
+original captured_at and object generation are preserved; a retry may not silently
+reinterpret the capture.
 
 This is intentional: captured_at must remain the time of that specific successful capture and must not become an imprecise "first observed" timestamp caused by cross-attempt deduplication. Semantic selectors already converge identical material from multiple artifacts, so CPI W1 does not need global artifact-row deduplication.
 

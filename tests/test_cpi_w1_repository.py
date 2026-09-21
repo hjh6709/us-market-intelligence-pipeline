@@ -2,7 +2,12 @@ import unittest
 from pathlib import Path
 from uuid import UUID
 
-from src.cpi_w1_repository import Claim, CpiW1Repository, _validate_reason
+from src.cpi_w1_repository import (
+    MAX_RETRY_DELAY_SECONDS,
+    Claim,
+    CpiW1Repository,
+    _validate_reason,
+)
 
 
 SOURCE = Path("src/cpi_w1_repository.py").read_text(encoding="utf-8")
@@ -38,6 +43,31 @@ class CpiW1RepositoryTest(unittest.TestCase):
         close_pos = SOURCE.index("LEASE_EXPIRED_RECLAIM")
         new_attempt_pos = SOURCE.index("INSERT INTO ingestion_attempts", close_pos)
         self.assertLess(close_pos, new_attempt_pos)
+
+    def test_retry_delay_is_policy_bounded_and_database_clock_owned(self) -> None:
+        retry_pos = SOURCE.index("def retry_claim")
+        retry_body = SOURCE[retry_pos:]
+        self.assertIn("retry_after_seconds", retry_body)
+        self.assertIn("MAX_RETRY_DELAY_SECONDS", retry_body)
+        self.assertIn(
+            "next_claim_at=CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')",
+            retry_body,
+        )
+        self.assertEqual(MAX_RETRY_DELAY_SECONDS, 86400)
+
+    def test_artifact_retry_compares_all_immutable_metadata(self) -> None:
+        for fragment in (
+            "artifact_contract_kind",
+            "source_contract_version",
+            "retrieval_url",
+            "content_type",
+            "captured_at",
+            "content_state",
+            "storage_uri",
+            "storage_generation",
+            "same collector attempt/locator retry changed immutable artifact metadata",
+        ):
+            self.assertIn(fragment, SOURCE)
 
     def test_retry_closes_attempt_before_returning_work_to_pending(self) -> None:
         retry_pos = SOURCE.index("def retry_claim")

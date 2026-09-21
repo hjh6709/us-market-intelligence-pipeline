@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 
 _REASON_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+MAX_RETRY_DELAY_SECONDS = 24 * 60 * 60
 
 
 class StaleClaimError(RuntimeError):
@@ -306,10 +307,19 @@ class CpiW1Repository:
         claim: Claim,
         *,
         reason_code: str,
-        next_claim_at: datetime,
+        retry_after_seconds: int,
     ) -> None:
         if _REASON_RE.fullmatch(reason_code) is None:
             raise ValueError("retry reason_code must be canonical uppercase token")
+        if (
+            not isinstance(retry_after_seconds, int)
+            or isinstance(retry_after_seconds, bool)
+            or retry_after_seconds < 1
+            or retry_after_seconds > MAX_RETRY_DELAY_SECONDS
+        ):
+            raise ValueError(
+                f"retry_after_seconds must be in [1, {MAX_RETRY_DELAY_SECONDS}]"
+            )
         with connection.transaction():
             self.assert_current_claim(connection, claim)
             attempt = connection.execute(
@@ -352,7 +362,7 @@ class CpiW1Repository:
                        reason_code=NULL,
                        claim_token=NULL,
                        lease_until=NULL,
-                       next_claim_at=%s
+                       next_claim_at=CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
                  WHERE work_item_id=%s
                    AND execution_scope=%s
                    AND state='CLAIMED'
@@ -361,7 +371,7 @@ class CpiW1Repository:
                  RETURNING work_item_id
                 """,
                 (
-                    next_claim_at,
+                    retry_after_seconds,
                     claim.work_item_id,
                     claim.execution_scope,
                     claim.claim_generation,
@@ -407,6 +417,8 @@ class CpiW1Repository:
             raise ValueError("source artifacts require ECONOMIC_COLLECT ownership")
         if re.fullmatch(r"[0-9a-f]{64}", content_sha256) is None:
             raise ValueError("content_sha256 must be lowercase SHA-256")
+        if captured_at.tzinfo is None or captured_at.utcoffset() is None:
+            raise ValueError("captured_at must be timezone-aware")
         if (storage_uri is None) != (storage_generation is None):
             raise ValueError("storage_uri and storage_generation must appear together")
         content_state = "RETAINED" if storage_uri is not None else "NOT_RETAINED"
@@ -416,7 +428,10 @@ class CpiW1Repository:
 
             existing = connection.execute(
                 """
-                SELECT artifact_id, content_sha256
+                SELECT artifact_id, source_code, artifact_contract_kind,
+                       source_contract_version, retrieval_url, content_sha256,
+                       content_type, captured_at, content_state,
+                       storage_uri, storage_generation
                   FROM source_artifacts
                  WHERE created_by_attempt_id=%s
                    AND locator_key=%s
@@ -425,12 +440,28 @@ class CpiW1Repository:
                 (claim.attempt_id, locator_key),
             ).fetchall()
             if existing:
-                matches = [row for row in existing if row[1] == content_sha256]
-                if len(matches) == 1 and len(existing) == 1:
-                    return matches[0][0]
-                raise RepositoryInvariantError(
-                    "one collector attempt/locator produced different artifact material"
+                if len(existing) != 1:
+                    raise RepositoryInvariantError(
+                        "one collector attempt/locator resolved to multiple artifacts"
+                    )
+                row = existing[0]
+                expected = (
+                    source_code,
+                    artifact_contract_kind,
+                    source_contract_version,
+                    retrieval_url,
+                    content_sha256,
+                    content_type,
+                    captured_at,
+                    content_state,
+                    storage_uri,
+                    storage_generation,
                 )
+                if tuple(row[1:]) != expected:
+                    raise RepositoryInvariantError(
+                        "same collector attempt/locator retry changed immutable artifact metadata"
+                    )
+                return row[0]
 
             artifact_id = uuid4()
             connection.execute(

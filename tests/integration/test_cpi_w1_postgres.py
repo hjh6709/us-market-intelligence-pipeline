@@ -1713,9 +1713,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 second,
                 reason_code="TRANSIENT_DEPENDENCY",
-                next_claim_at=connection.execute(
-                    "SELECT CURRENT_TIMESTAMP + INTERVAL '1 minute'"
-                ).fetchone()[0],
+                retry_after_seconds=60,
             )
             pending = connection.execute(
                 """
@@ -1741,6 +1739,118 @@ class CpiW1PostgresTest(unittest.TestCase):
                 second_attempt,
                 ("TERMINAL", "FAILED", "TRANSIENT_DEPENDENCY"),
             )
+
+    def test_artifact_same_identity_rejects_metadata_drift(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                work_key=f"collect:artifact-idempotency:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_COLLECT",
+            )
+            captured_at = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
+            artifact_id = repository.record_source_artifact(
+                connection,
+                claim,
+                source_code="BLS",
+                artifact_contract_kind="CPI_RELEASE_HTML",
+                source_contract_version="bls-cpi-source-v1",
+                locator_key="CURRENT_CPI_RELEASE_HTML",
+                content_sha256=digest("same-material"),
+                content_type="text/html",
+                captured_at=captured_at,
+                retrieval_url="https://www.bls.gov/news.release/cpi.nr0.htm",
+            )
+            same_id = repository.record_source_artifact(
+                connection,
+                claim,
+                source_code="BLS",
+                artifact_contract_kind="CPI_RELEASE_HTML",
+                source_contract_version="bls-cpi-source-v1",
+                locator_key="CURRENT_CPI_RELEASE_HTML",
+                content_sha256=digest("same-material"),
+                content_type="text/html",
+                captured_at=captured_at,
+                retrieval_url="https://www.bls.gov/news.release/cpi.nr0.htm",
+            )
+            self.assertEqual(same_id, artifact_id)
+            with self.assertRaises(Exception):
+                repository.record_source_artifact(
+                    connection,
+                    claim,
+                    source_code="BLS",
+                    artifact_contract_kind="CPI_RELEASE_HTML",
+                    source_contract_version="bls-cpi-source-v2",
+                    locator_key="CURRENT_CPI_RELEASE_HTML",
+                    content_sha256=digest("same-material"),
+                    content_type="text/html",
+                    captured_at=captured_at,
+                    retrieval_url="https://www.bls.gov/news.release/cpi.nr0.htm",
+                )
+
+    def test_retry_delay_uses_database_clock_and_rejects_unbounded_delay(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            before = connection.execute("SELECT CURRENT_TIMESTAMP").fetchone()[0]
+            repository.retry_claim(
+                connection,
+                claim,
+                reason_code="TRANSIENT_DEPENDENCY",
+                retry_after_seconds=60,
+            )
+            next_claim_at = connection.execute(
+                "SELECT next_claim_at FROM ingestion_work_items WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+            self.assertGreaterEqual(next_claim_at, before)
+            self.assertLessEqual(
+                (next_claim_at - before).total_seconds(),
+                61,
+            )
+
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            with self.assertRaises(ValueError):
+                repository.retry_claim(
+                    connection,
+                    claim,
+                    reason_code="TRANSIENT_DEPENDENCY",
+                    retry_after_seconds=86401,
+                )
 
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
         repository = CpiW1Repository()

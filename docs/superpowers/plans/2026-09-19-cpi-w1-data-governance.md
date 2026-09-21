@@ -833,6 +833,9 @@ Claim:
   creating the new attempt generation;
 - retry-to-PENDING terminalizes the current attempt with a durable reason before
   clearing ownership and setting next_claim_at.
+- Retry scheduling accepts only a bounded relative delay (W1: 1 second to 24 hours)
+  and derives next_claim_at from the database clock; callers do not supply an
+  absolute retry timestamp.
 
 Promotion work uses a deterministic promotion-family-prefixed work key:
 `<promotion_family>:<artifact_id>:<extractor_contract_version>`.
@@ -846,6 +849,9 @@ same outcome; SKIPPED is the only terminal work outcome with no attempt.
 - [ ] **Step 3: Implement source-artifact recording**
 
 Same attempt + locator + hash must converge to one artifact row. Different attempts may create distinct artifact rows for the same bytes.
+A metadata retry must match the full immutable capture tuple, not only the hash. Reject
+drift in source/contract/content type/retrieval URL/captured_at/retention/object
+generation. Preserve the original capture timestamp.
 
 - [ ] **Step 4: Implement `CPI_RELEASE_ENVELOPE_PROMOTE`**
 
