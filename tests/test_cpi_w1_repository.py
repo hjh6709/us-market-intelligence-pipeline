@@ -84,6 +84,14 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("state='PENDING'", retry_body)
         self.assertIn("reason_code=NULL", retry_body)
 
+    def test_renew_claim_preserves_generation_and_token(self) -> None:
+        self.assertIn("def renew_claim(", SOURCE)
+        self.assertIn("w.claim_generation=%s", SOURCE)
+        self.assertIn("w.claim_token=%s", SOURCE)
+        self.assertIn("w.lease_until > CURRENT_TIMESTAMP", SOURCE)
+        self.assertIn("a.state='RUNNING'", SOURCE)
+        self.assertIn("GREATEST(", SOURCE)
+
     def test_terminalization_orders_attempt_before_work(self) -> None:
         attempt_pos = SOURCE.index("UPDATE ingestion_attempts a")
         work_pos = SOURCE.index("UPDATE ingestion_work_items", attempt_pos)

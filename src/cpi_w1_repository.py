@@ -232,6 +232,58 @@ class CpiW1Repository:
             raise RepositoryInvariantError("attempt ownership does not match claim")
         return run_id, input_artifact_id
 
+    def renew_claim(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        lease_seconds: int = 300,
+    ) -> datetime:
+        if lease_seconds < 1 or lease_seconds > 3600:
+            raise ValueError("lease_seconds must be in [1, 3600]")
+
+        with connection.transaction():
+            row = connection.execute(
+                """
+                UPDATE ingestion_work_items w
+                   SET lease_until = GREATEST(
+                           w.lease_until,
+                           CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
+                       )
+                  FROM ingestion_attempts a
+                 WHERE w.work_item_id=%s
+                   AND w.execution_scope=%s
+                   AND w.data_domain='ECONOMIC'
+                   AND w.state='CLAIMED'
+                   AND w.claim_generation=%s
+                   AND w.claim_token=%s
+                   AND w.lease_until > CURRENT_TIMESTAMP
+                   AND a.attempt_id=%s
+                   AND a.work_item_id=w.work_item_id
+                   AND a.execution_scope=w.execution_scope
+                   AND a.data_domain=w.data_domain
+                   AND a.state='RUNNING'
+                   AND a.attempt_number=w.claim_generation
+                 RETURNING w.lease_until, w.claim_token, w.claim_generation
+                """,
+                (
+                    lease_seconds,
+                    claim.work_item_id,
+                    claim.execution_scope,
+                    claim.claim_generation,
+                    claim.claim_token,
+                    claim.attempt_id,
+                ),
+            ).fetchone()
+            if row is None:
+                raise StaleClaimError("claim is stale or expired and cannot be renewed")
+            lease_until, claim_token, claim_generation = row
+            if claim_token != claim.claim_token:
+                raise RepositoryInvariantError("lease renewal changed claim token")
+            if int(claim_generation) != claim.claim_generation:
+                raise RepositoryInvariantError("lease renewal changed claim generation")
+            return lease_until
+
     def terminalize_claim_in_transaction(
         self,
         connection: Any,

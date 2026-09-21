@@ -1644,6 +1644,83 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone()
             self.assertEqual(attempt, (1, "RUNNING"))
 
+    def test_repository_renews_active_claim_without_changing_owner(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                lease_seconds=30,
+            )
+            before = connection.execute(
+                """
+                SELECT claim_generation, claim_token, lease_until
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            renewed_until = repository.renew_claim(
+                connection,
+                claim,
+                lease_seconds=120,
+            )
+            after = connection.execute(
+                """
+                SELECT claim_generation, claim_token, lease_until
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(after[0], before[0])
+            self.assertEqual(after[1], before[1])
+            self.assertGreaterEqual(after[2], before[2])
+            self.assertEqual(after[2], renewed_until)
+
+    def test_repository_cannot_renew_expired_claim(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                lease_seconds=30,
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET lease_until=CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            with self.assertRaises(StaleClaimError):
+                repository.renew_claim(
+                    connection,
+                    claim,
+                    lease_seconds=120,
+                )
+
     def test_repository_reclaim_fences_old_claim(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:

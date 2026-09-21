@@ -810,6 +810,7 @@ HTML envelope/extractor contract.
 **Interfaces:**
 - Produces:
   - `claim_work_item(...)->Claim`
+  - `renew_claim(...)->datetime`
   - `record_source_artifact(...)->UUID`
   - `promote_release_envelope(...)->PromotionResult`
   - `promote_observation_bundle(...)->PromotionResult`
@@ -828,6 +829,8 @@ Claim:
 - assign new claim_token/lease;
 - create attempt_number aligned to the new execution generation.
 - same-generation lease renewal preserves the existing claim_token;
+- Lease renewal is DB-clock-owned, cannot resurrect an already expired claim, does
+  not change claim_generation, and never shortens an existing active lease;
 - expired-lease reclaim advances generation and assigns a different claim_token.
 - close the expired prior RUNNING attempt as FAILED/LEASE_EXPIRED_RECLAIM before
   creating the new attempt generation;

@@ -426,6 +426,10 @@ Allowed work behavior:
   `LEASE_EXPIRED_RECLAIM` operational reason before creating the new generation, so a
   terminal run cannot retain an indefinitely RUNNING abandoned attempt;
 - claim_token is immutable within one ownership generation; lease renewal cannot silently replace the owner token;
+- An active owner may renew its lease using the same work_item_id, claim_generation,
+  claim_token, and RUNNING attempt. Renewal uses the database clock, cannot resurrect
+  an already expired claim, cannot change ownership generation/token, and must not
+  shorten an existing active lease;
 - an expired-lease reclaim must advance claim_generation and use a new claim_token;
 - the orchestrator may terminalize PENDING -> TERMINAL with outcome=SKIPPED before any attempt exists when the work is no longer applicable;
 - once a parent run is TERMINAL, no new work item may be attached to that run;
