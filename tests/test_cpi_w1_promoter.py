@@ -109,7 +109,11 @@ class CpiW1PromoterTest(unittest.TestCase):
         envelope_body = method_source("promote_release_envelope")
         observation_body = method_source("promote_observation_bundle")
         self.assertNotIn("official_observation_assertions", envelope_body)
-        self.assertIn("official_observation_assertions", observation_body)
+        self.assertIn("_insert_or_verify_observations", observation_body)
+        self.assertIn(
+            "official_observation_assertions",
+            method_source("_insert_or_verify_observations"),
+        )
 
     def test_core4_requires_event_release_not_supplemental_relation(self) -> None:
         observation_start = SOURCE.index("def _current_valid_observation_topology")
