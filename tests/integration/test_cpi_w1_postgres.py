@@ -1626,6 +1626,161 @@ class CpiW1PostgresTest(unittest.TestCase):
                 knowledge.knowledge_fingerprint,
             )
 
+    def test_governance_application_end_to_end_correction_lifecycle(self) -> None:
+        governance = CpiW1Governance()
+        proposer = WorkforcePrincipal("https://idp.example.com", "proposer-correction")
+        approver = WorkforcePrincipal("https://idp.example.com", "approver-correction")
+        activator = WorkforcePrincipal("https://idp.example.com", "activator-correction")
+        operator = WorkforcePrincipal("https://idp.example.com", "operator-correction")
+
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            assertion_ids = {}
+            for code, value in (
+                ("CPI_HEADLINE_MOM", Decimal("0.3")),
+                ("CPI_HEADLINE_YOY", Decimal("2.9")),
+                ("CPI_CORE_MOM", Decimal("0.2")),
+                ("CPI_CORE_YOY", Decimal("2.7")),
+            ):
+                assertion_ids[code] = self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    observation_code=code,
+                    normalized_value=value,
+                )
+
+            initial = governance.selector.select_governed_event(
+                connection,
+                topology["event_id"],
+            )
+            self.assertEqual(
+                initial.knowledge.observation("CPI_HEADLINE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+            self.assertEqual(
+                initial.knowledge.observation("CPI_HEADLINE_MOM").normalized_value,
+                Decimal("0.3"),
+            )
+
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="EVENT_OCCURRENCE",
+                event_occurrence_id=topology["event_id"],
+                state=ServingControlState.WITHHELD,
+                reason_code="CORRECTION_REVIEW",
+                case_ref="CASE-CORRECTION-1",
+            )
+            withheld = governance.selector.select_governed_event(
+                connection,
+                topology["event_id"],
+            )
+            self.assertIsNone(
+                withheld.observations[0].normalized_value,
+            )
+
+            request_id = governance.create_interpretation_request(
+                connection,
+                principal=proposer,
+                subject_id=assertion_ids["CPI_HEADLINE_MOM"],
+                requested_state="INVALID",
+                reason_code="SOURCE_CORRECTION",
+                case_ref="CASE-CORRECTION-1",
+            )
+            governance.record_interpretation_approval(
+                connection,
+                principal=approver,
+                request_id=request_id,
+                decision="APPROVE",
+            )
+            governance.activate_interpretation_request(
+                connection,
+                principal=activator,
+                request_id=request_id,
+            )
+
+            after_invalidation = governance.selector.select_event(
+                connection,
+                topology["event_id"],
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(
+                after_invalidation.observation("CPI_HEADLINE_MOM").state,
+                ObservationResolutionState.UNRESOLVED,
+            )
+
+            correction_artifact = self.make_artifact(
+                connection,
+                f"correction:{uuid4()}",
+            )
+            correction_link = uuid4()
+            self.insert_subject(
+                connection,
+                correction_link,
+                "DISCLOSURE_ARTIFACT_LINK",
+            )
+            connection.execute(
+                """
+                INSERT INTO event_disclosure_artifacts (
+                    disclosure_artifact_link_id, disclosure_id, artifact_id,
+                    relation_kind, accepted_by_attempt_id, accepted_at
+                ) VALUES (
+                    %s, %s, %s, 'CORRECTION_NOTICE', %s, CURRENT_TIMESTAMP
+                )
+                """,
+                (
+                    correction_link,
+                    topology["disclosure_id"],
+                    correction_artifact,
+                    topology["promote_attempt"],
+                ),
+            )
+            correction_topology = dict(topology)
+            correction_topology["artifact_id"] = correction_artifact
+            correction_topology["disclosure_artifact_link_id"] = correction_link
+            self.insert_observation_assertion(
+                connection,
+                correction_topology,
+                observation_code="CPI_HEADLINE_MOM",
+                normalized_value=Decimal("0.4"),
+            )
+
+            corrected = governance.selector.select_event(
+                connection,
+                topology["event_id"],
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(
+                corrected.observation("CPI_HEADLINE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+            self.assertEqual(
+                corrected.observation("CPI_HEADLINE_MOM").normalized_value,
+                Decimal("0.4"),
+            )
+
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="EVENT_OCCURRENCE",
+                event_occurrence_id=topology["event_id"],
+                state=ServingControlState.ENABLED,
+                reason_code="CORRECTION_VERIFIED",
+                case_ref="CASE-CORRECTION-1",
+                operator_verified_knowledge_fingerprint=corrected.knowledge_fingerprint,
+            )
+            governed = governance.selector.select_governed_event(
+                connection,
+                topology["event_id"],
+            )
+            headline = next(
+                item
+                for item in governed.observations
+                if item.observation_code == "CPI_HEADLINE_MOM"
+            )
+            self.assertTrue(headline.consumer_eligible)
+            self.assertEqual(headline.normalized_value, Decimal("0.4"))
+
     def test_abnormal_work_terminalization_requires_reason_code(self) -> None:
         with self.connection() as connection:
             run_id = self.insert_run(connection)
