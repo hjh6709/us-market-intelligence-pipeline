@@ -45,6 +45,21 @@ class CpiW1SourceClientTest(unittest.TestCase):
         self.assertEqual(schedule.surface_role, "AUTHORITATIVE")
         self.assertEqual(ics.surface_role, "FALLBACK_CORROBORATION")
 
+    def test_contract_pins_current_table1_xlsx_as_corroboration_only(self) -> None:
+        raw = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
+        locator = raw["locators"]["CURRENT_CPI_TABLE1_XLSX"]
+        self.assertEqual(
+            locator["url"],
+            "https://www.bls.gov/web/cpi/cpipress1.xlsx",
+        )
+        self.assertEqual(
+            locator["surface_role"],
+            "CORROBORATING_REPRESENTATION",
+        )
+        self.assertTrue(locator["mutable_current_locator"])
+        self.assertTrue(locator["requires_reference_month_validation"])
+        self.assertFalse(locator["historical_as_released_authority"])
+
     def test_non_https_is_rejected_before_network(self) -> None:
         with self.assertRaises(SourceFetchError) as caught:
             self.contract.validate_url("http://www.bls.gov/news.release/cpi.nr0.htm")

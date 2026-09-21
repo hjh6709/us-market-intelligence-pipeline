@@ -775,7 +775,12 @@ git commit -m "feat: extract CPI release HTML evidence"
 
 Before implementing the XLSX parser:
 - capture and retain at least one official BLS News Release Table 1 XLSX fixture;
-- record its source URL, capture hash, and reference month in fixture metadata;
+- treat `https://www.bls.gov/web/cpi/cpipress1.xlsx` as a mutable current locator,
+  never a permanent disclosure identity;
+- record its source URL, capture timestamp, content hash, and independently verified
+  reference month in fixture metadata;
+- require the workbook reference month to match the already-established CPI event
+  occurrence before it can be linked as corroborating representation;
 - inspect ZIP members and workbook relationships from the real file rather than
   assuming worksheet names/cell coordinates.
 

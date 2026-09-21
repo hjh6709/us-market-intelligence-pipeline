@@ -34,6 +34,14 @@
       "url": "https://www.bls.gov/news.release/cpi.nr0.htm",
       "surface_role": "RELEASE_EVIDENCE",
       "artifact_contract_kind": "CPI_RELEASE_HTML"
+    },
+    "CURRENT_CPI_TABLE1_XLSX": {
+      "url": "https://www.bls.gov/web/cpi/cpipress1.xlsx",
+      "surface_role": "CORROBORATING_REPRESENTATION",
+      "artifact_contract_kind": "CPI_TABLE1_XLSX",
+      "mutable_current_locator": true,
+      "requires_reference_month_validation": true,
+      "historical_as_released_authority": false
     }
   },
   "legal_operational_notes": {
