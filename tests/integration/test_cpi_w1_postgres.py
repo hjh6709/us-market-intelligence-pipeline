@@ -1855,7 +1855,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -1912,7 +1912,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_split_promotion_allows_disclosed_envelope_and_quarantined_core4(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -2011,7 +2011,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_core4_bundle_promotes_four_assertions_atomically(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -2104,7 +2104,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_promotion_family_claim_cannot_be_swapped(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -2145,7 +2145,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_release_envelope_retry_converges_without_duplicate_evidence(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -2238,7 +2238,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_same_observation_parse_identity_with_different_material_fails(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),
@@ -2381,7 +2381,7 @@ class CpiW1PostgresTest(unittest.TestCase):
     def test_core4_db_failure_rolls_back_all_partial_assertions(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
-        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
             fixture,
             expected_reference_month=date(2026, 8, 1),

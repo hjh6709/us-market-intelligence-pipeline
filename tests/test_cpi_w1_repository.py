@@ -20,9 +20,14 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("w.lease_until <= CURRENT_TIMESTAMP", SOURCE)
 
     def test_claim_can_filter_by_work_family_prefix(self) -> None:
+        self.assertIn("CLAIM_SELECT_PREFIX_SQL", SOURCE)
         self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", SOURCE)
         self.assertNotIn("w.work_key LIKE %s", SOURCE)
         self.assertIn("work_key_prefix", SOURCE)
+
+    def test_unfiltered_claim_does_not_bind_nullable_prefix_parameters(self) -> None:
+        self.assertIn("(execution_scope,)", SOURCE)
+        self.assertIn("if work_key_prefix is None:", SOURCE)
 
     def test_current_claim_fencing_uses_generation_token_lease_and_attempt(self) -> None:
         for fragment in (

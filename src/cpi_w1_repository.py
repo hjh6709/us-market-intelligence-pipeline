@@ -50,10 +50,6 @@ SELECT
    AND w.data_domain = 'ECONOMIC'
    AND r.state <> 'TERMINAL'
    AND (
-        %s IS NULL
-        OR LEFT(w.work_key, CHAR_LENGTH(%s)) = %s
-   )
-   AND (
         (
             w.state = 'PENDING'
             AND (w.next_claim_at IS NULL OR w.next_claim_at <= CURRENT_TIMESTAMP)
@@ -68,6 +64,12 @@ SELECT
  FOR UPDATE OF w SKIP LOCKED
  LIMIT 1
 """
+
+CLAIM_SELECT_PREFIX_SQL = CLAIM_SELECT_SQL.replace(
+    "   AND (\n        (\n            w.state = 'PENDING'",
+    "   AND LEFT(w.work_key, CHAR_LENGTH(%s)) = %s\n"
+    "   AND (\n        (\n            w.state = 'PENDING'",
+)
 
 CURRENT_CLAIM_SQL = """
 SELECT
@@ -121,15 +123,16 @@ class CpiW1Repository:
             raise ValueError("lease_seconds must be in [1, 3600]")
 
         with connection.transaction():
-            row = connection.execute(
-                CLAIM_SELECT_SQL,
-                (
-                    execution_scope,
-                    work_key_prefix,
-                    work_key_prefix,
-                    work_key_prefix,
-                ),
-            ).fetchone()
+            if work_key_prefix is None:
+                row = connection.execute(
+                    CLAIM_SELECT_SQL,
+                    (execution_scope,),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    CLAIM_SELECT_PREFIX_SQL,
+                    (execution_scope, work_key_prefix, work_key_prefix),
+                ).fetchone()
             if row is None:
                 return None
 
