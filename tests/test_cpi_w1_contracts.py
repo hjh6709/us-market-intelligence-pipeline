@@ -70,6 +70,8 @@ class CpiW1ContractsTest(unittest.TestCase):
                 "CPI_RELEASE_ENVELOPE_PROMOTE",
                 "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
                 "CPI_OBSERVATION_BUNDLE_PROMOTE",
+                "CPI_CORRECTION_NOTICE_PROMOTE",
+                "CPI_CORRECTION_OBSERVATION_PROMOTE",
             },
         )
 

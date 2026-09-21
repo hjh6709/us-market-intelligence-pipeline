@@ -1,3 +1,4 @@
+import ast
 import unittest
 from datetime import date
 from pathlib import Path
@@ -7,6 +8,17 @@ from src.cpi_w1_promoter import canonical_release_disclosure_key, promotion_work
 
 
 SOURCE = Path("src/cpi_w1_promoter.py").read_text(encoding="utf-8")
+
+
+def method_source(name: str) -> str:
+    module = ast.parse(SOURCE)
+    for node in ast.walk(module):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            segment = ast.get_source_segment(SOURCE, node)
+            if segment is None:
+                raise AssertionError(f"source segment unavailable for {name}")
+            return segment
+    raise AssertionError(f"method not found: {name}")
 
 
 class CpiW1PromoterTest(unittest.TestCase):
@@ -74,12 +86,10 @@ class CpiW1PromoterTest(unittest.TestCase):
     def test_correction_promotions_are_split_and_subset_scoped(self) -> None:
         self.assertIn("def promote_correction_notice", SOURCE)
         self.assertIn("def promote_correction_observations", SOURCE)
-        notice_start = SOURCE.index("def promote_correction_notice")
-        obs_start = SOURCE.index("def promote_correction_observations")
-        notice_body = SOURCE[notice_start:obs_start]
+        notice_body = method_source("promote_correction_notice")
         self.assertIn("'CORRECTION_NOTICE'", notice_body)
         self.assertNotIn("official_observation_assertions", notice_body)
-        observation_body = SOURCE[obs_start:]
+        observation_body = method_source("promote_correction_observations")
         self.assertIn(
             "correction bundle must be a non-empty unique Core-4 subset",
             observation_body,
@@ -91,18 +101,15 @@ class CpiW1PromoterTest(unittest.TestCase):
             "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
             SOURCE,
         )
-        start = SOURCE.index("def promote_corroborating_representation")
-        observation = SOURCE.index("def promote_observation_bundle")
-        body = SOURCE[start:observation]
+        body = method_source("promote_corroborating_representation")
         self.assertIn("'CORROBORATING_REPRESENTATION'", body)
         self.assertNotIn("official_observation_assertions", body)
 
     def test_envelope_and_observation_promotions_are_separate(self) -> None:
-        envelope_start = SOURCE.index("def promote_release_envelope")
-        observation_start = SOURCE.index("def promote_observation_bundle")
-        envelope_body = SOURCE[envelope_start:observation_start]
+        envelope_body = method_source("promote_release_envelope")
+        observation_body = method_source("promote_observation_bundle")
         self.assertNotIn("official_observation_assertions", envelope_body)
-        self.assertIn("official_observation_assertions", SOURCE[observation_start:])
+        self.assertIn("official_observation_assertions", observation_body)
 
     def test_core4_requires_event_release_not_supplemental_relation(self) -> None:
         observation_start = SOURCE.index("def _current_valid_observation_topology")
