@@ -68,6 +68,7 @@ class CpiW1ContractsTest(unittest.TestCase):
             {item.value for item in PromotionFamily},
             {
                 "CPI_RELEASE_ENVELOPE_PROMOTE",
+                "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
                 "CPI_OBSERVATION_BUNDLE_PROMOTE",
             },
         )
