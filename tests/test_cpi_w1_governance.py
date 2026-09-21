@@ -55,6 +55,14 @@ class CpiW1GovernanceTest(unittest.TestCase):
             ):
                 self.assertNotIn(forbidden, parameters)
 
+    def test_governance_owns_mutation_transaction(self) -> None:
+        self.assertIn("TransactionStatus.IDLE", SOURCE)
+        self.assertIn("_owned_governance_transaction", SOURCE)
+        self.assertIn(
+            "CPI governance requires an idle connection",
+            SOURCE,
+        )
+
     def test_application_calls_guarded_database_functions(self) -> None:
         self.assertIn("SELECT apply_interpretation_decision", SOURCE)
         self.assertIn("SELECT apply_economic_serving_control", SOURCE)

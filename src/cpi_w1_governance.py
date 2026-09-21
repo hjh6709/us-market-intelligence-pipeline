@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
+
+from psycopg.pq import TransactionStatus
 
 from src.cpi_w1_contracts import ReleaseProjectionState, ServingControlState
 from src.cpi_w1_repository import CpiW1Repository
@@ -53,6 +56,18 @@ class WorkforcePrincipal:
     @property
     def database_subject(self) -> str:
         return f"idp:{self._encode(self.issuer)}:{self._encode(self.subject_id)}"
+
+
+@contextmanager
+def _owned_governance_transaction(connection: Any):
+    info = getattr(connection, "info", None)
+    transaction_status = getattr(info, "transaction_status", None)
+    if transaction_status is not None and transaction_status != TransactionStatus.IDLE:
+        raise RuntimeError(
+            "CPI governance requires an idle connection so it owns the mutation transaction"
+        )
+    with _owned_governance_transaction(connection):
+        yield
 
 
 def _reason_code(value: str) -> str:
@@ -140,7 +155,7 @@ class CpiW1Governance:
         _reason_code(reason_code)
         case_ref = _case_ref(case_ref)
 
-        with connection.transaction():
+        with _owned_governance_transaction(connection):
             expected_version = _current_interpretation_version(connection, subject_id)
             request_id = uuid4()
             connection.execute(
@@ -175,7 +190,7 @@ class CpiW1Governance:
         if decision not in {"APPROVE", "REJECT"}:
             raise ValueError("decision must be APPROVE or REJECT")
 
-        with connection.transaction():
+        with _owned_governance_transaction(connection):
             row = connection.execute(
                 """
                 SELECT proposer_subject
@@ -215,7 +230,7 @@ class CpiW1Governance:
         principal: WorkforcePrincipal,
         request_id: UUID,
     ) -> UUID:
-        with connection.transaction():
+        with _owned_governance_transaction(connection):
             row = connection.execute(
                 "SELECT apply_interpretation_decision(%s, %s)",
                 (request_id, principal.database_subject),
@@ -259,7 +274,7 @@ class CpiW1Governance:
             elif verification_ref is None or not verification_ref.strip():
                 raise ValueError("domain re-enable requires verification_ref")
 
-        with connection.transaction():
+        with _owned_governance_transaction(connection):
             if (
                 state is ServingControlState.ENABLED
                 and scope_kind == "EVENT_OCCURRENCE"
