@@ -132,8 +132,9 @@ class CpiW1Repository:
             if row is None:
                 return None
 
-            work_item_id, run_id, input_artifact_id, generation, _state, work_key = row
-            generation = int(generation) + 1
+            work_item_id, run_id, input_artifact_id, generation, previous_state, work_key = row
+            previous_generation = int(generation)
+            generation = previous_generation + 1
             claim_token = uuid4()
             attempt_id = uuid4()
 
@@ -147,6 +148,26 @@ class CpiW1Repository:
                 """,
                 (run_id,),
             )
+
+            if previous_state == "CLAIMED":
+                closed = connection.execute(
+                    """
+                    UPDATE ingestion_attempts
+                       SET state='TERMINAL',
+                           outcome='FAILED',
+                           reason_code='LEASE_EXPIRED_RECLAIM',
+                           finished_at=CURRENT_TIMESTAMP
+                     WHERE work_item_id=%s
+                       AND attempt_number=%s
+                       AND state='RUNNING'
+                     RETURNING attempt_id
+                    """,
+                    (work_item_id, previous_generation),
+                ).fetchone()
+                if closed is None:
+                    raise RepositoryInvariantError(
+                        "expired claimed work has no running prior attempt"
+                    )
 
             updated = connection.execute(
                 """
@@ -278,6 +299,77 @@ class CpiW1Repository:
         ).fetchone()
         if work is None:
             raise StaleClaimError("claim lost before work terminalization")
+
+    def retry_claim(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        reason_code: str,
+        next_claim_at: datetime,
+    ) -> None:
+        if _REASON_RE.fullmatch(reason_code) is None:
+            raise ValueError("retry reason_code must be canonical uppercase token")
+        with connection.transaction():
+            self.assert_current_claim(connection, claim)
+            attempt = connection.execute(
+                """
+                UPDATE ingestion_attempts a
+                   SET state='TERMINAL',
+                       outcome='FAILED',
+                       reason_code=%s,
+                       finished_at=CURRENT_TIMESTAMP
+                  FROM ingestion_work_items w
+                 WHERE a.attempt_id=%s
+                   AND a.work_item_id=w.work_item_id
+                   AND w.work_item_id=%s
+                   AND w.execution_scope=%s
+                   AND w.state='CLAIMED'
+                   AND w.claim_generation=%s
+                   AND w.claim_token=%s
+                   AND w.lease_until > CURRENT_TIMESTAMP
+                   AND a.state='RUNNING'
+                   AND a.attempt_number=w.claim_generation
+                 RETURNING a.attempt_id
+                """,
+                (
+                    reason_code,
+                    claim.attempt_id,
+                    claim.work_item_id,
+                    claim.execution_scope,
+                    claim.claim_generation,
+                    claim.claim_token,
+                ),
+            ).fetchone()
+            if attempt is None:
+                raise StaleClaimError("claim lost before retry attempt terminalization")
+
+            work = connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='PENDING',
+                       outcome=NULL,
+                       reason_code=NULL,
+                       claim_token=NULL,
+                       lease_until=NULL,
+                       next_claim_at=%s
+                 WHERE work_item_id=%s
+                   AND execution_scope=%s
+                   AND state='CLAIMED'
+                   AND claim_generation=%s
+                   AND claim_token=%s
+                 RETURNING work_item_id
+                """,
+                (
+                    next_claim_at,
+                    claim.work_item_id,
+                    claim.execution_scope,
+                    claim.claim_generation,
+                    claim.claim_token,
+                ),
+            ).fetchone()
+            if work is None:
+                raise StaleClaimError("claim lost before retry work reset")
 
     def terminalize_claim(
         self,

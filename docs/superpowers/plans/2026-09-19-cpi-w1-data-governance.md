@@ -829,6 +829,10 @@ Claim:
 - create attempt_number aligned to the new execution generation.
 - same-generation lease renewal preserves the existing claim_token;
 - expired-lease reclaim advances generation and assigns a different claim_token.
+- close the expired prior RUNNING attempt as FAILED/LEASE_EXPIRED_RECLAIM before
+  creating the new attempt generation;
+- retry-to-PENDING terminalizes the current attempt with a durable reason before
+  clearing ownership and setting next_claim_at.
 
 Promotion work uses a deterministic promotion-family-prefixed work key:
 `<promotion_family>:<artifact_id>:<extractor_contract_version>`.

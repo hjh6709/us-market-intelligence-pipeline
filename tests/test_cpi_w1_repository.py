@@ -33,6 +33,22 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("state='RUNNING'", SOURCE)
         self.assertIn("started_at=COALESCE(started_at, CURRENT_TIMESTAMP)", SOURCE)
 
+    def test_reclaim_closes_expired_attempt_before_new_attempt(self) -> None:
+        self.assertIn("LEASE_EXPIRED_RECLAIM", SOURCE)
+        close_pos = SOURCE.index("LEASE_EXPIRED_RECLAIM")
+        new_attempt_pos = SOURCE.index("INSERT INTO ingestion_attempts", close_pos)
+        self.assertLess(close_pos, new_attempt_pos)
+
+    def test_retry_closes_attempt_before_returning_work_to_pending(self) -> None:
+        retry_pos = SOURCE.index("def retry_claim")
+        retry_body = SOURCE[retry_pos:]
+        self.assertLess(
+            retry_body.index("UPDATE ingestion_attempts"),
+            retry_body.index("UPDATE ingestion_work_items"),
+        )
+        self.assertIn("state='PENDING'", retry_body)
+        self.assertIn("reason_code=NULL", retry_body)
+
     def test_terminalization_orders_attempt_before_work(self) -> None:
         attempt_pos = SOURCE.index("UPDATE ingestion_attempts a")
         work_pos = SOURCE.index("UPDATE ingestion_work_items", attempt_pos)

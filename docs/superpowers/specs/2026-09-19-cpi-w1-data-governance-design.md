@@ -403,7 +403,13 @@ Allowed work behavior:
 - a claim moves PENDING -> CLAIMED and increments claim_generation;
 - a worker holding the current claim may terminalize CLAIMED -> TERMINAL;
 - a retryable attempt may return CLAIMED -> PENDING with next_claim_at and without changing business identity;
+- that retry transition first terminalizes the current attempt with a durable
+  operational failure reason, then clears claim ownership and returns the work to
+  PENDING; attempt history is never rewritten;
 - an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
+- reclaim closes the previous still-RUNNING attempt as FAILED with durable
+  `LEASE_EXPIRED_RECLAIM` operational reason before creating the new generation, so a
+  terminal run cannot retain an indefinitely RUNNING abandoned attempt;
 - claim_token is immutable within one ownership generation; lease renewal cannot silently replace the owner token;
 - an expired-lease reclaim must advance claim_generation and use a new claim_token;
 - the orchestrator may terminalize PENDING -> TERMINAL with outcome=SKIPPED before any attempt exists when the work is no longer applicable;

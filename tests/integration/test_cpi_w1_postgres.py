@@ -1667,6 +1667,81 @@ class CpiW1PostgresTest(unittest.TestCase):
                     reason_code="STALE_OWNER",
                 )
 
+    def test_reclaim_closes_expired_attempt_and_retry_preserves_history(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            first = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                lease_seconds=1,
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET lease_until=CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            second = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            old_attempt = connection.execute(
+                """
+                SELECT state, outcome, reason_code
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (first.attempt_id,),
+            ).fetchone()
+            self.assertEqual(
+                old_attempt,
+                ("TERMINAL", "FAILED", "LEASE_EXPIRED_RECLAIM"),
+            )
+            repository.retry_claim(
+                connection,
+                second,
+                reason_code="TRANSIENT_DEPENDENCY",
+                next_claim_at=connection.execute(
+                    "SELECT CURRENT_TIMESTAMP + INTERVAL '1 minute'"
+                ).fetchone()[0],
+            )
+            pending = connection.execute(
+                """
+                SELECT state, outcome, reason_code, claim_generation,
+                       claim_token, lease_until
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(pending[:4], ("PENDING", None, None, 2))
+            self.assertIsNone(pending[4])
+            self.assertIsNone(pending[5])
+            second_attempt = connection.execute(
+                """
+                SELECT state, outcome, reason_code
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (second.attempt_id,),
+            ).fetchone()
+            self.assertEqual(
+                second_attempt,
+                ("TERMINAL", "FAILED", "TRANSIENT_DEPENDENCY"),
+            )
+
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
