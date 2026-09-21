@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from src.cpi_w1_contracts import ReleaseProjectionState, ServingControlState
+from src.cpi_w1_repository import CpiW1Repository
 from src.cpi_w1_selector import (
     CpiW1Selector,
     ObservationResolutionState,
@@ -116,8 +117,13 @@ def _current_control_version(
 
 
 class CpiW1Governance:
-    def __init__(self, selector: CpiW1Selector | None = None) -> None:
+    def __init__(
+        self,
+        selector: CpiW1Selector | None = None,
+        repository: CpiW1Repository | None = None,
+    ) -> None:
         self.selector = selector or CpiW1Selector()
+        self.repository = repository or CpiW1Repository()
 
     def create_interpretation_request(
         self,
@@ -250,10 +256,18 @@ class CpiW1Governance:
                     raise ValueError(
                         "event re-enable requires operator-verified lowercase SHA-256"
                     )
-                knowledge = self.selector.select_event(
+            elif verification_ref is None or not verification_ref.strip():
+                raise ValueError("domain re-enable requires verification_ref")
+
+        with connection.transaction():
+            if (
+                state is ServingControlState.ENABLED
+                and scope_kind == "EVENT_OCCURRENCE"
+            ):
+                self.repository.lock_cpi_event(connection, event_occurrence_id)
+                knowledge = self.selector._select_current_event_in_caller_transaction(
                     connection,
                     event_occurrence_id,
-                    "OFFICIAL_SOURCE_RECONSTRUCTION",
                 )
                 unresolved = {
                     ObservationResolutionState.UNRESOLVED,
@@ -274,10 +288,7 @@ class CpiW1Governance:
                         "operator-verified knowledge fingerprint is stale"
                     )
                 verified_fingerprint = knowledge.knowledge_fingerprint
-            elif verification_ref is None or not verification_ref.strip():
-                raise ValueError("domain re-enable requires verification_ref")
 
-        with connection.transaction():
             expected_version = _current_control_version(
                 connection,
                 scope_kind=scope_kind,

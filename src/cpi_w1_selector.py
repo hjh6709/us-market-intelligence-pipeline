@@ -737,6 +737,23 @@ class CpiW1Selector:
             knowledge_fingerprint=fingerprint,
         )
 
+    def _select_current_event_in_caller_transaction(
+        self,
+        connection: Any,
+        event_id: UUID,
+    ) -> CpiEventKnowledge:
+        """Internal governance hook; caller owns transaction and event fencing."""
+        evaluation_at = connection.execute(
+            "SELECT CURRENT_TIMESTAMP"
+        ).fetchone()[0]
+        return self._select_event_in_snapshot(
+            connection,
+            event_id,
+            KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            None,
+            evaluation_at,
+        )
+
     def select_event(
         self,
         connection: Any,
