@@ -22,8 +22,17 @@ class CpiW1GovernanceTest(unittest.TestCase):
             WorkforcePrincipal("corp", "jane@example.com")
         with self.assertRaises(GovernanceIdentityError):
             WorkforcePrincipal("corp ", "immutable-sub")
-        principal = WorkforcePrincipal("corp", "immutable-sub")
-        self.assertEqual(principal.database_subject, "idp:corp:immutable-sub")
+        principal = WorkforcePrincipal("https://idp.example.com", "opaque:immutable-sub")
+        self.assertTrue(principal.database_subject.startswith("idp:"))
+        self.assertNotIn("https://", principal.database_subject)
+        self.assertNotIn("opaque:immutable-sub", principal.database_subject)
+
+    def test_oidc_issuer_url_and_opaque_subject_are_supported(self) -> None:
+        principal = WorkforcePrincipal(
+            "https://login.example.com/tenant/v2.0",
+            "opaque:subject/123",
+        )
+        self.assertTrue(principal.database_subject.startswith("idp:"))
 
     def test_public_methods_do_not_accept_raw_actor_or_version_fields(self) -> None:
         for method_name in (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -45,14 +46,13 @@ class WorkforcePrincipal:
                 raise GovernanceIdentityError(
                     f"{label} must be an immutable IdP identifier, not an email alias"
                 )
-            if ":" in value:
-                raise GovernanceIdentityError(
-                    f"{label} must not contain the principal delimiter"
-                )
+    @staticmethod
+    def _encode(value: str) -> str:
+        return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
     @property
     def database_subject(self) -> str:
-        return f"idp:{self.issuer}:{self.subject_id}"
+        return f"idp:{self._encode(self.issuer)}:{self._encode(self.subject_id)}"
 
 
 def _reason_code(value: str) -> str:
