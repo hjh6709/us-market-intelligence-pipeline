@@ -132,6 +132,90 @@ def validate_manifest(manifest: dict[str, Any], repo_root: Path) -> None:
         )
 
 
+def validate_conformance_fixtures(
+    manifest: dict[str, Any],
+    repo_root: Path,
+) -> None:
+    fixtures = manifest.get("conformance_fixtures", [])
+    if not isinstance(fixtures, list):
+        raise CorpusValidationError("conformance_fixtures must be a list")
+    seen: set[str] = set()
+    fixtures_root = (repo_root / "tests/fixtures/cpi_w1").resolve()
+    for fixture in fixtures:
+        fixture_id = fixture.get("fixture_id")
+        if not isinstance(fixture_id, str) or not fixture_id:
+            raise CorpusValidationError("conformance fixture_id required")
+        if fixture_id in seen:
+            raise CorpusValidationError(f"duplicate conformance fixture_id: {fixture_id}")
+        seen.add(fixture_id)
+        if fixture.get("fixture_kind") != "SYNTHETIC_CONFORMANCE":
+            raise CorpusValidationError(
+                f"{fixture_id}: fixture_kind must be SYNTHETIC_CONFORMANCE"
+            )
+        local_path = fixture.get("local_path")
+        expected_sha256 = fixture.get("expected_sha256")
+        if not isinstance(local_path, str) or not local_path:
+            raise CorpusValidationError(f"{fixture_id}: local_path required")
+        if (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in expected_sha256)
+        ):
+            raise CorpusValidationError(f"{fixture_id}: lowercase SHA-256 required")
+        full_path = (repo_root / local_path).resolve()
+        if fixtures_root not in full_path.parents:
+            raise CorpusValidationError(
+                f"{fixture_id}: conformance path escapes CPI fixture root"
+            )
+        if not full_path.is_file():
+            raise CorpusValidationError(f"{fixture_id}: fixture missing")
+        if hashlib.sha256(full_path.read_bytes()).hexdigest() != expected_sha256:
+            raise CorpusValidationError(f"{fixture_id}: fixture SHA-256 mismatch")
+
+
+def replay_conformance_fixture(
+    fixture: dict[str, Any],
+    repo_root: Path,
+) -> ReplayEntryResult:
+    extractor = fixture.get("extractor_contract_version")
+    if extractor != _RELEASE_EXTRACTOR:
+        return ReplayEntryResult(
+            fixture["fixture_id"],
+            "SYNTHETIC_CONFORMANCE",
+            "NOT_RUN",
+            f"extractor not implemented by replay tool: {extractor}",
+        )
+    expected = fixture.get("expected_semantics") or {}
+    try:
+        actual = _actual_core4(
+            repo_root / fixture["local_path"],
+            fixture["reference_month"],
+        )
+    except Exception as exc:
+        return ReplayEntryResult(
+            fixture["fixture_id"],
+            "SYNTHETIC_CONFORMANCE",
+            "NEWLY_FAILED",
+            f"{type(exc).__name__}: {exc}",
+        )
+    if expected.get("kind") == "CORE4" and actual == expected.get("values"):
+        return ReplayEntryResult(
+            fixture["fixture_id"],
+            "SYNTHETIC_CONFORMANCE",
+            "SEMANTIC_UNCHANGED",
+        )
+    return ReplayEntryResult(
+        fixture["fixture_id"],
+        "SYNTHETIC_CONFORMANCE",
+        "UNEXPECTED_CHANGED",
+        json.dumps(
+            {"expected": expected.get("values"), "actual": actual},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
+
+
 def inventory_status(entry: dict[str, Any]) -> str:
     if entry["materialization_status"] != "MATERIALIZED":
         return "REMOTE_ONLY"
@@ -219,7 +303,12 @@ def build_report(
     repo_root: Path,
 ) -> dict[str, Any]:
     validate_manifest(manifest, repo_root)
+    validate_conformance_fixtures(manifest, repo_root)
     results = [replay_entry(entry, repo_root) for entry in manifest["entries"]]
+    conformance_results = [
+        replay_conformance_fixture(fixture, repo_root)
+        for fixture in manifest.get("conformance_fixtures", [])
+    ]
     release_gate_ready = all(
         (not entry.get("replay_required", False))
         or (
@@ -246,8 +335,12 @@ def build_report(
                 result.inventory_status == "BLOCKED_NO_EXTRACTOR"
                 for result in results
             ),
+            "synthetic_conformance": len(conformance_results),
         },
         "results": [result.as_dict() for result in results],
+        "conformance_results": [
+            result.as_dict() for result in conformance_results
+        ],
     }
 
 

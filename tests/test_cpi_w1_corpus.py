@@ -6,6 +6,7 @@ from pathlib import Path
 from scripts.replay_cpi_w1_corpus import (
     build_report,
     load_manifest,
+    validate_conformance_fixtures,
     validate_manifest,
 )
 
@@ -29,18 +30,30 @@ class CpiW1CorpusTest(unittest.TestCase):
             },
         )
 
-    def test_materialized_fixtures_are_sha256_pinned(self) -> None:
-        materialized = [
-            entry
-            for entry in self.manifest["entries"]
-            if entry["materialization_status"] == "MATERIALIZED"
-        ]
-        self.assertEqual(len(materialized), 2)
-        for entry in materialized:
-            data = (ROOT / entry["local_path"]).read_bytes()
+    def test_official_inventory_does_not_claim_synthetic_bytes(self) -> None:
+        self.assertTrue(
+            all(
+                entry["materialization_status"] == "REMOTE_ONLY"
+                for entry in self.manifest["entries"]
+            )
+        )
+        self.assertTrue(
+            all(
+                entry["local_path"] is None
+                and entry["expected_sha256"] is None
+                for entry in self.manifest["entries"]
+            )
+        )
+
+    def test_synthetic_conformance_fixtures_are_separately_sha_pinned(self) -> None:
+        validate_conformance_fixtures(self.manifest, ROOT)
+        fixtures = self.manifest["conformance_fixtures"]
+        self.assertEqual(len(fixtures), 2)
+        for fixture in fixtures:
+            data = (ROOT / fixture["local_path"]).read_bytes()
             self.assertEqual(
                 hashlib.sha256(data).hexdigest(),
-                entry["expected_sha256"],
+                fixture["expected_sha256"],
             )
 
     def test_required_exception_tags_exist_on_exact_reference_months(self) -> None:
@@ -97,25 +110,22 @@ class CpiW1CorpusTest(unittest.TestCase):
         )
         self.assertEqual(entry["materialization_status"], "REMOTE_ONLY")
 
-    def test_materialized_release_html_replays_semantically_unchanged(self) -> None:
+    def test_synthetic_release_html_replays_without_counting_as_official_corpus(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
-        materialized_results = [
-            item
-            for item in report["results"]
-            if item["inventory_status"] == "MATERIALIZED_PINNED"
-        ]
-        self.assertEqual(len(materialized_results), 2)
+        self.assertEqual(len(report["conformance_results"]), 2)
         self.assertEqual(
-            {item["semantic_status"] for item in materialized_results},
+            {item["semantic_status"] for item in report["conformance_results"]},
             {"SEMANTIC_UNCHANGED"},
         )
+        self.assertEqual(report["counts"]["materialized_pinned"], 0)
 
     def test_release_gate_fails_closed_until_full_baseline_is_materialized(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
         self.assertFalse(report["release_gate_ready"])
         self.assertEqual(report["counts"]["entries"], 56)
-        self.assertEqual(report["counts"]["materialized_pinned"], 2)
-        self.assertEqual(report["counts"]["remote_only"], 54)
+        self.assertEqual(report["counts"]["materialized_pinned"], 0)
+        self.assertEqual(report["counts"]["remote_only"], 56)
+        self.assertEqual(report["counts"]["synthetic_conformance"], 2)
 
     def test_replay_tool_has_no_database_dependency(self) -> None:
         source = (

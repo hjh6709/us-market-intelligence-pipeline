@@ -7,7 +7,8 @@
   "readiness": {
     "policy": "REQUIRED_BASELINE_MUST_BE_MATERIALIZED_AND_SHA256_PINNED_FOR_RELEASE_GATE",
     "inventory_is_not_replay_proof": true,
-    "semantic_replay_requires_entry_extractor_contract": true
+    "semantic_replay_requires_entry_extractor_contract": true,
+    "synthetic_conformance_does_not_count_as_official_materialization": true
   },
   "entries": [
     {
@@ -763,18 +764,12 @@
       "artifact_contract_kind": "CPI_RELEASE_HTML",
       "source_contract_version": "bls-cpi-source-v1",
       "official_locator": "https://www.bls.gov/news.release/archives/cpi_12182025.htm",
-      "expected_sha256": "8eda25611611096b7a90e95a05ff941d7e5040ca6166a2c7465a6783a5cafcad",
-      "local_path": "tests/fixtures/cpi_w1/html/nov_2025_explicit_unavailable.html",
-      "materialization_status": "MATERIALIZED",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
       "replay_required": true,
       "expected_semantics": {
-        "kind": "CORE4",
-        "values": {
-          "CPI_HEADLINE_MOM": "EXPLICIT_UNAVAILABLE",
-          "CPI_HEADLINE_YOY": "2.7",
-          "CPI_CORE_MOM": "EXPLICIT_UNAVAILABLE",
-          "CPI_CORE_YOY": "2.6"
-        }
+        "kind": "UNVERIFIED_INVENTORY"
       },
       "exceptional_tags": [
         "EXPLICIT_UNAVAILABLE",
@@ -916,10 +911,50 @@
       "artifact_contract_kind": "CPI_RELEASE_HTML",
       "source_contract_version": "bls-cpi-source-v1",
       "official_locator": "https://www.bls.gov/news.release/archives/cpi_09112026.htm",
-      "expected_sha256": "a896049ee97b85827c09afcf77aba9f9cd7d68bd3f7e06bb7b157660317a8fab",
-      "local_path": "tests/fixtures/cpi_w1/html/normal_aug_2026.html",
-      "materialization_status": "MATERIALIZED",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
       "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": [
+        "CURRENT_BASELINE_RELEASE"
+      ],
+      "extractor_contract_version": "bls-cpi-release-html-v1"
+    }
+  ],
+  "conformance_fixtures": [
+    {
+      "fixture_id": "synthetic:2025-11:explicit-unavailable",
+      "fixture_kind": "SYNTHETIC_CONFORMANCE",
+      "reference_month": "2025-11",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "extractor_contract_version": "bls-cpi-release-html-v1",
+      "local_path": "tests/fixtures/cpi_w1/html/nov_2025_explicit_unavailable.html",
+      "expected_sha256": "8eda25611611096b7a90e95a05ff941d7e5040ca6166a2c7465a6783a5cafcad",
+      "expected_semantics": {
+        "kind": "CORE4",
+        "values": {
+          "CPI_HEADLINE_MOM": "EXPLICIT_UNAVAILABLE",
+          "CPI_HEADLINE_YOY": "2.7",
+          "CPI_CORE_MOM": "EXPLICIT_UNAVAILABLE",
+          "CPI_CORE_YOY": "2.6"
+        }
+      },
+      "exceptional_tags": [
+        "EXPLICIT_UNAVAILABLE",
+        "POST_SHUTDOWN_RECOVERY"
+      ]
+    },
+    {
+      "fixture_id": "synthetic:2026-08:normal",
+      "fixture_kind": "SYNTHETIC_CONFORMANCE",
+      "reference_month": "2026-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "extractor_contract_version": "bls-cpi-release-html-v1",
+      "local_path": "tests/fixtures/cpi_w1/html/normal_aug_2026.html",
+      "expected_sha256": "a896049ee97b85827c09afcf77aba9f9cd7d68bd3f7e06bb7b157660317a8fab",
       "expected_semantics": {
         "kind": "CORE4",
         "values": {
@@ -930,9 +965,8 @@
         }
       },
       "exceptional_tags": [
-        "CURRENT_BASELINE_RELEASE"
-      ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+        "CURRENT_BASELINE_SHAPE"
+      ]
     }
   ]
 }

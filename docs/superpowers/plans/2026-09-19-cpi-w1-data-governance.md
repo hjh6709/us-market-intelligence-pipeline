@@ -1251,7 +1251,10 @@ Each entry contains:
 - expected semantic summary;
 - exceptional-case tags.
 
-A URL inventory is not golden-corpus proof. Release-gate readiness requires every
+A URL inventory is not golden-corpus proof.
+Synthetic/reduced parser fixtures belong in a separate `conformance_fixtures`
+section. They may be hash-pinned and replayed for parser regression, but never count
+toward official baseline materialization or release-gate readiness. Release-gate readiness requires every
 replay_required baseline entry to be locally materialized, SHA-256 pinned, and bound
 to an implemented extractor contract. REMOTE_ONLY entries are useful inventory but
 must keep the release gate incomplete.

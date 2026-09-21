@@ -1438,7 +1438,13 @@ Each corpus entry pins artifact provenance such as source URL/locator, captured_
 
 ### 31.2 Parser differential replay
 
-URL inventory is not equivalent to a golden replay corpus. Each replay-required
+URL inventory is not equivalent to a golden replay corpus.
+Synthetic conformance fixtures are also not official corpus materialization. Reduced,
+hand-authored, or adversarial HTML fixtures may be SHA-256 pinned and replayed to
+protect parser behavior, but they must live in a separately labeled conformance set
+and never satisfy an official-artifact materialization gate. Only bytes captured from
+the approved official locator (or an approved immutable archive of those exact bytes)
+may count as materialized official corpus evidence. Each replay-required
 baseline artifact must be materialized as exact bytes, pinned by SHA-256, and bound to
 the extractor contract that interprets that artifact kind before the parser release
 gate can be considered complete. An entry may remain REMOTE_ONLY during corpus
