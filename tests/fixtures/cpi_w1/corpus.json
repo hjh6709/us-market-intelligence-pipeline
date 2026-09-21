@@ -1,0 +1,881 @@
+{
+  "schema_version": "cpi-w1-corpus-v1",
+  "baseline": {
+    "start_reference_month": "2022-01",
+    "end_reference_month": "2026-08"
+  },
+  "readiness": {
+    "policy": "REQUIRED_BASELINE_MUST_BE_MATERIALIZED_AND_SHA256_PINNED_FOR_RELEASE_GATE",
+    "inventory_is_not_replay_proof": true
+  },
+  "entries": [
+    {
+      "corpus_id": "cpi:2022-01:release-html",
+      "reference_month": "2022-01",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_02102022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-02:release-html",
+      "reference_month": "2022-02",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_03102022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-03:release-html",
+      "reference_month": "2022-03",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_04122022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-04:release-html",
+      "reference_month": "2022-04",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_05112022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-05:release-html",
+      "reference_month": "2022-05",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_06102022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-06:release-html",
+      "reference_month": "2022-06",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_07132022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-07:release-html",
+      "reference_month": "2022-07",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_08102022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-08:release-html",
+      "reference_month": "2022-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_09132022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-09:release-html",
+      "reference_month": "2022-09",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_10132022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-10:release-html",
+      "reference_month": "2022-10",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_11102022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-11:release-html",
+      "reference_month": "2022-11",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_12132022.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2022-12:release-html",
+      "reference_month": "2022-12",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_01122023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-01:release-html",
+      "reference_month": "2023-01",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_02142023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-02:release-html",
+      "reference_month": "2023-02",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_03142023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-03:release-html",
+      "reference_month": "2023-03",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_04122023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-04:release-html",
+      "reference_month": "2023-04",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_05102023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-05:release-html",
+      "reference_month": "2023-05",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_06132023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-06:release-html",
+      "reference_month": "2023-06",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_07122023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-07:release-html",
+      "reference_month": "2023-07",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_08102023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-08:release-html",
+      "reference_month": "2023-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_09132023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-09:release-html",
+      "reference_month": "2023-09",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_10122023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-10:release-html",
+      "reference_month": "2023-10",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_11142023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": [
+        "ZERO_HEADLINE_MOM"
+      ]
+    },
+    {
+      "corpus_id": "cpi:2023-11:release-html",
+      "reference_month": "2023-11",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_12122023.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2023-12:release-html",
+      "reference_month": "2023-12",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_01112024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-01:release-html",
+      "reference_month": "2024-01",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_02132024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-02:release-html",
+      "reference_month": "2024-02",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_03122024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-03:release-html",
+      "reference_month": "2024-03",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_04102024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-04:release-html",
+      "reference_month": "2024-04",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_05152024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-05:release-html",
+      "reference_month": "2024-05",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_06122024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-06:release-html",
+      "reference_month": "2024-06",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_07112024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": [
+        "NEGATIVE_HEADLINE_MOM"
+      ]
+    },
+    {
+      "corpus_id": "cpi:2024-07:release-html",
+      "reference_month": "2024-07",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_08142024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-08:release-html",
+      "reference_month": "2024-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_09112024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-09:release-html",
+      "reference_month": "2024-09",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_10102024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-10:release-html",
+      "reference_month": "2024-10",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_11132024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-11:release-html",
+      "reference_month": "2024-11",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_12112024.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2024-12:release-html",
+      "reference_month": "2024-12",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_01152025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-01:release-html",
+      "reference_month": "2025-01",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_02122025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": [
+        "JANUARY_SEASONAL_REVISION"
+      ]
+    },
+    {
+      "corpus_id": "cpi:2025-02:release-html",
+      "reference_month": "2025-02",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_03122025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-03:release-html",
+      "reference_month": "2025-03",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_04102025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-04:release-html",
+      "reference_month": "2025-04",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_05132025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-05:release-html",
+      "reference_month": "2025-05",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_06112025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-06:release-html",
+      "reference_month": "2025-06",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_07152025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-07:release-html",
+      "reference_month": "2025-07",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_08122025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-08:release-html",
+      "reference_month": "2025-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_09112025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-09:release-html",
+      "reference_month": "2025-09",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_10242025.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2025-10:explicit-cancellation",
+      "reference_month": "2025-10",
+      "artifact_contract_kind": "BLS_REVISED_RELEASE_DATES_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "CANCELLATION",
+        "schedule_status": "CANCELED",
+        "release_projection": "NO_RELEASE_EXPECTED"
+      },
+      "exceptional_tags": [
+        "EXPLICIT_CANCELLATION",
+        "2025_LAPSE_IN_APPROPRIATIONS"
+      ]
+    },
+    {
+      "corpus_id": "cpi:2025-11:release-html",
+      "reference_month": "2025-11",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_12182025.htm",
+      "expected_sha256": "8eda25611611096b7a90e95a05ff941d7e5040ca6166a2c7465a6783a5cafcad",
+      "local_path": "tests/fixtures/cpi_w1/html/nov_2025_explicit_unavailable.html",
+      "materialization_status": "MATERIALIZED",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "CORE4",
+        "values": {
+          "CPI_HEADLINE_MOM": "EXPLICIT_UNAVAILABLE",
+          "CPI_HEADLINE_YOY": "2.7",
+          "CPI_CORE_MOM": "EXPLICIT_UNAVAILABLE",
+          "CPI_CORE_YOY": "2.6"
+        }
+      },
+      "exceptional_tags": [
+        "EXPLICIT_UNAVAILABLE",
+        "POST_SHUTDOWN_RECOVERY"
+      ]
+    },
+    {
+      "corpus_id": "cpi:2025-12:release-html",
+      "reference_month": "2025-12",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_01132026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-01:release-html",
+      "reference_month": "2026-01",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_02132026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-02:release-html",
+      "reference_month": "2026-02",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_03112026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-03:release-html",
+      "reference_month": "2026-03",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_04102026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-04:release-html",
+      "reference_month": "2026-04",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_05122026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-05:release-html",
+      "reference_month": "2026-05",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_06102026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-06:release-html",
+      "reference_month": "2026-06",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_07142026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-07:release-html",
+      "reference_month": "2026-07",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_08122026.htm",
+      "expected_sha256": null,
+      "local_path": null,
+      "materialization_status": "REMOTE_ONLY",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "UNVERIFIED_INVENTORY"
+      },
+      "exceptional_tags": []
+    },
+    {
+      "corpus_id": "cpi:2026-08:release-html",
+      "reference_month": "2026-08",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "official_locator": "https://www.bls.gov/news.release/archives/cpi_09112026.htm",
+      "expected_sha256": "a896049ee97b85827c09afcf77aba9f9cd7d68bd3f7e06bb7b157660317a8fab",
+      "local_path": "tests/fixtures/cpi_w1/html/normal_aug_2026.html",
+      "materialization_status": "MATERIALIZED",
+      "replay_required": true,
+      "expected_semantics": {
+        "kind": "CORE4",
+        "values": {
+          "CPI_HEADLINE_MOM": "0.4",
+          "CPI_HEADLINE_YOY": "3.4",
+          "CPI_CORE_MOM": "0.3",
+          "CPI_CORE_YOY": "2.4"
+        }
+      },
+      "exceptional_tags": [
+        "CURRENT_BASELINE_RELEASE"
+      ]
+    }
+  ]
+}
