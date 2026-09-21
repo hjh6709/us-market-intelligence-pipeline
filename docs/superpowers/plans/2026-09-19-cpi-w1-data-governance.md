@@ -964,11 +964,11 @@ git commit -m "feat: add fenced CPI W1 promotion workflow"
   - `select_governed_event(connection, event_id) -> GovernedCpiEvent`
   - `apply_serving_overlay(connection, knowledge) -> GovernedCpiEvent`
 
-- [ ] **Step 1: Encode canonical selector vectors as tests**
+- [x] **Step 1: Encode canonical selector vectors as tests**
 
 Create table-driven tests for every vector in spec section 31.3.
 
-- [ ] **Step 2: Implement knowledge-mode filtering and projection evaluation clock**
+- [x] **Step 2: Implement knowledge-mode filtering and projection evaluation clock**
 
 Run each selector/serving-overlay read in a selector-owned PostgreSQL
 `REPEATABLE READ, READ ONLY` transaction. Reject invocation on an already-active
@@ -983,7 +983,7 @@ repeatedly during one selection.
 
 Never use storage `created_at` as PIT knowledge time.
 
-- [ ] **Step 3: Implement transitive provenance eligibility**
+- [x] **Step 3: Implement transitive provenance eligibility**
 
 An observation is eligible only if:
 - observation subject valid;
@@ -992,7 +992,7 @@ An observation is eligible only if:
 
 A marker similarly requires its artifact relation.
 
-- [ ] **Step 4: Implement semantic material grouping**
+- [x] **Step 4: Implement semantic material grouping**
 
 Use `material_fingerprint` from Task 6:
 - 0 materials -> UNRESOLVED;
@@ -1002,7 +1002,7 @@ Use `material_fingerprint` from Task 6:
 
 Different provenance rows with the same material remain one resolved semantic material.
 
-- [ ] **Step 5: Implement schedule authority-tier selection**
+- [x] **Step 5: Implement schedule authority-tier selection**
 
 For every visible/valid schedule assertion:
 - join its source artifact;
@@ -1018,7 +1018,7 @@ For every visible/valid schedule assertion:
 - use captured_at only when the source contract explicitly permits capture
   chronology. CPI schedule HTML and global ICS v1 both set this to false.
 
-- [ ] **Step 6: Implement release projection**
+- [x] **Step 6: Implement release projection**
 
 Release-anchor cardinality is fail-closed: more than one distinct valid EVENT_RELEASE
 disclosure for one occurrence yields release CONFLICT. Never reduce multiple release
@@ -1035,7 +1035,7 @@ Cover:
 
 A valid envelope + quarantined observations yields DISCLOSED with observation resolution UNRESOLVED.
 
-- [ ] **Step 7: Define the selector knowledge fingerprint**
+- [x] **Step 7: Define the selector knowledge fingerprint**
 
 Build a canonical selector-owned payload and SHA-256 fingerprint over:
 - selector contract version;
@@ -1047,7 +1047,7 @@ Build a canonical selector-owned payload and SHA-256 fingerprint over:
 Exclude request/as-of time, storage timestamps, duplicate provenance, and all
 serving-control history. Add stability/change-vector tests.
 
-- [ ] **Step 8: Implement serving overlay separately**
+- [x] **Step 8: Implement serving overlay separately**
 
 Knowledge result is unchanged by serving-control history.
 
@@ -1064,7 +1064,7 @@ Live governed overlay:
 - lower-level overlay rejects a stale supplied knowledge fingerprint rather than
   serving a prior VALUE after new conflict/invalidation.
 
-- [ ] **Step 9: Run and commit**
+- [x] **Step 9: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_selector -v

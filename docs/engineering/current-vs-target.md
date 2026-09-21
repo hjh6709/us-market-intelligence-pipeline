@@ -55,13 +55,15 @@ Current implemented foundation on the CPI W1 branch includes:
   source-role separation;
 - BLS release-envelope and Core 4 HTML extraction;
 - fenced CPI W1 repository/promotion primitives for release-envelope, secondary
-  corroborating-representation topology, and atomic Core 4 promotion.
+  corroborating-representation topology, and atomic Core 4 promotion;
+- CPI source reconstruction and SYSTEM_KNOWN_PIT selector with authority-tier
+  schedule selection, transitive provenance invalidation, semantic conflict
+  preservation, knowledge fingerprinting, and live serving-control overlay.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
 
 - Table 1 XLSX binary parser/corpus validation and live corroboration ingestion path;
-- source-reconstruction/PIT selector and serving-control overlay;
 - application governance client and production authorization/RBAC;
 - golden-corpus differential replay and parser-change release gate;
 - controlled collector/orchestrator and reconciliation;
