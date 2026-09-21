@@ -1020,6 +1020,10 @@ For every visible/valid schedule assertion:
 
 - [ ] **Step 6: Implement release projection**
 
+Release-anchor cardinality is fail-closed: more than one distinct valid EVENT_RELEASE
+disclosure for one occurrence yields release CONFLICT. Never reduce multiple release
+anchors to a boolean or choose latest.
+
 Cover:
 - NOT_YET_DUE;
 - DUE_DATE_UNTIMED;
@@ -1053,6 +1057,9 @@ Live governed overlay:
 - calculate latest CPI_DOMAIN and EVENT_OCCURRENCE control states;
 - deny-overrides;
 - WITHHELD removes numeric values from governed consumer model;
+- Live numeric eligibility additionally requires release projection DISCLOSED and
+  observation resolution VALUE; release CONFLICT/UNRESOLVED cannot leak a numeric
+  value even when one isolated assertion remains VALUE;
 - canonical live serving selects knowledge and controls from one snapshot;
 - lower-level overlay rejects a stale supplied knowledge fingerprint rather than
   serving a prior VALUE after new conflict/invalidation.

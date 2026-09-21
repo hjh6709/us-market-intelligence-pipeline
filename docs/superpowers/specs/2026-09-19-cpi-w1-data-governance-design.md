@@ -1158,6 +1158,13 @@ observability metadata.
 
 CPI release selection considers valid EVENT_RELEASE links only.
 
+For one CPI event occurrence:
+- zero distinct valid EVENT_RELEASE disclosures means there is no validated release anchor;
+- exactly one distinct valid EVENT_RELEASE disclosure is the release anchor;
+- more than one distinct valid EVENT_RELEASE disclosure is release-topology CONFLICT.
+  The selector must not collapse multiple valid release disclosures to a boolean
+  "released" state or choose one by accepted_at, created_at, capture time, or row order.
+
 SUPPLEMENTAL_DISCLOSURE never becomes the release anchor.
 
 Projection states:
@@ -1199,6 +1206,18 @@ Live governed consumers then apply the effective serving-control overlay:
 - forward/Paper decision paths must obey it before using CPI values for a live or simulated-forward decision;
 - alert/notification generation must obey it before emitting a numeric CPI value;
 - authorized offline research may inspect the underlying knowledge result only in an explicit diagnostic/research mode that cannot create live customer or trading side effects.
+
+A governed live numeric observation is consumer-eligible only when all of the
+following hold:
+- the release projection is DISCLOSED;
+- the observation resolution is VALUE;
+- the effective serving-control state is ENABLED.
+
+If release knowledge is CONFLICT, UNRESOLVED, NOT_YET_DUE, DUE_DATE_UNTIMED,
+AWAITING_CONFIRMATION, or NO_RELEASE_EXPECTED, the governed numeric value is absent
+even if an isolated observation assertion happens to resolve to VALUE. This is
+knowledge eligibility, not a serving-control decision, and must not rewrite either
+the evidence or control history.
 
 If the knowledge result is VALUE but the effective control is WITHHELD:
 
@@ -1418,6 +1437,7 @@ Canonical selector conformance vectors must include at least:
 - invalidating an event-disclosure link makes observations pinned to that link ineligible without deleting them;
 - invalidating a disclosure-artifact link makes markers/observations pinned to it ineligible without deleting them;
 - identical semantic material from different artifacts/parser versions has the same material identity while preserving separate evidence rows;
+- multiple valid EVENT_RELEASE disclosures -> release CONFLICT;
 - EVENT_RELEASE versus SUPPLEMENTAL_DISCLOSURE behavior;
 - SUPPLEMENTAL_DISCLOSURE cannot contribute CPI W1 Core 4 canonical actuals;
 - correction representation creates conflict rather than silent supersession when prior valid material differs;
