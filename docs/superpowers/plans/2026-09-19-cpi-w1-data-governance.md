@@ -1089,7 +1089,7 @@ git commit -m "feat: add CPI source and PIT selectors"
   - `activate_interpretation_request(...)`
   - `apply_serving_control(...)`
 
-- [ ] **Step 1: Write failing application-layer tests**
+- [x] **Step 1: Write failing application-layer tests**
 
 Test application refuses:
 - empty workforce subject;
@@ -1100,7 +1100,7 @@ Test application refuses:
 - arbitrary expiry supplied by caller;
 - arbitrary decision/control version supplied by caller.
 
-- [ ] **Step 2: Implement request creation with policy-owned expiry**
+- [x] **Step 2: Implement request creation with policy-owned expiry**
 
 For governance policy v1, the application does not accept caller-selected requested_at
 or expires_at. Persist `governance_policy_version="cpi-governance-v1"`; the guarded
@@ -1111,7 +1111,7 @@ Do not let CLI/API callers set approval count.
 Derive proposer/approver/actor subjects from authenticated workforce context; public
 method/request payloads must not accept arbitrary actor identities.
 
-- [ ] **Step 3: Implement activation wrappers**
+- [x] **Step 3: Implement activation wrappers**
 
 Call only the migration's guarded DB functions. Do not duplicate race-sensitive activation logic in Python.
 
@@ -1124,7 +1124,7 @@ activation. Canonical event-scoped promotion and interpretation-decision activat
 use the same fence, so a new observation/release or validity decision cannot commit
 between fingerprint verification and re-enable.
 
-- [ ] **Step 4: Add end-to-end correction test**
+- [x] **Step 4: Add end-to-end correction test**
 
 1. accept one observation;
 2. selector returns VALUE;
@@ -1138,7 +1138,7 @@ between fingerprint verification and re-enable.
 10. verify selector;
 11. serving control -> ENABLED.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_governance -v
@@ -1146,6 +1146,69 @@ RUN_POSTGRES_INTEGRATION=1 DATABASE_URL=postgresql://market:market@localhost:554
 git add src/cpi_w1_governance.py tests
 git commit -m "feat: add CPI governance application boundary"
 ```
+
+---
+
+### Task 12A: Add Explicit CPI Correction Evidence Promotion Boundary
+
+**Why this task exists:** Task 12 verifies governance/withhold/re-enable behavior, but
+the repository must not rely on direct SQL fixture insertion to represent production
+official corrections. The canonical spec requires explicit correction extractor
+contracts and CORRECTION_NOTICE provenance.
+
+**Files:**
+- Modify: `src/cpi_w1_contracts.py`
+- Modify: `src/cpi_w1_release.py`
+- Modify: `src/cpi_w1_promoter.py`
+- Modify: `tests/test_cpi_w1_promoter.py`
+- Modify: `tests/integration/test_cpi_w1_postgres.py`
+
+**Interfaces:**
+- Add promotion families:
+  - `CPI_CORRECTION_NOTICE_PROMOTE`
+  - `CPI_CORRECTION_OBSERVATION_PROMOTE`
+- Add typed candidates:
+  - correction notice candidate bound to exact artifact hash/reference month;
+  - correction observation candidate containing a non-empty unique Core 4 subset.
+
+- [ ] **Step 1: Add failing semantic-contract tests**
+
+Require:
+- correction notice promotion creates only CORRECTION_NOTICE topology;
+- correction observation promotion requires the same artifact's CORRECTION_NOTICE link;
+- only a non-empty unique subset of Core 4 is legal;
+- SUPPLEMENTAL_DISCLOSURE cannot anchor corrected Core 4;
+- prior valid material remains immutable and a differing corrected value produces
+  selector CONFLICT until governance changes eligibility.
+
+- [ ] **Step 2: Implement correction-notice topology promotion**
+
+Require one valid BLS EVENT_RELEASE for the same CPI reference month. Take the shared
+event fence before reading mutable governance-dependent topology and before inserting
+the CORRECTION_NOTICE relation. Do not insert observations in this family.
+
+- [ ] **Step 3: Implement correction-observation promotion**
+
+Require exact claimed artifact, approved correction extractor contract, matching valid
+CORRECTION_NOTICE link, and EVENT_RELEASE topology. Promote the explicitly corrected
+subset atomically; do not require or manufacture all four values.
+
+- [ ] **Step 4: Replace direct-SQL correction fixture with promoter-driven rehearsal**
+
+The Task 12 end-to-end correction lifecycle must establish correction topology and
+corrected evidence through the promoter boundary rather than direct canonical INSERTs.
+
+- [ ] **Step 5: Run and commit**
+
+```bash
+.venv/bin/python -m unittest tests.test_cpi_w1_promoter tests.test_cpi_w1_governance -v
+RUN_POSTGRES_INTEGRATION=1 DATABASE_URL=postgresql://market:market@localhost:55432/market \
+  .venv/bin/python -m unittest tests.integration.test_cpi_w1_postgres -v
+```
+
+Live correction discovery/locator parsing remains blocked until an official BLS
+correction surface and fixture are evidence-validated; this task freezes the canonical
+mutation boundary without inventing a source URL or parser.
 
 ---
 

@@ -58,13 +58,17 @@ Current implemented foundation on the CPI W1 branch includes:
   corroborating-representation topology, and atomic Core 4 promotion;
 - CPI source reconstruction and SYSTEM_KNOWN_PIT selector with authority-tier
   schedule selection, transitive provenance invalidation, semantic conflict
-  preservation, knowledge fingerprinting, and live serving-control overlay.
+  preservation, knowledge fingerprinting, and live serving-control overlay;
+- application governance boundary for interpretation requests/approvals/activation
+  and emergency serving control, with trusted workforce-principal objects and
+  event-fenced re-enable verification.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
 
 - Table 1 XLSX binary parser/corpus validation and live corroboration ingestion path;
-- application governance client and production authorization/RBAC;
+- official correction promotion boundary and live correction source/parser path;
+- production IdP/RBAC integration for the implemented governance application boundary;
 - golden-corpus differential replay and parser-change release gate;
 - controlled collector/orchestrator and reconciliation;
 - production object-storage retention, orphan cleanup, integrity repair, and

@@ -1302,6 +1302,33 @@ Secondary official representations require a separate topology-only family:
 The separate topology family is necessary for the same reason release-envelope and
 observation promotion are split: a valid official representation relationship must
 not disappear merely because its numeric surface cannot yet be interpreted safely.
+
+Explicit official corrections use two additional families:
+
+4. CPI_CORRECTION_NOTICE_PROMOTE
+   - accepts only a source artifact parsed by an explicitly versioned correction-notice
+     extractor contract;
+   - requires the notice to be scoped to exactly one existing valid CPI EVENT_RELEASE
+     disclosure for the same reference month;
+   - links the correction artifact to that disclosure as CORRECTION_NOTICE;
+   - inserts no corrected observation assertion.
+
+5. CPI_CORRECTION_OBSERVATION_PROMOTE
+   - requires a valid EVENT_RELEASE relation and the matching valid CORRECTION_NOTICE
+     disclosure-artifact link for the exact input artifact;
+   - accepts a non-empty unique subset of the CPI W1 Core 4 semantics, never unrelated
+     observations;
+   - atomically promotes exactly the corrected semantics explicitly established by the
+     correction extractor contract;
+   - does not manufacture unaffected Core 4 values and does not invalidate or supersede
+     prior evidence automatically.
+
+A correction artifact that cannot be safely scoped to the release is QUARANTINED and
+must not be linked merely because it is a BLS/CPI-program notice. If corrected material
+differs from still-valid prior material, selector output remains CONFLICT until governed
+interpretation decisions change eligibility. Correction topology and corrected values
+are split so a valid scoped notice can be preserved even when numeric correction
+extraction remains unresolved.
    - may QUARANTINE without rolling back already accepted release-envelope evidence.
 
 This split is a semantic boundary, not a microservice requirement. Both work families may run in the same promoter codebase and under the same economic-promoter logical writer capability.
