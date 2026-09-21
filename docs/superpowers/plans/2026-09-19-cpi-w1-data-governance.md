@@ -1102,7 +1102,10 @@ Test application refuses:
 
 - [ ] **Step 2: Implement request creation with policy-owned expiry**
 
-For governance policy v1, compute expiry inside the service from one constant policy duration and persist `governance_policy_version="cpi-governance-v1"`.
+For governance policy v1, the application does not accept caller-selected requested_at
+or expires_at. Persist `governance_policy_version="cpi-governance-v1"`; the guarded
+database policy trigger derives expires_at as exactly 24 hours from database-owned
+requested_at.
 
 Do not let CLI/API callers set approval count.
 Derive proposer/approver/actor subjects from authenticated workforce context; public
@@ -1116,6 +1119,10 @@ For EVENT_OCCURRENCE re-enable, recompute the current selector knowledge fingerp
 immediately before activation, require a lowercase 64-character SHA-256 operator-
 verified fingerprint, compare the two, and refuse activation on mismatch or while
 knowledge remains CONFLICT/UNRESOLVED.
+Acquire the shared event advisory fence before recomputation and hold it through
+activation. Canonical event-scoped promotion and interpretation-decision activation
+use the same fence, so a new observation/release or validity decision cannot commit
+between fingerprint verification and re-enable.
 
 - [ ] **Step 4: Add end-to-end correction test**
 

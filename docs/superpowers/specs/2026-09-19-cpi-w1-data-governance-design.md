@@ -1061,6 +1061,14 @@ timestamps are excluded so an unchanged knowledge state remains stable across re
 Task 11 owns the exact canonical payload builder; Task 12 must recompute it immediately
 before event re-enable and compare it to the operator-verified value.
 
+Event-scoped promotion, interpretation activation, and event re-enable share a
+transaction-scoped event advisory fence. Re-enable acquires the fence before
+recomputing current knowledge and holds it through control activation. Promotion
+acquires it before validating mutable governance-dependent topology and writing
+event-scoped evidence. Interpretation activation acquires the same fence for every
+event affected by the governed subject. This prevents check/use races between
+fingerprint verification, new official evidence, and validity decisions.
+
 These are correctness guards, not a complete production authorization model. Independent production re-enable approval, break-glass policy, and workforce role enforcement remain mandatory before Public Beta under the Runtime/Security/Readiness contract.
 
 ## 25. Selector contract
