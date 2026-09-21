@@ -37,6 +37,16 @@ _MONTHS = {
 _PENDING_TOKENS = {"tba", "to be announced", "date pending", "pending"}
 _CANCELED_TOKENS = {"canceled", "cancelled"}
 
+_MAX_SCHEDULE_HTML_BYTES = 5 * 1024 * 1024
+_MAX_SCHEDULE_TABLES = 64
+_MAX_SCHEDULE_ROWS_PER_TABLE = 5000
+_MAX_SCHEDULE_CELLS_PER_ROW = 64
+_MAX_SCHEDULE_CELL_TEXT_CHARS = 8192
+_MAX_ICS_BYTES = 2 * 1024 * 1024
+_MAX_ICS_LINES = 100000
+_MAX_ICS_EVENTS = 5000
+_MAX_ICS_LINE_CHARS = 65536
+
 
 class ScheduleParseError(ValueError):
     pass
@@ -85,10 +95,16 @@ class _SemanticTableParser(HTMLParser):
         if tag == "table":
             self._table_depth += 1
             if self._table_depth == 1:
+                if len(self.tables) >= _MAX_SCHEDULE_TABLES:
+                    raise ScheduleParseError("too many schedule tables")
                 self._rows = []
         elif self._table_depth == 1 and tag == "tr":
+            if self._rows is not None and len(self._rows) >= _MAX_SCHEDULE_ROWS_PER_TABLE:
+                raise ScheduleParseError("too many schedule rows")
             self._row = []
         elif self._table_depth == 1 and tag in {"th", "td"}:
+            if self._row is not None and len(self._row) >= _MAX_SCHEDULE_CELLS_PER_ROW:
+                raise ScheduleParseError("too many schedule cells in row")
             self._cell_parts = []
 
     def handle_data(self, data: str) -> None:
@@ -99,6 +115,8 @@ class _SemanticTableParser(HTMLParser):
         tag = tag.lower()
         if self._table_depth == 1 and tag in {"th", "td"} and self._cell_parts is not None:
             text = " ".join("".join(self._cell_parts).split())
+            if len(text) > _MAX_SCHEDULE_CELL_TEXT_CHARS:
+                raise ScheduleParseError("schedule table cell exceeds text limit")
             if self._row is not None:
                 self._row.append(text)
             self._cell_parts = None
@@ -168,6 +186,8 @@ def parse_cpi_schedule_html(
     contract_version: str,
     timezone_name: str = "America/New_York",
 ) -> ScheduleCandidate:
+    if len(body) > _MAX_SCHEDULE_HTML_BYTES:
+        raise ScheduleParseError("CPI schedule HTML exceeds parser byte limit")
     if expected_reference_month.day != 1:
         raise ValueError("expected_reference_month must be the first day of the month")
     try:
@@ -298,6 +318,8 @@ def parse_bls_revised_release_dates_html(
 ) -> ScheduleCandidate:
     """Parse explicit CPI cancellation from the BLS lapse revised-dates surface."""
 
+    if len(body) > _MAX_SCHEDULE_HTML_BYTES:
+        raise ScheduleParseError("BLS revised release dates HTML exceeds parser byte limit")
     if expected_reference_month.day != 1:
         raise ValueError("expected_reference_month must be the first day of the month")
     try:
@@ -367,8 +389,12 @@ def parse_bls_revised_release_dates_html(
 
 def _unfold_ics_lines(text: str) -> list[str]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if len(lines) > _MAX_ICS_LINES:
+        raise ScheduleParseError("BLS ICS exceeds line-count limit")
     unfolded: list[str] = []
     for line in lines:
+        if len(line) > _MAX_ICS_LINE_CHARS:
+            raise ScheduleParseError("BLS ICS line exceeds text limit")
         if line.startswith((" ", "\t")) and unfolded:
             unfolded[-1] += line[1:]
         else:
@@ -382,6 +408,8 @@ def parse_cpi_schedule_ics(
     expected_reference_month: date,
     contract_version: str,
 ) -> ScheduleCandidate:
+    if len(body) > _MAX_ICS_BYTES:
+        raise ScheduleParseError("BLS ICS exceeds parser byte limit")
     if expected_reference_month.day != 1:
         raise ValueError("expected_reference_month must be the first day of the month")
     try:
@@ -393,6 +421,8 @@ def parse_cpi_schedule_ics(
     current: dict[str, str] | None = None
     for line in lines:
         if line == "BEGIN:VEVENT":
+            if len(events) >= _MAX_ICS_EVENTS:
+                raise ScheduleParseError("BLS ICS exceeds event-count limit")
             current = {}
             continue
         if line == "END:VEVENT":

@@ -195,6 +195,38 @@ class CpiW1ScheduleTest(unittest.TestCase):
         later = replace(candidate, source_effective_date=date(2026, 9, 1))
         self.assertEqual(candidate.material_fingerprint, later.material_fingerprint)
 
+    def test_schedule_parsers_enforce_parser_level_byte_limits(self) -> None:
+        with self.assertRaises(ScheduleParseError):
+            parse_cpi_schedule_html(
+                b"x" * (5 * 1024 * 1024 + 1),
+                expected_reference_month=REFERENCE_MONTH,
+                contract_version="bls-cpi-source-v1",
+            )
+        with self.assertRaises(ScheduleParseError):
+            parse_bls_revised_release_dates_html(
+                b"x" * (5 * 1024 * 1024 + 1),
+                expected_reference_month=date(2025, 10, 1),
+            )
+        with self.assertRaises(ScheduleParseError):
+            parse_cpi_schedule_ics(
+                b"x" * (2 * 1024 * 1024 + 1),
+                expected_reference_month=REFERENCE_MONTH,
+                contract_version="bls-cpi-source-v1",
+            )
+
+    def test_schedule_html_rejects_excessive_cell_count(self) -> None:
+        cells = "".join("<td>x</td>" for _ in range(65))
+        body = (
+            "<table><tr><th>Reference Month</th><th>Release Date</th>"
+            "<th>Release Time</th></tr><tr>" + cells + "</tr></table>"
+        ).encode()
+        with self.assertRaises(ScheduleParseError):
+            parse_cpi_schedule_html(
+                body,
+                expected_reference_month=REFERENCE_MONTH,
+                contract_version="bls-cpi-source-v1",
+            )
+
     def test_ambiguous_duplicate_rows_are_rejected(self) -> None:
         body = b"""<table>
         <tr><th>Reference Month</th><th>Release Date</th><th>Release Time</th></tr>
