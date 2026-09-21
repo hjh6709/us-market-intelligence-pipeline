@@ -90,6 +90,7 @@ class GovernedObservation:
     knowledge_state: ObservationResolutionState
     normalized_value: Decimal | None
     withheld: bool
+    consumer_eligible: bool
 
 
 @dataclass(frozen=True)
@@ -302,10 +303,15 @@ def _select_schedule(evidence: Iterable[_ScheduleEvidence]) -> _ScheduleSelectio
 def _project_release(
     schedule: _ScheduleSelection,
     *,
-    has_valid_release: bool,
+    valid_release_count: int,
     evaluation_at: datetime,
 ) -> ReleaseProjectionState:
     _require_aware(evaluation_at, "evaluation_at")
+    if valid_release_count < 0:
+        raise ValueError("valid_release_count must be non-negative")
+    if valid_release_count > 1:
+        return ReleaseProjectionState.CONFLICT
+    has_valid_release = valid_release_count == 1
 
     if schedule.kind == "CONFLICT":
         if has_valid_release and not schedule.contains_canceled_material:
@@ -714,7 +720,7 @@ class CpiW1Selector:
         )
         release_state = _project_release(
             schedule,
-            has_valid_release=bool(release_ids),
+            valid_release_count=len(release_ids),
             evaluation_at=evaluation_at,
         )
         fingerprint = _knowledge_fingerprint(
@@ -833,16 +839,22 @@ class CpiW1Selector:
                 observation_code=item.observation_code,
                 knowledge_state=item.state,
                 normalized_value=(
-                    None
+                    item.normalized_value
                     if (
-                        effective is ServingControlState.WITHHELD
+                        knowledge.release_state is ReleaseProjectionState.DISCLOSED
                         and item.state is ObservationResolutionState.VALUE
+                        and effective is ServingControlState.ENABLED
                     )
-                    else item.normalized_value
+                    else None
                 ),
                 withheld=(
                     effective is ServingControlState.WITHHELD
                     and item.state is ObservationResolutionState.VALUE
+                ),
+                consumer_eligible=(
+                    knowledge.release_state is ReleaseProjectionState.DISCLOSED
+                    and item.state is ObservationResolutionState.VALUE
+                    and effective is ServingControlState.ENABLED
                 ),
             )
             for item in knowledge.observations

@@ -92,7 +92,7 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertEqual(
             _project_release(
                 selected,
-                has_valid_release=False,
+                valid_release_count=0,
                 evaluation_at=datetime(2026, 9, 11, 12, 29, tzinfo=UTC),
             ),
             ReleaseProjectionState.NOT_YET_DUE,
@@ -100,7 +100,7 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertEqual(
             _project_release(
                 selected,
-                has_valid_release=False,
+                valid_release_count=0,
                 evaluation_at=datetime(2026, 9, 11, 12, 30, tzinfo=UTC),
             ),
             ReleaseProjectionState.AWAITING_CONFIRMATION,
@@ -123,10 +123,21 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertEqual(
             _project_release(
                 selected,
-                has_valid_release=False,
+                valid_release_count=0,
                 evaluation_at=datetime(2026, 9, 11, 16, 0, tzinfo=UTC),
             ),
             ReleaseProjectionState.DUE_DATE_UNTIMED,
+        )
+
+    def test_multiple_release_anchors_are_conflict(self) -> None:
+        selected = _ScheduleSelection("UNRESOLVED", None, (), False)
+        self.assertEqual(
+            _project_release(
+                selected,
+                valid_release_count=2,
+                evaluation_at=datetime(2026, 9, 11, tzinfo=UTC),
+            ),
+            ReleaseProjectionState.CONFLICT,
         )
 
     def test_canceled_schedule_and_release_is_conflict(self) -> None:
@@ -146,7 +157,7 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertEqual(
             _project_release(
                 selected,
-                has_valid_release=False,
+                valid_release_count=0,
                 evaluation_at=datetime(2026, 9, 11, tzinfo=UTC),
             ),
             ReleaseProjectionState.NO_RELEASE_EXPECTED,
@@ -154,7 +165,7 @@ class CpiW1SelectorTest(unittest.TestCase):
         self.assertEqual(
             _project_release(
                 selected,
-                has_valid_release=True,
+                valid_release_count=1,
                 evaluation_at=datetime(2026, 9, 11, tzinfo=UTC),
             ),
             ReleaseProjectionState.CONFLICT,
@@ -286,6 +297,14 @@ class CpiW1SelectorTest(unittest.TestCase):
         )
         self.assertIn("TransactionStatus.IDLE", source)
         self.assertIn("with _consistent_read_transaction(connection):", source)
+
+    def test_governed_numeric_requires_disclosed_release(self) -> None:
+        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "knowledge.release_state is ReleaseProjectionState.DISCLOSED",
+            source,
+        )
+        self.assertIn("consumer_eligible=", source)
 
     def test_live_governed_selector_has_atomic_entrypoint(self) -> None:
         import inspect

@@ -3084,6 +3084,72 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(isolation, "repeatable read")
             self.assertEqual(read_only, "on")
 
+    def test_multiple_valid_event_release_disclosures_fail_closed(self) -> None:
+        selector = CpiW1Selector()
+        with self.connection() as connection:
+            promoted = self.promote_normal_release(connection)
+            event_id = promoted["event_id"]
+
+            second_attempt = self.make_attempt(
+                connection,
+                "ECONOMIC_PROMOTE",
+                f"promote:second-release:{uuid4()}",
+            )
+            second_disclosure = self.make_disclosure(
+                connection,
+                second_attempt,
+                key=f"BLS:CPI:2026-08-01:SECOND-RELEASE:{uuid4()}",
+            )
+            second_link = uuid4()
+            self.insert_subject(
+                connection,
+                second_link,
+                "EVENT_DISCLOSURE_LINK",
+            )
+            connection.execute(
+                """
+                INSERT INTO event_disclosure_links (
+                    disclosure_link_id, event_occurrence_id, disclosure_id,
+                    relation_kind, accepted_by_attempt_id, accepted_at
+                ) VALUES (
+                    %s, %s, %s, 'EVENT_RELEASE', %s, CURRENT_TIMESTAMP
+                )
+                """,
+                (
+                    second_link,
+                    event_id,
+                    second_disclosure,
+                    second_attempt,
+                ),
+            )
+
+            knowledge = selector.select_event(
+                connection,
+                event_id,
+                KnowledgeMode.OFFICIAL_SOURCE_RECONSTRUCTION,
+            )
+            self.assertEqual(knowledge.release_state.value, "CONFLICT")
+            self.assertEqual(
+                knowledge.observation("CPI_CORE_MOM").state,
+                ObservationResolutionState.VALUE,
+            )
+
+            governed = selector.select_governed_event(
+                connection,
+                event_id,
+            )
+            core = next(
+                item
+                for item in governed.observations
+                if item.observation_code == "CPI_CORE_MOM"
+            )
+            self.assertFalse(core.consumer_eligible)
+            self.assertIsNone(core.normalized_value)
+            self.assertEqual(
+                governed.effective_control_state,
+                ServingControlState.ENABLED,
+            )
+
     def test_selector_current_and_pit_respect_artifact_relation_invalidation(self) -> None:
         selector = CpiW1Selector()
         with self.connection() as connection:
@@ -3562,6 +3628,13 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertTrue(
                 all(
                     item.withheld
+                    for item in governed.observations
+                    if item.knowledge_state is ObservationResolutionState.VALUE
+                )
+            )
+            self.assertTrue(
+                all(
+                    not item.consumer_eligible
                     for item in governed.observations
                     if item.knowledge_state is ObservationResolutionState.VALUE
                 )
