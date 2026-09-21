@@ -8,7 +8,8 @@ from uuid import uuid4
 
 import psycopg
 
-from src.cpi_w1_promoter import CpiW1Promoter
+from src.cpi_w1_contracts import PromotionFamily
+from src.cpi_w1_promoter import CpiW1Promoter, promotion_work_key
 from src.cpi_w1_release import extract_core4_from_release_html, extract_release_envelope
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
 
@@ -1592,7 +1593,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 run_id,
                 execution_scope="ECONOMIC_PROMOTE",
-                work_key=f"promote:claim:{uuid4()}",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
             claim = repository.claim_work_item(
                 connection,
@@ -1628,7 +1629,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 run_id,
                 execution_scope="ECONOMIC_PROMOTE",
-                work_key=f"promote:reclaim:{uuid4()}",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
             first = repository.claim_work_item(
                 connection,
@@ -1672,6 +1673,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             work_id = uuid4()
+            work_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+            )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -1679,11 +1685,12 @@ class CpiW1PostgresTest(unittest.TestCase):
                     work_key, input_artifact_id
                 ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
                 """,
-                (work_id, run_id, f"promote:envelope:{artifact_id}", artifact_id),
+                (work_id, run_id, work_key, artifact_id),
             )
             claim = repository.claim_work_item(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
             )
             result = promoter.promote_release_envelope(
                 connection,
@@ -1724,6 +1731,16 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             envelope_work = uuid4()
             observation_work = uuid4()
+            envelope_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
+            observation_key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -1736,17 +1753,18 @@ class CpiW1PostgresTest(unittest.TestCase):
                 (
                     envelope_work,
                     run_id,
-                    f"promote:envelope:{artifact_id}",
+                    envelope_key,
                     artifact_id,
                     observation_work,
                     run_id,
-                    f"promote:observations:{artifact_id}",
+                    observation_key,
                     artifact_id,
                 ),
             )
             envelope_claim = repository.claim_work_item(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
             )
             promoter.promote_release_envelope(
                 connection,
@@ -1757,6 +1775,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             observation_claim = repository.claim_work_item(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
             )
             promoter.quarantine_observation_work(
                 connection,
@@ -1775,11 +1794,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ).fetchall()
             )
             self.assertEqual(
-                outcomes[f"promote:envelope:{artifact_id}"],
+                outcomes[envelope_key],
                 "SUCCEEDED",
             )
             self.assertEqual(
-                outcomes[f"promote:observations:{artifact_id}"],
+                outcomes[observation_key],
                 "QUARANTINED",
             )
             self.assertEqual(
@@ -1814,6 +1833,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             envelope_work = uuid4()
+            envelope_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -1824,13 +1848,14 @@ class CpiW1PostgresTest(unittest.TestCase):
                 (
                     envelope_work,
                     envelope_run,
-                    f"promote:envelope:{artifact_id}",
+                    envelope_key,
                     artifact_id,
                 ),
             )
             envelope_claim = repository.claim_work_item(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
             )
             promoter.promote_release_envelope(
                 connection,
@@ -1844,6 +1869,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             observation_work = uuid4()
+            observation_key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                artifact_id,
+                bundle.extractor_contract_version,
+            )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -1854,13 +1884,14 @@ class CpiW1PostgresTest(unittest.TestCase):
                 (
                     observation_work,
                     observation_run,
-                    f"promote:observations:{artifact_id}",
+                    observation_key,
                     artifact_id,
                 ),
             )
             observation_claim = repository.claim_work_item(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
             )
             result = promoter.promote_observation_bundle(
                 connection,
@@ -1875,6 +1906,47 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ).fetchone()[0],
                 4,
             )
+
+    def test_promotion_family_claim_cannot_be_swapped(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path("tests/fixtures/cpi_w1/html/normal.html").read_bytes()
+        envelope = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"release:wrong-family:{uuid4()}")
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            wrong_key = promotion_work_key(
+                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+                artifact_id,
+                envelope.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, wrong_key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
+            )
+            with self.assertRaises(Exception):
+                promoter.promote_release_envelope(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=envelope,
+                )
 
     def test_canceled_schedule_cannot_carry_scheduled_fields(self) -> None:
         with self.connection() as connection:

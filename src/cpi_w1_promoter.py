@@ -10,6 +10,7 @@ from src.cpi_w1_contracts import (
     DisclosureArtifactRelationKind,
     DisclosureRelationKind,
     ObservationState,
+    PromotionFamily,
     material_fingerprint,
 )
 from src.cpi_w1_release import ObservationBundleCandidate, ReleaseEnvelopeCandidate
@@ -52,6 +53,16 @@ def _stable_uuid(kind: str, *parts: object) -> UUID:
 
 def canonical_release_disclosure_key(reference_month) -> str:
     return f"BLS:CPI:{reference_month.isoformat()}:DATA_RELEASE"
+
+
+def promotion_work_key(
+    family: PromotionFamily,
+    artifact_id: UUID,
+    extractor_contract_version: str,
+) -> str:
+    if not extractor_contract_version or extractor_contract_version != extractor_contract_version.strip():
+        raise ValueError("extractor_contract_version must be a canonical non-empty token")
+    return f"{family.value}:{artifact_id}:{extractor_contract_version}"
 
 
 class CpiW1Promoter:
@@ -126,6 +137,13 @@ class CpiW1Promoter:
     ) -> PromotionResult:
         if candidate.event_type != "CPI":
             raise PromotionInvariantError("release candidate is not CPI")
+        expected_work_key = promotion_work_key(
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+        )
+        if claim.work_key != expected_work_key:
+            raise PromotionInvariantError("claim is not release-envelope promotion work")
 
         with connection.transaction():
             self._verify_input_artifact(
@@ -428,6 +446,13 @@ class CpiW1Promoter:
         codes = [item.observation_code for item in candidate.observations]
         if len(codes) != 4 or set(codes) != _CORE4:
             raise PromotionInvariantError("Core 4 bundle must resolve exactly four semantics")
+        expected_work_key = promotion_work_key(
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+        )
+        if claim.work_key != expected_work_key:
+            raise PromotionInvariantError("claim is not observation-bundle promotion work")
 
         with connection.transaction():
             self._verify_input_artifact(
@@ -545,6 +570,9 @@ class CpiW1Promoter:
         *,
         reason_code: str,
     ) -> None:
+        prefix = PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":"
+        if not claim.work_key.startswith(prefix):
+            raise PromotionInvariantError("claim is not observation-bundle promotion work")
         self.repository.terminalize_claim(
             connection,
             claim,

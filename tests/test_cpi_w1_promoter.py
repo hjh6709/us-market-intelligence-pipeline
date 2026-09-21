@@ -2,7 +2,8 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from src.cpi_w1_promoter import canonical_release_disclosure_key
+from src.cpi_w1_contracts import PromotionFamily
+from src.cpi_w1_promoter import canonical_release_disclosure_key, promotion_work_key
 
 
 SOURCE = Path("src/cpi_w1_promoter.py").read_text(encoding="utf-8")
@@ -13,6 +14,23 @@ class CpiW1PromoterTest(unittest.TestCase):
         self.assertEqual(
             canonical_release_disclosure_key(date(2026, 8, 1)),
             "BLS:CPI:2026-08-01:DATA_RELEASE",
+        )
+
+    def test_promotion_work_key_binds_family_artifact_and_extractor(self) -> None:
+        from uuid import UUID
+
+        artifact_id = UUID("00000000-0000-0000-0000-000000000123")
+        self.assertEqual(
+            promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                "bls-cpi-release-html-v1",
+            ),
+            (
+                "CPI_RELEASE_ENVELOPE_PROMOTE:"
+                "00000000-0000-0000-0000-000000000123:"
+                "bls-cpi-release-html-v1"
+            ),
         )
 
     def test_promotion_public_interfaces_do_not_accept_accepted_at(self) -> None:

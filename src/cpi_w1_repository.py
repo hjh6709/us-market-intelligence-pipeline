@@ -29,6 +29,7 @@ class Claim:
     claim_generation: int
     claim_token: UUID
     input_artifact_id: UUID | None
+    work_key: str
 
 
 CLAIM_SELECT_SQL = """
@@ -37,7 +38,8 @@ SELECT
     w.run_id,
     w.input_artifact_id,
     w.claim_generation,
-    w.state
+    w.state,
+    w.work_key
   FROM ingestion_work_items w
   JOIN ingestion_runs r
     ON r.run_id = w.run_id
@@ -46,6 +48,7 @@ SELECT
  WHERE w.execution_scope = %s
    AND w.data_domain = 'ECONOMIC'
    AND r.state <> 'TERMINAL'
+   AND (%s IS NULL OR w.work_key LIKE %s)
    AND (
         (
             w.state = 'PENDING'
@@ -66,6 +69,7 @@ CURRENT_CLAIM_SQL = """
 SELECT
     w.run_id,
     w.input_artifact_id,
+    w.work_key,
     a.state,
     a.attempt_number
   FROM ingestion_work_items w
@@ -105,6 +109,7 @@ class CpiW1Repository:
         *,
         execution_scope: str,
         lease_seconds: int = 300,
+        work_key_prefix: str | None = None,
     ) -> Claim | None:
         if execution_scope not in {"ECONOMIC_COLLECT", "ECONOMIC_PROMOTE"}:
             raise ValueError("unsupported execution_scope")
@@ -112,14 +117,15 @@ class CpiW1Repository:
             raise ValueError("lease_seconds must be in [1, 3600]")
 
         with connection.transaction():
+            like_pattern = None if work_key_prefix is None else work_key_prefix + "%"
             row = connection.execute(
                 CLAIM_SELECT_SQL,
-                (execution_scope,),
+                (execution_scope, work_key_prefix, like_pattern),
             ).fetchone()
             if row is None:
                 return None
 
-            work_item_id, run_id, input_artifact_id, generation, _state = row
+            work_item_id, run_id, input_artifact_id, generation, _state, work_key = row
             generation = int(generation) + 1
             claim_token = uuid4()
             attempt_id = uuid4()
@@ -169,6 +175,7 @@ class CpiW1Repository:
                 claim_generation=generation,
                 claim_token=claim_token,
                 input_artifact_id=input_artifact_id,
+                work_key=work_key,
             )
 
     def assert_current_claim(self, connection: Any, claim: Claim) -> tuple[UUID, UUID | None]:
@@ -184,9 +191,11 @@ class CpiW1Repository:
         ).fetchone()
         if row is None:
             raise StaleClaimError("claim is stale, expired, or no longer running")
-        run_id, input_artifact_id, attempt_state, attempt_number = row
+        run_id, input_artifact_id, work_key, attempt_state, attempt_number = row
         if run_id != claim.run_id:
             raise RepositoryInvariantError("claim run identity changed")
+        if work_key != claim.work_key:
+            raise RepositoryInvariantError("claim work identity changed")
         if attempt_state != "RUNNING" or int(attempt_number) != claim.claim_generation:
             raise RepositoryInvariantError("attempt ownership does not match claim")
         return run_id, input_artifact_id

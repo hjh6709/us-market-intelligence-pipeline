@@ -830,6 +830,11 @@ Claim:
 - same-generation lease renewal preserves the existing claim_token;
 - expired-lease reclaim advances generation and assigns a different claim_token.
 
+Promotion work uses a deterministic promotion-family-prefixed work key:
+`<promotion_family>:<artifact_id>:<extractor_contract_version>`.
+Workers claim only their family prefix, and the promoter revalidates the exact key so
+one promotion family cannot execute another family's work.
+
 All later mutation methods require matching `work_item_id + claim_generation + claim_token`.
 Work terminalization requires the current generation attempt to be TERMINAL with the
 same outcome; SKIPPED is the only terminal work outcome with no attempt.
