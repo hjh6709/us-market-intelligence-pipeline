@@ -1018,6 +1018,17 @@ class CpiW1PostgresTest(unittest.TestCase):
             assertion_id,
             "OFFICIAL_OBSERVATION_ASSERTION",
         )
+        try:
+            material_fingerprint = ObservationMaterial(
+                observation_code=observation_code,
+                assertion_state=ObservationState(assertion_state),
+                normalized_value=normalized_value,
+            ).fingerprint
+        except (TypeError, ValueError):
+            # Negative DB-constraint tests still need a syntactically valid hash.
+            material_fingerprint = digest(
+                f"invalid:{observation_code}:{assertion_state}:{normalized_value}"
+            )
         connection.execute(
             """
             INSERT INTO official_observation_assertions (
@@ -1047,9 +1058,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 source_reason_text,
                 artifact_id or topology["artifact_id"],
                 topology["promote_attempt"],
-                digest(
-                    f"{observation_code}:{assertion_state}:{normalized_value}"
-                ),
+                material_fingerprint,
             ),
         )
         return assertion_id
