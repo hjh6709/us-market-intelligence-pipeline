@@ -1378,6 +1378,13 @@ Recovery path:
 For the primary CPI release HTML, expected automatic work includes both CPI_RELEASE_ENVELOPE_PROMOTE and CPI_OBSERVATION_BUNDLE_PROMOTE.
 
 Automatic promotion-work identity includes artifact identity + promotion-family contract + extractor contract version. Duplicate handoffs therefore converge, while a new extractor version creates an explicit replayable interpretation attempt.
+The database enforces this automatic-promotion identity across runs for work with a
+non-null input artifact. `run_id + work_key` remains the general work identity, but
+automatic ECONOMIC_PROMOTE work additionally has one global
+`input_artifact_id + work_key` identity. Two orchestrator runs may race, but they
+cannot create two business work items for the same artifact/family/extractor. A losing
+run may legitimately finalize NO_WORK after observing that the promotion work already
+exists elsewhere.
 
 A run may finish PARTIAL when envelope promotion succeeds but observation promotion is QUARANTINED or FAILED. Product release state and observation-resolution state remain independent axes.
 

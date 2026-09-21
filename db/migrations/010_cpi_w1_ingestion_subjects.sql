@@ -114,6 +114,11 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
 CREATE INDEX IF NOT EXISTS ingestion_work_items_claimable_idx
     ON ingestion_work_items (data_domain, execution_scope, state, next_claim_at, lease_until);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ingestion_work_items_promotion_identity
+    ON ingestion_work_items (input_artifact_id, work_key)
+    WHERE execution_scope = 'ECONOMIC_PROMOTE'
+      AND input_artifact_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS ingestion_attempts (
     attempt_id UUID PRIMARY KEY,
     work_item_id UUID NOT NULL,

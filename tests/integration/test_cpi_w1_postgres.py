@@ -2091,6 +2091,46 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (attempt_id,),
                 )
 
+    def test_duplicate_promotion_work_across_runs_is_rejected(self) -> None:
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"promotion-global-id:{uuid4()}",
+            )
+            work_key = (
+                f"CPI_RELEASE_ENVELOPE_PROMOTE:{artifact_id}:"
+                "bls-cpi-release-html-v1"
+            )
+            first_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            second_run = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), first_run, work_key, artifact_id),
+            )
+            with self.assertRaises(psycopg.errors.UniqueViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_work_items (
+                        work_item_id, run_id, execution_scope, data_domain,
+                        work_key, input_artifact_id
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s
+                    )
+                    """,
+                    (uuid4(), second_run, work_key, artifact_id),
+                )
+
     def test_repository_claim_starts_run_and_creates_aligned_attempt(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:

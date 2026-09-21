@@ -96,6 +96,15 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("storage_generation IS NULL", self.sql)
         self.assertIn("created_by_execution_scope = 'ECONOMIC_COLLECT'", self.sql)
 
+    def test_promotion_work_identity_is_global_across_runs(self) -> None:
+        self.assertIn("ingestion_work_items_promotion_identity", self.sql)
+        self.assertIn(
+            "ON ingestion_work_items (input_artifact_id, work_key)",
+            self.sql,
+        )
+        self.assertIn("execution_scope = 'ECONOMIC_PROMOTE'", self.sql)
+        self.assertIn("input_artifact_id IS NOT NULL", self.sql)
+
     def test_replay_and_scheduled_delivery_have_durable_identity(self) -> None:
         self.assertIn("ingestion_runs_replay_reference_valid", self.sql)
         self.assertIn("ingestion_runs_trigger_idempotency", self.sql)

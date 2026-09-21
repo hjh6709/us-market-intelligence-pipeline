@@ -1360,7 +1360,10 @@ Do not execute promoter logic inside the collector transaction.
 - [ ] **Step 3: Add reconciliation command mode**
 
 `--reconcile-promotions` scans committed CPI artifacts and inserts missing deterministic
-promotion work. Duplicate execution converges by work key.
+promotion work. Duplicate execution converges under the database-enforced global
+`input_artifact_id + work_key` promotion identity, not a racy application-only
+SELECT-before-INSERT check. Different runs may observe the same existing promotion
+work; a new extractor version remains a different work_key.
 
 The same reconciliation pass calls repository
 `finalize_ingestion_run_if_complete` for non-terminal CPI W1 runs. This closes the
