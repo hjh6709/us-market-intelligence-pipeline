@@ -579,6 +579,9 @@ class CpiW1Selector:
     ) -> CpiEventKnowledge:
         cutoff = self._cutoff(mode, as_of)
         with self.connection.transaction():
+            self.connection.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+            )
             evaluation_time = (
                 cutoff
                 if mode is KnowledgeMode.SYSTEM_KNOWN_PIT

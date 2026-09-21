@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -80,6 +81,14 @@ def value_evidence(code: str, value: str) -> ObservationEvidence:
 
 
 class CpiW1SelectorTest(unittest.TestCase):
+    def test_selector_uses_one_repeatable_read_snapshot(self) -> None:
+        source = Path("src/cpi_w1_selector.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+            source,
+        )
+        self.assertEqual(source.count("SELECT CURRENT_TIMESTAMP"), 1)
+
     def test_same_material_from_multiple_artifacts_converges(self) -> None:
         row = value_evidence("CPI_CORE_MOM", "0.3")
         result = resolve_observation_materials("CPI_CORE_MOM", [row, row])
