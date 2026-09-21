@@ -1516,6 +1516,115 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (event_id,),
                 )
 
+    def test_governance_application_derives_identity_and_versions(self) -> None:
+        governance = CpiW1Governance()
+        proposer = WorkforcePrincipal("corp", "proposer-1")
+        approver = WorkforcePrincipal("corp", "approver-1")
+        activator = WorkforcePrincipal("corp", "activator-1")
+        with self.connection() as connection:
+            subject_id = self.make_governable_observation(connection)
+            request_id = governance.create_interpretation_request(
+                connection,
+                principal=proposer,
+                subject_id=subject_id,
+                requested_state="INVALID",
+                reason_code="SOURCE_REVIEW",
+                case_ref="CASE-APP-1",
+            )
+            request = connection.execute(
+                """
+                SELECT expected_decision_version, proposer_subject,
+                       governance_policy_version,
+                       expires_at - requested_at
+                  FROM interpretation_requests
+                 WHERE request_id=%s
+                """,
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(request[0], 0)
+            self.assertEqual(request[1], proposer.database_subject)
+            self.assertEqual(request[2], "cpi-governance-v1")
+            self.assertEqual(request[3].total_seconds(), 24 * 60 * 60)
+
+            governance.record_interpretation_approval(
+                connection,
+                principal=approver,
+                request_id=request_id,
+                decision="APPROVE",
+            )
+            decision_id = governance.activate_interpretation_request(
+                connection,
+                principal=activator,
+                request_id=request_id,
+            )
+            decision = connection.execute(
+                """
+                SELECT decision_version, decision_state
+                  FROM interpretation_decisions
+                 WHERE interpretation_decision_id=%s
+                """,
+                (decision_id,),
+            ).fetchone()
+            self.assertEqual(decision, (1, "INVALID"))
+
+    def test_governance_application_event_reenable_requires_current_fingerprint(self) -> None:
+        governance = CpiW1Governance()
+        operator = WorkforcePrincipal("corp", "operator-1")
+        with self.connection() as connection:
+            topology = self.make_observation_topology(connection)
+            for code, value in (
+                ("CPI_HEADLINE_MOM", Decimal("0.3")),
+                ("CPI_HEADLINE_YOY", Decimal("2.9")),
+                ("CPI_CORE_MOM", Decimal("0.2")),
+                ("CPI_CORE_YOY", Decimal("2.7")),
+            ):
+                self.insert_observation_assertion(
+                    connection,
+                    topology,
+                    observation_code=code,
+                    normalized_value=value,
+                )
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="EVENT_OCCURRENCE",
+                event_occurrence_id=topology["event_id"],
+                state=ServingControlState.WITHHELD,
+                reason_code="INTEGRITY_REVIEW",
+                case_ref="CASE-APP-2",
+            )
+            knowledge = governance.selector.select_event(
+                connection,
+                topology["event_id"],
+                "OFFICIAL_SOURCE_RECONSTRUCTION",
+            )
+            decision_id = governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="EVENT_OCCURRENCE",
+                event_occurrence_id=topology["event_id"],
+                state=ServingControlState.ENABLED,
+                reason_code="REVIEW_COMPLETE",
+                case_ref="CASE-APP-2",
+                operator_verified_knowledge_fingerprint=knowledge.knowledge_fingerprint,
+            )
+            state = connection.execute(
+                """
+                SELECT control_version, state, actor_subject,
+                       verified_knowledge_fingerprint
+                  FROM economic_serving_control_decisions
+                 WHERE control_decision_id=%s
+                """,
+                (decision_id,),
+            ).fetchone()
+            self.assertEqual(state[0], 2)
+            self.assertEqual(state[1], "ENABLED")
+            self.assertEqual(state[2], operator.database_subject)
+            self.assertEqual(
+                state[3],
+                knowledge.knowledge_fingerprint,
+            )
+
     def test_abnormal_work_terminalization_requires_reason_code(self) -> None:
         with self.connection() as connection:
             run_id = self.insert_run(connection)
