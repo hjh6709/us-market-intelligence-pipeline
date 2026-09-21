@@ -140,3 +140,10 @@ DROP TRIGGER IF EXISTS official_observation_assertions_promoter_lineage_guard
 CREATE TRIGGER official_observation_assertions_promoter_lineage_guard
     BEFORE INSERT ON official_observation_assertions
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
+
+
+DROP TRIGGER IF EXISTS official_observation_assertions_accepted_at_guard
+    ON official_observation_assertions;
+CREATE TRIGGER official_observation_assertions_accepted_at_guard
+    BEFORE INSERT ON official_observation_assertions
+    FOR EACH ROW EXECUTE FUNCTION set_cpi_w1_accepted_at();

@@ -828,6 +828,46 @@ class CpiW1PostgresTest(unittest.TestCase):
         )
         return assertion_id
 
+    def test_accepted_at_is_database_owned(self) -> None:
+        with self.connection() as connection:
+            event_id, promote_attempt = self.make_event(connection)
+            disclosure_id = self.make_disclosure(connection, promote_attempt)
+            disclosure_link_id = uuid4()
+            self.insert_subject(
+                connection,
+                disclosure_link_id,
+                "EVENT_DISCLOSURE_LINK",
+            )
+            transaction_time = connection.execute(
+                "SELECT CURRENT_TIMESTAMP"
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO event_disclosure_links (
+                    disclosure_link_id, event_occurrence_id, disclosure_id,
+                    relation_kind, accepted_by_attempt_id, accepted_at
+                ) VALUES (
+                    %s, %s, %s, 'EVENT_RELEASE', %s,
+                    '2000-01-01 00:00:00+00'
+                )
+                """,
+                (
+                    disclosure_link_id,
+                    event_id,
+                    disclosure_id,
+                    promote_attempt,
+                ),
+            )
+            stored = connection.execute(
+                """
+                SELECT accepted_at
+                  FROM event_disclosure_links
+                 WHERE disclosure_link_id=%s
+                """,
+                (disclosure_link_id,),
+            ).fetchone()[0]
+        self.assertEqual(stored, transaction_time)
+
     def test_official_observation_decimal_round_trips_exactly(self) -> None:
         with self.connection() as connection:
             topology = self.make_observation_topology(connection)

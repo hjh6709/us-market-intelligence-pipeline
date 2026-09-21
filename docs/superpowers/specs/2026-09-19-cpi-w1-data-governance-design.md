@@ -674,6 +674,12 @@ Promotion APIs must not accept arbitrary `accepted_at` input. Backfill/replay ma
 accept old source evidence later, but its system-known visibility begins at the real
 acceptance time; replay never backdates platform knowledge.
 
+The database insert boundary overwrites accepted_at from the PostgreSQL transaction
+clock for governable evidence rows. This is defense in depth against a privileged
+application caller accidentally or deliberately supplying a backdated/future
+knowledge timestamp. Rows accepted in one promotion transaction therefore share the
+same transaction-time knowledge boundary.
+
 CPI W1 relation kinds:
 
 - EVENT_RELEASE

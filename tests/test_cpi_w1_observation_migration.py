@@ -104,6 +104,13 @@ class CpiW1ObservationMigrationTest(unittest.TestCase):
         self.assertIn("material_fingerprint TEXT NOT NULL", self.sql)
         self.assertIn("extractor_contract_version TEXT NOT NULL", self.sql)
 
+    def test_observation_accepted_at_is_database_owned(self) -> None:
+        self.assertIn(
+            "official_observation_assertions_accepted_at_guard",
+            self.sql,
+        )
+        self.assertIn("set_cpi_w1_accepted_at", self.sql)
+
     def test_observation_evidence_is_append_only(self) -> None:
         self.assertIn("official_observation_assertions_immutable", self.sql)
         self.assertIn(

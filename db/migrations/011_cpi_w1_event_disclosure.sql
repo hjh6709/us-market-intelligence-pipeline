@@ -379,3 +379,40 @@ CREATE TRIGGER disclosure_marker_assertions_promoter_lineage_guard
     BEFORE INSERT ON disclosure_marker_assertions
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_w1_promoter_attempt('accepted_by_attempt_id');
 
+
+
+-- System-known visibility is owned by the database transaction clock.
+-- Callers may not backdate or future-date accepted_at.
+CREATE OR REPLACE FUNCTION set_cpi_w1_accepted_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $accepted_at$
+BEGIN
+    NEW.accepted_at := CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$accepted_at$;
+
+DROP TRIGGER IF EXISTS event_schedule_assertions_accepted_at_guard
+    ON event_schedule_assertions;
+CREATE TRIGGER event_schedule_assertions_accepted_at_guard
+    BEFORE INSERT ON event_schedule_assertions
+    FOR EACH ROW EXECUTE FUNCTION set_cpi_w1_accepted_at();
+
+DROP TRIGGER IF EXISTS event_disclosure_links_accepted_at_guard
+    ON event_disclosure_links;
+CREATE TRIGGER event_disclosure_links_accepted_at_guard
+    BEFORE INSERT ON event_disclosure_links
+    FOR EACH ROW EXECUTE FUNCTION set_cpi_w1_accepted_at();
+
+DROP TRIGGER IF EXISTS event_disclosure_artifacts_accepted_at_guard
+    ON event_disclosure_artifacts;
+CREATE TRIGGER event_disclosure_artifacts_accepted_at_guard
+    BEFORE INSERT ON event_disclosure_artifacts
+    FOR EACH ROW EXECUTE FUNCTION set_cpi_w1_accepted_at();
+
+DROP TRIGGER IF EXISTS disclosure_marker_assertions_accepted_at_guard
+    ON disclosure_marker_assertions;
+CREATE TRIGGER disclosure_marker_assertions_accepted_at_guard
+    BEFORE INSERT ON disclosure_marker_assertions
+    FOR EACH ROW EXECUTE FUNCTION set_cpi_w1_accepted_at();

@@ -112,6 +112,17 @@ class CpiW1EventMigrationTest(unittest.TestCase):
         self.assertIn("schedule_timezone IS NULL", self.sql)
         self.assertIn("event_schedule_assertions_source_effective_valid", self.sql)
 
+    def test_accepted_at_is_database_transaction_owned(self) -> None:
+        self.assertIn("FUNCTION set_cpi_w1_accepted_at", self.sql)
+        self.assertIn("NEW.accepted_at := CURRENT_TIMESTAMP", self.sql)
+        for table in (
+            "event_schedule_assertions",
+            "event_disclosure_links",
+            "event_disclosure_artifacts",
+            "disclosure_marker_assertions",
+        ):
+            self.assertIn(f"{table}_accepted_at_guard", self.sql)
+
     def test_evidence_is_append_only(self) -> None:
         self.assertIn("reject_cpi_w1_immutable_evidence_mutation", self.sql)
         for table in (
