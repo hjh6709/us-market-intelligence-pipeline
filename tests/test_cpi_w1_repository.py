@@ -14,6 +14,19 @@ SOURCE = Path("src/cpi_w1_repository.py").read_text(encoding="utf-8")
 
 
 class CpiW1RepositoryTest(unittest.TestCase):
+    def test_repository_owns_run_and_work_creation_boundaries(self) -> None:
+        self.assertIn("def create_run(", SOURCE)
+        self.assertIn("def create_work_item(", SOURCE)
+        self.assertIn("ON CONFLICT DO NOTHING", SOURCE)
+        self.assertIn(
+            "same ingestion run idempotency key changed immutable metadata",
+            SOURCE,
+        )
+        self.assertIn(
+            "same ingestion work identity changed immutable metadata",
+            SOURCE,
+        )
+
     def test_claim_sql_uses_skip_locked_and_due_or_expired_work(self) -> None:
         self.assertIn("FOR UPDATE OF w SKIP LOCKED", SOURCE)
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)

@@ -109,6 +109,192 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    def create_run(
+        self,
+        connection: Any,
+        *,
+        execution_scope: str,
+        job_type: str,
+        trigger_type: str,
+        run_mode: str,
+        source_revision: str,
+        workload_artifact_digest: str,
+        job_contract_version: str,
+        config_fingerprint: str,
+        trigger_idempotency_key: str | None = None,
+        scheduled_for: datetime | None = None,
+        replay_of_run_id: UUID | None = None,
+    ) -> UUID:
+        if execution_scope not in {"ECONOMIC_COLLECT", "ECONOMIC_PROMOTE"}:
+            raise ValueError("unsupported execution_scope")
+        if run_mode not in {"LIVE", "BACKFILL", "REPLAY"}:
+            raise ValueError("unsupported run_mode")
+        for label, value in (
+            ("job_type", job_type),
+            ("trigger_type", trigger_type),
+            ("source_revision", source_revision),
+            ("workload_artifact_digest", workload_artifact_digest),
+            ("job_contract_version", job_contract_version),
+            ("config_fingerprint", config_fingerprint),
+        ):
+            if not value or value != value.strip():
+                raise ValueError(f"{label} must be canonical and non-empty")
+        if trigger_idempotency_key is not None and (
+            not trigger_idempotency_key
+            or trigger_idempotency_key != trigger_idempotency_key.strip()
+        ):
+            raise ValueError("trigger_idempotency_key must be canonical when supplied")
+        if scheduled_for is not None and (
+            scheduled_for.tzinfo is None or scheduled_for.utcoffset() is None
+        ):
+            raise ValueError("scheduled_for must be timezone-aware")
+        if (run_mode == "REPLAY") != (replay_of_run_id is not None):
+            raise ValueError("REPLAY requires replay_of_run_id and other modes forbid it")
+
+        candidate_id = uuid4()
+        with connection.transaction():
+            connection.execute(
+                """
+                INSERT INTO ingestion_runs (
+                    run_id, execution_scope, data_domain, job_type, trigger_type,
+                    run_mode, trigger_idempotency_key, scheduled_for,
+                    replay_of_run_id, source_revision, workload_artifact_digest,
+                    job_contract_version, config_fingerprint
+                ) VALUES (
+                    %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                (
+                    candidate_id,
+                    execution_scope,
+                    job_type,
+                    trigger_type,
+                    run_mode,
+                    trigger_idempotency_key,
+                    scheduled_for,
+                    replay_of_run_id,
+                    source_revision,
+                    workload_artifact_digest,
+                    job_contract_version,
+                    config_fingerprint,
+                ),
+            )
+            if trigger_idempotency_key is None:
+                row = connection.execute(
+                    """
+                    SELECT run_id, execution_scope, job_type, trigger_type,
+                           run_mode, trigger_idempotency_key, scheduled_for,
+                           replay_of_run_id, source_revision,
+                           workload_artifact_digest, job_contract_version,
+                           config_fingerprint
+                      FROM ingestion_runs
+                     WHERE run_id=%s
+                    """,
+                    (candidate_id,),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT run_id, execution_scope, job_type, trigger_type,
+                           run_mode, trigger_idempotency_key, scheduled_for,
+                           replay_of_run_id, source_revision,
+                           workload_artifact_digest, job_contract_version,
+                           config_fingerprint
+                      FROM ingestion_runs
+                     WHERE data_domain='ECONOMIC'
+                       AND execution_scope=%s
+                       AND job_type=%s
+                       AND trigger_type=%s
+                       AND trigger_idempotency_key=%s
+                    """,
+                    (
+                        execution_scope,
+                        job_type,
+                        trigger_type,
+                        trigger_idempotency_key,
+                    ),
+                ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("ingestion run identity did not converge")
+            expected = (
+                execution_scope,
+                job_type,
+                trigger_type,
+                run_mode,
+                trigger_idempotency_key,
+                scheduled_for,
+                replay_of_run_id,
+                source_revision,
+                workload_artifact_digest,
+                job_contract_version,
+                config_fingerprint,
+            )
+            if tuple(row[1:]) != expected:
+                raise RepositoryInvariantError(
+                    "same ingestion run idempotency key changed immutable metadata"
+                )
+            return row[0]
+
+    def create_work_item(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        execution_scope: str,
+        work_key: str,
+        input_artifact_id: UUID | None = None,
+    ) -> UUID:
+        if execution_scope not in {"ECONOMIC_COLLECT", "ECONOMIC_PROMOTE"}:
+            raise ValueError("unsupported execution_scope")
+        if not work_key or work_key != work_key.strip():
+            raise ValueError("work_key must be canonical and non-empty")
+        if execution_scope == "ECONOMIC_PROMOTE" and input_artifact_id is None:
+            raise ValueError("promotion work requires input_artifact_id")
+
+        candidate_id = uuid4()
+        with connection.transaction():
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (candidate_id, run_id, execution_scope, work_key, input_artifact_id),
+            )
+            if execution_scope == "ECONOMIC_PROMOTE":
+                row = connection.execute(
+                    """
+                    SELECT work_item_id, run_id, execution_scope,
+                           input_artifact_id, work_key
+                      FROM ingestion_work_items
+                     WHERE execution_scope='ECONOMIC_PROMOTE'
+                       AND input_artifact_id=%s
+                       AND work_key=%s
+                    """,
+                    (input_artifact_id, work_key),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT work_item_id, run_id, execution_scope,
+                           input_artifact_id, work_key
+                      FROM ingestion_work_items
+                     WHERE run_id=%s AND work_key=%s
+                    """,
+                    (run_id, work_key),
+                ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("ingestion work identity did not converge")
+            if row[2] != execution_scope or row[3] != input_artifact_id or row[4] != work_key:
+                raise RepositoryInvariantError(
+                    "same ingestion work identity changed immutable metadata"
+                )
+            return row[0]
+
     @staticmethod
     def lock_cpi_event(connection: Any, event_occurrence_id: UUID) -> None:
         connection.execute(
