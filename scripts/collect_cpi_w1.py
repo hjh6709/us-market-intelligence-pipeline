@@ -129,6 +129,7 @@ class CpiW1CollectorOrchestrator:
                 extractor_contract_version=extractor,
                 reason_code=decision.reason_code or "EXTRACTOR_NOT_REVIEWED",
                 review_ref=decision.review_ref or "NO_REVIEW_REFERENCE",
+                gate_fingerprint=self.release_gate.gate_fingerprint,
             )
             return "BLOCKED_BY_RELEASE_GATE", (), decision.reason_code
 

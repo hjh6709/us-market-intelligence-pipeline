@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,14 +26,17 @@ class CpiW1ExtractorReleaseGate:
         source_contract_version: str,
         approved_extractors: frozenset[str],
         blocked_extractors: dict[str, dict[str, str]],
+        gate_fingerprint: str,
     ) -> None:
         self.source_contract_version = source_contract_version
         self.approved_extractors = approved_extractors
         self.blocked_extractors = blocked_extractors
+        self.gate_fingerprint = gate_fingerprint
 
     @classmethod
     def from_json(cls, path: str | Path) -> "CpiW1ExtractorReleaseGate":
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        raw_bytes = Path(path).read_bytes()
+        raw = json.loads(raw_bytes.decode("utf-8"))
         if raw.get("schema_version") != _SCHEMA_VERSION:
             raise ValueError("unsupported CPI extractor release-gate schema")
         if raw.get("source_contract_version") != "bls-cpi-source-v1":
@@ -70,6 +74,7 @@ class CpiW1ExtractorReleaseGate:
             source_contract_version=raw["source_contract_version"],
             approved_extractors=approved_set,
             blocked_extractors=normalized_blocked,
+            gate_fingerprint=hashlib.sha256(raw_bytes).hexdigest(),
         )
 
     def decision(self, extractor_contract_version: str) -> ExtractorGateDecision:

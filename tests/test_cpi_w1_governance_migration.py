@@ -70,6 +70,10 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("pause requires current claim ownership", self.sql)
         self.assertIn("resume requires canonical case reference", self.sql)
 
+    def test_deferred_promotion_identity_includes_gate_snapshot(self) -> None:
+        self.assertIn("event_payload ->> 'gate_fingerprint'", self.sql)
+        self.assertIn("p_gate_fingerprint TEXT", self.sql)
+
     def test_promotion_deferred_audit_is_artifact_and_extractor_idempotent(self) -> None:
         self.assertIn("CPI_PROMOTION_DEFERRED", self.sql)
         self.assertIn("source_artifact_id UUID REFERENCES source_artifacts", self.sql)

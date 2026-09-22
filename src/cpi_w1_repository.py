@@ -310,6 +310,7 @@ class CpiW1Repository:
         extractor_contract_version: str,
         reason_code: str,
         review_ref: str,
+        gate_fingerprint: str,
     ) -> UUID:
         if _REASON_RE.fullmatch(reason_code) is None:
             raise ValueError("promotion deferred reason must be canonical")
@@ -317,10 +318,18 @@ class CpiW1Repository:
             raise ValueError("extractor_contract_version must be canonical")
         if not review_ref or review_ref != review_ref.strip():
             raise ValueError("review_ref must be canonical")
+        if re.fullmatch(r"[0-9a-f]{64}", gate_fingerprint) is None:
+            raise ValueError("gate_fingerprint must be lowercase SHA-256")
         with connection.transaction():
             row = connection.execute(
-                "SELECT record_cpi_promotion_deferred(%s, %s, %s, %s)",
-                (artifact_id, extractor_contract_version, reason_code, review_ref),
+                "SELECT record_cpi_promotion_deferred(%s, %s, %s, %s, %s)",
+                (
+                    artifact_id,
+                    extractor_contract_version,
+                    reason_code,
+                    review_ref,
+                    gate_fingerprint,
+                ),
             ).fetchone()
             if row is None:
                 raise RepositoryInvariantError("promotion deferred audit returned no id")

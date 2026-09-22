@@ -79,6 +79,9 @@ class CollectCpiW1Test(unittest.TestCase):
             "config/cpi_w1_extractor_release_gate.json"
         ).read_text(encoding="utf-8"))
 
+    def test_deferred_audit_is_bound_to_gate_snapshot(self) -> None:
+        self.assertIn("gate_fingerprint=self.release_gate.gate_fingerprint", SOURCE)
+
     def test_release_gate_block_is_durable_audit_evidence(self) -> None:
         self.assertIn("record_promotion_deferred", SOURCE)
         self.assertIn("BLOCKED_BY_RELEASE_GATE", SOURCE)

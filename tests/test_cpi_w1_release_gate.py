@@ -9,6 +9,15 @@ GATE = ROOT / "config/cpi_w1_extractor_release_gate.json"
 
 
 class CpiW1ReleaseGateTest(unittest.TestCase):
+    def test_gate_snapshot_has_stable_sha256_identity(self) -> None:
+        import hashlib
+
+        gate = CpiW1ExtractorReleaseGate.from_json(GATE)
+        self.assertEqual(
+            gate.gate_fingerprint,
+            hashlib.sha256(GATE.read_bytes()).hexdigest(),
+        )
+
     def test_current_release_parser_is_fail_closed_until_official_corpus_ready(self) -> None:
         gate = CpiW1ExtractorReleaseGate.from_json(GATE)
         decision = gate.decision("bls-cpi-release-html-v1")
