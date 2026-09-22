@@ -56,6 +56,7 @@ def review_capture(
     reviewer_ref: str,
     verified_sha256: str,
     approved_root: Path,
+    repo_root: Path,
 ) -> dict[str, Any]:
     reviewer_ref = _require_canonical_text(reviewer_ref, "reviewer_ref")
     if len(verified_sha256) != 64 or any(ch not in "0123456789abcdef" for ch in verified_sha256):
@@ -99,7 +100,20 @@ def review_capture(
     if verified_sha256 != actual_sha256:
         raise CorpusReviewError("reviewer-verified hash does not match staged bytes")
 
+    repo_root = repo_root.resolve()
+    allowed_root = (repo_root / "tests/fixtures/cpi_w1/official").resolve()
+    approved_root = (
+        approved_root
+        if approved_root.is_absolute()
+        else repo_root / approved_root
+    ).resolve()
+    if approved_root != allowed_root:
+        raise CorpusReviewError(
+            "approved_root must be the repository official corpus directory"
+        )
     approved_root.mkdir(parents=True, exist_ok=True)
+    if approved_root.is_symlink():
+        raise CorpusReviewError("approved corpus root must not be a symlink")
     suffix = ".xlsx" if entry["artifact_contract_kind"].endswith("_XLSX") else ".html"
     stable_name = (
         f"{entry['reference_month']}-"
@@ -107,7 +121,11 @@ def review_capture(
         f"{actual_sha256[:16]}{suffix}"
     )
     approved_path = approved_root / stable_name
+    if approved_path.is_symlink():
+        raise CorpusReviewError("approved corpus file must not be a symlink")
     if approved_path.exists():
+        if not approved_path.is_file():
+            raise CorpusReviewError("approved corpus path must be a regular file")
         if hashlib.sha256(approved_path.read_bytes()).hexdigest() != actual_sha256:
             raise CorpusReviewError("approved corpus path already contains different bytes")
     else:
@@ -130,7 +148,7 @@ def review_capture(
     candidate_entry = dict(entry)
     candidate_entry["materialization_status"] = "MATERIALIZED"
     candidate_entry["expected_sha256"] = actual_sha256
-    candidate_entry["local_path"] = str(approved_path.as_posix())
+    candidate_entry["local_path"] = approved_path.relative_to(repo_root).as_posix()
     return {
         "status": "REVIEWED_BYTES_ONLY",
         "approved_path": str(approved_path),
@@ -154,6 +172,7 @@ def main() -> int:
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     contract = BlsCpiSourceContract.from_json(args.source_contract)
+    repo_root = Path(__file__).resolve().parents[1]
     result = review_capture(
         manifest=manifest,
         contract=contract,
@@ -163,6 +182,7 @@ def main() -> int:
         reviewer_ref=args.reviewer_ref,
         verified_sha256=args.verified_sha256,
         approved_root=args.approved_root,
+        repo_root=repo_root,
     )
     args.output.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n",

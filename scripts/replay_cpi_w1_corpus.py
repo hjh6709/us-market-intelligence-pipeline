@@ -172,9 +172,26 @@ def validate_manifest(manifest: dict[str, Any], repo_root: Path) -> None:
                 raise CorpusValidationError(
                     f"{corpus_id}: MATERIALIZED requires lowercase SHA-256"
                 )
-            full_path = repo_root / local_path
-            if not full_path.is_file():
-                raise CorpusValidationError(f"{corpus_id}: local fixture missing")
+            path_obj = Path(local_path)
+            if path_obj.is_absolute() or ".." in path_obj.parts:
+                raise CorpusValidationError(
+                    f"{corpus_id}: official local_path must be repo-relative"
+                )
+            official_prefix = Path("tests/fixtures/cpi_w1/official")
+            if path_obj.parts[: len(official_prefix.parts)] != official_prefix.parts:
+                raise CorpusValidationError(
+                    f"{corpus_id}: official local_path must stay under official corpus directory"
+                )
+            full_path = (repo_root / path_obj).resolve()
+            allowed_root = (repo_root / official_prefix).resolve()
+            if allowed_root not in full_path.parents:
+                raise CorpusValidationError(
+                    f"{corpus_id}: official local_path escapes corpus directory"
+                )
+            if full_path.is_symlink() or not full_path.is_file():
+                raise CorpusValidationError(
+                    f"{corpus_id}: local fixture must be a regular non-symlink file"
+                )
             actual = hashlib.sha256(full_path.read_bytes()).hexdigest()
             if actual != expected_sha256:
                 raise CorpusValidationError(f"{corpus_id}: fixture SHA-256 mismatch")

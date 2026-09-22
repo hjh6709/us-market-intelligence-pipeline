@@ -74,7 +74,8 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                 metadata_path=meta,
                 reviewer_ref="REVIEW-123",
                 verified_sha256=sha,
-                approved_root=root / "approved",
+                approved_root=root / "tests/fixtures/cpi_w1/official",
+                repo_root=root,
             )
             candidate = result["candidate_entry"]
             self.assertEqual(candidate["materialization_status"], "MATERIALIZED")
@@ -98,7 +99,8 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                     metadata_path=meta,
                     reviewer_ref="REVIEW-123",
                     verified_sha256="0" * 64,
-                    approved_root=root / "approved",
+                    approved_root=root / "tests/fixtures/cpi_w1/official",
+                repo_root=root,
                 )
 
     def test_review_rejects_manifest_sidecar_identity_drift(self) -> None:
@@ -117,7 +119,8 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                     metadata_path=meta,
                     reviewer_ref="REVIEW-123",
                     verified_sha256=sha,
-                    approved_root=root / "approved",
+                    approved_root=root / "tests/fixtures/cpi_w1/official",
+                repo_root=root,
                 )
 
     def test_review_rejects_non_allowlisted_final_url(self) -> None:
@@ -136,7 +139,25 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                     metadata_path=meta,
                     reviewer_ref="REVIEW-123",
                     verified_sha256=sha,
-                    approved_root=root / "approved",
+                    approved_root=root / "tests/fixtures/cpi_w1/official",
+                repo_root=root,
+                )
+
+    def test_review_rejects_approved_root_outside_official_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data, meta, sha = self.staged(root)
+            with self.assertRaises(CorpusReviewError):
+                review_capture(
+                    manifest=self.manifest(),
+                    contract=CONTRACT,
+                    corpus_id="cpi:2026-08:release-html",
+                    data_path=data,
+                    metadata_path=meta,
+                    reviewer_ref="REVIEW-123",
+                    verified_sha256=sha,
+                    approved_root=root / "outside",
+                    repo_root=root,
                 )
 
     def test_review_does_not_mutate_manifest(self) -> None:
@@ -153,7 +174,8 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                 metadata_path=meta,
                 reviewer_ref="REVIEW-123",
                 verified_sha256=sha,
-                approved_root=root / "approved",
+                approved_root=root / "tests/fixtures/cpi_w1/official",
+                repo_root=root,
             )
         self.assertEqual(json.dumps(manifest, sort_keys=True), original)
 

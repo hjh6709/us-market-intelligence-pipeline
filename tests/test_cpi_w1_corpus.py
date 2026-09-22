@@ -186,6 +186,15 @@ class CpiW1CorpusTest(unittest.TestCase):
         )
         self.assertEqual(approvals, [])
 
+    def test_materialized_official_path_cannot_escape_repository_corpus(self) -> None:
+        manifest = json.loads(json.dumps(self.manifest))
+        entry = manifest["entries"][0]
+        entry["materialization_status"] = "MATERIALIZED"
+        entry["expected_sha256"] = "0" * 64
+        entry["local_path"] = "../../etc/passwd"
+        with self.assertRaises(Exception):
+            validate_manifest(manifest, ROOT)
+
     def test_replay_tool_has_no_database_dependency(self) -> None:
         source = (
             ROOT / "scripts/replay_cpi_w1_corpus.py"
