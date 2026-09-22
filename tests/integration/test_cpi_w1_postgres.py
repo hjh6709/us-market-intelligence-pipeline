@@ -2642,6 +2642,60 @@ class CpiW1PostgresTest(unittest.TestCase):
                     retry_after_seconds=86401,
                 )
 
+    def test_deferred_promotion_audit_is_idempotent_per_gate_snapshot(self) -> None:
+        repository = CpiW1Repository()
+        gate_a = "a" * 64
+        gate_b = "b" * 64
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"deferred:audit:{uuid4()}",
+            )
+            first = repository.record_promotion_deferred(
+                connection,
+                artifact_id=artifact_id,
+                extractor_contract_version="bls-cpi-release-html-v1",
+                reason_code="OFFICIAL_CORPUS_NOT_READY",
+                review_ref="CORPUS-REVIEW-1",
+                gate_fingerprint=gate_a,
+            )
+            same = repository.record_promotion_deferred(
+                connection,
+                artifact_id=artifact_id,
+                extractor_contract_version="bls-cpi-release-html-v1",
+                reason_code="OFFICIAL_CORPUS_NOT_READY",
+                review_ref="CORPUS-REVIEW-1",
+                gate_fingerprint=gate_a,
+            )
+            later_gate = repository.record_promotion_deferred(
+                connection,
+                artifact_id=artifact_id,
+                extractor_contract_version="bls-cpi-release-html-v1",
+                reason_code="EXTRACTOR_NOT_REVIEWED",
+                review_ref="CORPUS-REVIEW-2",
+                gate_fingerprint=gate_b,
+            )
+            self.assertEqual(first, same)
+            self.assertNotEqual(first, later_gate)
+            rows = connection.execute(
+                """
+                SELECT event_payload ->> 'gate_fingerprint',
+                       event_payload ->> 'reason_code'
+                  FROM business_audit_events
+                 WHERE action_kind='CPI_PROMOTION_DEFERRED'
+                   AND source_artifact_id=%s
+                 ORDER BY event_payload ->> 'gate_fingerprint'
+                """,
+                (artifact_id,),
+            ).fetchall()
+            self.assertEqual(
+                rows,
+                [
+                    (gate_a, "OFFICIAL_CORPUS_NOT_READY"),
+                    (gate_b, "EXTRACTOR_NOT_REVIEWED"),
+                ],
+            )
+
     def test_schedule_assertion_promotion_persists_authoritative_evidence(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
