@@ -18,6 +18,11 @@ class CollectCpiW1Test(unittest.TestCase):
             self.assertEqual(args.mode, mode)
         self.assertTrue(self.parse("--mode", "live", "--dry-run").dry_run)
 
+    def test_dry_run_returns_before_database_connect(self) -> None:
+        dry_pos = SOURCE.index("if args.dry_run:")
+        connect_pos = SOURCE.index("psycopg.connect")
+        self.assertLess(dry_pos, connect_pos)
+
     def test_replay_requires_artifact_and_extractor_identity(self) -> None:
         with self.assertRaises(SystemExit):
             validate_args(self.parse("--mode", "replay", "--reconcile-promotions"))
@@ -30,9 +35,17 @@ class CollectCpiW1Test(unittest.TestCase):
             )
         )
 
+    def test_replay_arguments_are_used_to_scope_reconciliation(self) -> None:
+        self.assertIn("only_artifact_id", SOURCE)
+        self.assertIn("only_extractor_version", SOURCE)
+        self.assertIn("replay extractor does not match artifact contract kind", SOURCE)
+
     def test_collector_does_not_import_legacy_cpi_upsert(self) -> None:
         self.assertNotIn("upsert_cpi_data", SOURCE)
         self.assertNotIn("src.cpi_ingestion", SOURCE)
+
+    def test_collection_work_key_is_bound_to_exact_run(self) -> None:
+        self.assertIn('f"COLLECT:{locator_key}:{run_id}"', SOURCE)
 
     def test_collection_and_promotion_are_separate(self) -> None:
         self.assertIn("record_source_artifact", SOURCE)

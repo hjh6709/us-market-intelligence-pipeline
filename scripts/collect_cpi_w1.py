@@ -181,16 +181,17 @@ class CpiW1CollectorOrchestrator:
             job_contract_version=_COLLECT_JOB_CONTRACT,
             config_fingerprint=self._config_fingerprint(),
         )
+        collection_work_key = f"COLLECT:{locator_key}:{run_id}"
         work_id = self.repository.create_work_item(
             connection,
             run_id=run_id,
             execution_scope="ECONOMIC_COLLECT",
-            work_key=f"COLLECT:{locator_key}",
+            work_key=collection_work_key,
         )
         claim = self.repository.claim_work_item(
             connection,
             execution_scope="ECONOMIC_COLLECT",
-            work_key_prefix=f"COLLECT:{locator_key}",
+            work_key_prefix=collection_work_key,
         )
         if claim is None or claim.work_item_id != work_id:
             raise RuntimeError("collector could not obtain its deterministic work item")
@@ -297,18 +298,52 @@ class CpiW1CollectorOrchestrator:
             blocked_reason_code=blocked_reason,
         )
 
-    def reconcile_promotions(self, connection: Any) -> list[CollectionResult]:
-        rows = connection.execute(
-            """
-            SELECT artifact_id, artifact_contract_kind
-              FROM source_artifacts
-             WHERE data_domain='ECONOMIC'
-               AND source_code='BLS'
-             ORDER BY created_at, artifact_id
-            """
-        ).fetchall()
+    def reconcile_promotions(
+        self,
+        connection: Any,
+        *,
+        only_artifact_id: UUID | None = None,
+        only_extractor_version: str | None = None,
+    ) -> list[CollectionResult]:
+        if (only_artifact_id is None) != (only_extractor_version is None):
+            raise ValueError(
+                "replay reconciliation requires artifact and extractor together"
+            )
+        if only_artifact_id is None:
+            rows = connection.execute(
+                """
+                SELECT artifact_id, artifact_contract_kind
+                  FROM source_artifacts
+                 WHERE data_domain='ECONOMIC'
+                   AND source_code='BLS'
+                 ORDER BY created_at, artifact_id
+                """
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                """
+                SELECT artifact_id, artifact_contract_kind
+                  FROM source_artifacts
+                 WHERE artifact_id=%s
+                   AND data_domain='ECONOMIC'
+                   AND source_code='BLS'
+                """,
+                (only_artifact_id,),
+            ).fetchall()
+            if not rows:
+                raise KeyError(f"CPI source artifact not found: {only_artifact_id}")
         results: list[CollectionResult] = []
         for artifact_id, artifact_contract_kind in rows:
+            expected_extractor = _EXTRACTOR_BY_ARTIFACT_KIND.get(
+                artifact_contract_kind
+            )
+            if (
+                only_extractor_version is not None
+                and expected_extractor != only_extractor_version
+            ):
+                raise ValueError(
+                    "replay extractor does not match artifact contract kind"
+                )
             status, work_ids, reason = self._schedule_promotions(
                 connection,
                 artifact_id=artifact_id,
@@ -375,6 +410,11 @@ def main() -> int:
     repository = CpiW1Repository()
     store = FilesystemArtifactStore(args.artifact_root)
 
+    if args.dry_run:
+        if args.locator not in contract.locators:
+            raise SystemExit(f"unknown CPI source locator: {args.locator}")
+        return 0
+
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as connection:
         orchestrator = CpiW1CollectorOrchestrator(
             repository=repository,
@@ -383,14 +423,26 @@ def main() -> int:
             artifact_store=store,
         )
         if args.reconcile_promotions:
-            orchestrator.reconcile_promotions(connection)
+            orchestrator.reconcile_promotions(
+                connection,
+                only_artifact_id=(
+                    UUID(args.replay_artifact_id)
+                    if args.mode == "replay"
+                    else None
+                ),
+                only_extractor_version=(
+                    args.replay_extractor_version
+                    if args.mode == "replay"
+                    else None
+                ),
+            )
             return 0
         orchestrator.collect_locator(
             connection,
             locator_key=args.locator,
             run_mode=args.mode.upper(),
             trigger_idempotency_key=args.trigger_idempotency_key,
-            dry_run=args.dry_run,
+            dry_run=False,
         )
     return 0
 
