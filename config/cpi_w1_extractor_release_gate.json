@@ -1,0 +1,19 @@
+{
+  "schema_version": "cpi-w1-extractor-release-gate-v1",
+  "source_contract_version": "bls-cpi-source-v1",
+  "approved_extractors": [],
+  "blocked_extractors": {
+    "bls-cpi-release-html-v1": {
+      "reason_code": "OFFICIAL_CORPUS_NOT_READY",
+      "review_ref": "tests/fixtures/cpi_w1/corpus.json"
+    },
+    "bls-cpi-table1-xlsx-v1": {
+      "reason_code": "XLSX_PARSER_NOT_READY",
+      "review_ref": "docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md"
+    },
+    "bls-cpi-correction-html-v1": {
+      "reason_code": "CORRECTION_SOURCE_NOT_FROZEN",
+      "review_ref": "config/cpi_w1_source_contract.json"
+    }
+  }
+}
