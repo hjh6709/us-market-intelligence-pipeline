@@ -2,6 +2,7 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 from src.cpi_w1_artifacts import ArtifactIntegrityError, FilesystemArtifactStore
@@ -56,7 +57,7 @@ class CpiW1ArtifactStoreTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             store = FilesystemArtifactStore(temp_dir)
             stored = store.put(artifact_id, body, sha)
-            path = Path(stored.storage_uri.removeprefix("file://"))
+            path = Path(unquote(urlsplit(stored.storage_uri).path))
             self.assertTrue(path.exists())
             store.delete_uncommitted(stored)
             self.assertFalse(path.exists())
@@ -68,10 +69,22 @@ class CpiW1ArtifactStoreTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             store = FilesystemArtifactStore(temp_dir)
             stored = store.put(artifact_id, body, sha)
-            path = Path(stored.storage_uri.removeprefix("file://"))
+            path = Path(unquote(urlsplit(stored.storage_uri).path))
             path.write_bytes(b"tampered")
             with self.assertRaises(ArtifactIntegrityError):
                 store.delete_uncommitted(stored)
+
+    def test_delete_uncommitted_handles_percent_encoded_path(self) -> None:
+        body = b"encoded-path"
+        sha = hashlib.sha256(body).hexdigest()
+        artifact_id = uuid4()
+        with tempfile.TemporaryDirectory(prefix="cpi w1 ") as temp_dir:
+            store = FilesystemArtifactStore(temp_dir)
+            stored = store.put(artifact_id, body, sha)
+            self.assertIn("%20", stored.storage_uri)
+            store.delete_uncommitted(stored)
+            path = Path(unquote(urlsplit(stored.storage_uri).path))
+            self.assertFalse(path.exists())
 
     def test_existing_corrupt_object_is_not_silently_reused(self) -> None:
         body = b"expected"

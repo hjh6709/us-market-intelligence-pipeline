@@ -7,6 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 from uuid import UUID, uuid4
 
 
@@ -104,7 +105,10 @@ class FilesystemArtifactStore:
 
     def delete_uncommitted(self, stored: StoredArtifact) -> None:
         """Delete only the exact object created for an uncommitted DB artifact."""
-        path = Path(stored.storage_uri.removeprefix("file://"))
+        parsed = urlsplit(stored.storage_uri)
+        if parsed.scheme != "file" or parsed.netloc not in ("", "localhost"):
+            raise ArtifactIntegrityError("uncommitted artifact URI must be local file")
+        path = Path(unquote(parsed.path))
         expected_dir = self._artifact_dir(stored.artifact_id).resolve()
         if path.parent.resolve() != expected_dir or path.is_symlink():
             raise ArtifactIntegrityError("uncommitted artifact path escaped its UUID directory")
