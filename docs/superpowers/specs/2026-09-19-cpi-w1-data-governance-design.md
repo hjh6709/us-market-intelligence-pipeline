@@ -406,7 +406,13 @@ W1 work states:
 
 - PENDING
 - CLAIMED
+- PAUSED
 - TERMINAL
+
+PAUSED is an operational containment state, not an economic-data or knowledge state.
+It exists because automatic promotion work has one durable business identity across
+runs. A recoverable infrastructure failure must not be made permanently unretryable
+merely because an automatic retry budget was exhausted.
 
 Allowed work behavior:
 
@@ -419,8 +425,21 @@ Allowed work behavior:
   PENDING; attempt history is never rewritten;
 - W1 retry scheduling uses a policy-owned relative delay against the database clock,
   not a caller-selected absolute timestamp. The initial operational policy bounds one
-  retry delay to 1 second through 24 hours; longer deferral requires explicit
-  orchestration rather than silently parking one work item.
+  retry delay to 1 second through 24 hours;
+- when automatic retry policy is exhausted or explicit operator investigation is
+  required, the current RUNNING attempt is terminalized FAILED and the work moves
+  CLAIMED -> PAUSED with a durable canonical reason. PAUSED has no claim token, no
+  lease, no next_claim_at, and is not claimable;
+- PAUSED -> PENDING is allowed only through an audited operational-resume boundary.
+  Resume clears the pause reason from mutable work state, schedules the work from the
+  database clock, preserves all prior attempt history, and does not change
+  claim_generation until the next claim;
+- a parent run containing PAUSED work remains non-terminal. Reconciliation surfaces
+  the pause but must not invent a terminal run outcome;
+- TERMINAL/FAILED is reserved for an explicit irreversible abandonment of that exact
+  work business identity. Because automatic promotion identity is globally unique for
+  artifact + family + extractor, terminal FAILED cannot be used as a temporary
+  dead-letter state that an orchestrator later recreates.
 - an expired CLAIMED lease may be reclaimed atomically by a new executor by advancing claim_generation and attempt_number; the stale claimant is fenced and cannot terminalize the work;
 - reclaim closes the previous still-RUNNING attempt as FAILED with durable
   `LEASE_EXPIRED_RECLAIM` operational reason before creating the new generation, so a
@@ -437,8 +456,10 @@ Allowed work behavior:
 
 Work state/timestamp/claim invariants:
 
-- PENDING has outcome=NULL, claim_token=NULL, lease_until=NULL;
-- CLAIMED has outcome=NULL, claim_token non-null, lease_until non-null;
+- PENDING has outcome=NULL, reason_code=NULL, claim_token=NULL, lease_until=NULL;
+- CLAIMED has outcome=NULL, reason_code=NULL, claim_token non-null, lease_until non-null;
+- PAUSED has outcome=NULL, a non-empty canonical reason_code, claim_token=NULL,
+  lease_until=NULL, and next_claim_at=NULL;
 - TERMINAL has outcome non-null, claim_token=NULL, lease_until=NULL;
 - SKIPPED is valid only for a PENDING -> TERMINAL orchestrator transition with no execution attempt;
 - DATA_NOT_AVAILABLE, QUARANTINED, FAILED, and SUCCEEDED require an execution attempt.
@@ -1391,6 +1412,11 @@ A run may finish PARTIAL when envelope promotion succeeds but observation promot
 ## 29. Ingestion transition authority
 
 Immutable evidence has one logical writer capability.
+
+Operational PAUSED/resume actions are append-only audited with the authenticated
+workload/workforce actor, work_item_id, reason/case context, and database-owned
+occurred_at. Mutable work state alone is not sufficient forensic evidence because a
+resume clears the active pause reason.
 
 Mutable ingestion workflow state follows an explicit transition matrix.
 

@@ -1332,6 +1332,54 @@ git commit -m "test: add CPI W1 golden corpus replay"
 
 ---
 
+### Task 13A: Add Recoverable Promotion Pause/Resume State
+
+**Why this task exists:** automatic promotion work is globally unique by input artifact
+plus deterministic work key. A temporary infrastructure failure cannot safely use
+TERMINAL/FAILED as a dead-letter state because that exact work identity cannot later be
+recreated. Infinite automatic retry is also unacceptable operationally.
+
+**Files:**
+- Modify: `db/migrations/010_cpi_w1_ingestion_subjects.sql`
+- Modify: `db/migrations/013_cpi_w1_governance_serving.sql`
+- Modify: `src/cpi_w1_repository.py`
+- Modify: `tests/test_cpi_w1_ingestion_migration.py`
+- Modify: `tests/test_cpi_w1_governance_migration.py`
+- Modify: `tests/test_cpi_w1_repository.py`
+- Modify: `tests/integration/test_cpi_w1_postgres.py`
+
+- [ ] **Step 1: Add PAUSED state and structural invariants**
+
+Require PENDING / CLAIMED / PAUSED / TERMINAL. PAUSED carries no outcome, token,
+lease, or next_claim_at, and requires a canonical reason_code. It is not claimable and
+prevents run finalization.
+
+- [ ] **Step 2: Add atomic pause boundary**
+
+Current owner only: terminalize the current RUNNING attempt as FAILED with the pause
+reason, then move CLAIMED -> PAUSED without changing business identity or generation.
+Record an append-only operational audit event.
+
+- [ ] **Step 3: Add audited resume boundary**
+
+Authenticated operational actor only: lock one PAUSED work item, record immutable
+resume audit evidence, then move PAUSED -> PENDING with database-owned next_claim_at.
+Clear the mutable pause reason; prior attempts and audit events remain immutable.
+
+- [ ] **Step 4: Freeze terminal FAILED semantics**
+
+TERMINAL/FAILED is irreversible abandonment for the exact durable work identity.
+Reconciliation must not recreate it under the same artifact/family/extractor identity.
+Retryable infrastructure failures use retry-to-PENDING or PAUSED instead.
+
+- [ ] **Step 5: Add integration vectors**
+
+Cover automatic retry -> pause, PAUSED not claimable, run cannot finalize while
+paused, audited resume -> next claim generation, stale owner cannot pause, and duplicate
+reconciliation cannot bypass a paused work item.
+
+---
+
 ### Task 14: Add Controlled Collector/Orchestrator Entry Point
 
 **Files:**
