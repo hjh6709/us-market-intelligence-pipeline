@@ -61,13 +61,20 @@ Current implemented foundation on the CPI W1 branch includes:
   preservation, knowledge fingerprinting, and live serving-control overlay;
 - application governance boundary for interpretation requests/approvals/activation
   and emergency serving control, with trusted workforce-principal objects and
-  event-fenced re-enable verification.
+  event-fenced re-enable verification;
+- explicit CPI correction notice and correction-observation promotion boundaries
+  with CORRECTION_NOTICE provenance and promoter-driven correction rehearsal;
+- CPI corpus inventory/replay tooling, staging capture boundary, reviewed-byte
+  promotion boundary, and fail-closed parser release gate infrastructure.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
 
 - Table 1 XLSX binary parser/corpus validation and live corroboration ingestion path;
-- official correction promotion boundary and live correction source/parser path;
+- live correction source discovery/locator/parser path;
+- all replay-required official CPI corpus artifacts are still not materialized,
+  reviewed, SHA-256 pinned, and semantically approved; the parser release gate
+  therefore remains intentionally not ready;
 - production IdP/RBAC integration for the implemented governance application boundary;
 - golden-corpus differential replay and parser-change release gate;
 - controlled collector/orchestrator and reconciliation;

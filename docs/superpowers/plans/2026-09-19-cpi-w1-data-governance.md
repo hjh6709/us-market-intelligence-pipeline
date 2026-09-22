@@ -1171,7 +1171,7 @@ contracts and CORRECTION_NOTICE provenance.
   - correction notice candidate bound to exact artifact hash/reference month;
   - correction observation candidate containing a non-empty unique Core 4 subset.
 
-- [ ] **Step 1: Add failing semantic-contract tests**
+- [x] **Step 1: Add failing semantic-contract tests**
 
 Require:
 - correction notice promotion creates only CORRECTION_NOTICE topology;
@@ -1181,24 +1181,24 @@ Require:
 - prior valid material remains immutable and a differing corrected value produces
   selector CONFLICT until governance changes eligibility.
 
-- [ ] **Step 2: Implement correction-notice topology promotion**
+- [x] **Step 2: Implement correction-notice topology promotion**
 
 Require one valid BLS EVENT_RELEASE for the same CPI reference month. Take the shared
 event fence before reading mutable governance-dependent topology and before inserting
 the CORRECTION_NOTICE relation. Do not insert observations in this family.
 
-- [ ] **Step 3: Implement correction-observation promotion**
+- [x] **Step 3: Implement correction-observation promotion**
 
 Require exact claimed artifact, approved correction extractor contract, matching valid
 CORRECTION_NOTICE link, and EVENT_RELEASE topology. Promote the explicitly corrected
 subset atomically; do not require or manufacture all four values.
 
-- [ ] **Step 4: Replace direct-SQL correction fixture with promoter-driven rehearsal**
+- [x] **Step 4: Replace direct-SQL correction fixture with promoter-driven rehearsal**
 
 The Task 12 end-to-end correction lifecycle must establish correction topology and
 corrected evidence through the promoter boundary rather than direct canonical INSERTs.
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 ```bash
 .venv/bin/python -m unittest tests.test_cpi_w1_promoter tests.test_cpi_w1_governance -v
@@ -1260,6 +1260,21 @@ to an implemented extractor contract. REMOTE_ONLY entries are useful inventory b
 must keep the release gate incomplete.
 
 Baseline reference-month window: 2022-01 through 2026-08.
+
+Reviewed-byte promotion boundary:
+- remote capture first stages bytes plus a capture sidecar and never mutates the manifest;
+- a separate review command rechecks manifest identity, requested/final URL policy,
+  byte count, capture hash, and an independently supplied reviewer SHA-256;
+- reviewed official bytes may only be written under
+  `tests/fixtures/cpi_w1/official/`; absolute paths, path traversal, and symlinked
+  official roots/files are rejected;
+- byte review creates only a MATERIALIZED candidate. It does not convert
+  `UNVERIFIED_INVENTORY` into approved expected semantics;
+- manifest promotion and semantic expectation approval remain explicit reviewed
+  repository changes.
+
+Current readiness remains intentionally incomplete while any replay-required official
+entry is REMOTE_ONLY or lacks approved expected semantics.
 
 - [ ] **Step 2: Write corpus-validation tests**
 
