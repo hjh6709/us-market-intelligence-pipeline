@@ -67,6 +67,7 @@ class CpiW1ContractsTest(unittest.TestCase):
         self.assertEqual(
             {item.value for item in PromotionFamily},
             {
+                "CPI_SCHEDULE_ASSERTION_PROMOTE",
                 "CPI_RELEASE_ENVELOPE_PROMOTE",
                 "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
                 "CPI_OBSERVATION_BUNDLE_PROMOTE",
