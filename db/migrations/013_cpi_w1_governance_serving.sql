@@ -181,7 +181,7 @@ CREATE OR REPLACE FUNCTION pause_cpi_ingestion_work(
 )
 RETURNS VOID
 LANGUAGE plpgsql
-AS $
+AS $pause_work$
 DECLARE
     applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
 BEGIN
@@ -549,19 +549,15 @@ CREATE TRIGGER economic_serving_control_decisions_immutable
     BEFORE UPDATE OR DELETE ON economic_serving_control_decisions
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
  THEN
-        RAISE EXCEPTION 'pause reason must be canonical'
-            USING ERRCODE = '23514';
+        RAISE EXCEPTION 'pause reason must be canonical' USING ERRCODE = '23514';
     END IF;
     IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = ''
        OR p_actor_subject <> BTRIM(p_actor_subject) THEN
-        RAISE EXCEPTION 'pause actor must be canonical'
-            USING ERRCODE = '23514';
+        RAISE EXCEPTION 'pause actor must be canonical' USING ERRCODE = '23514';
     END IF;
 
     UPDATE ingestion_attempts a
-       SET state='TERMINAL',
-           outcome='FAILED',
-           reason_code=p_reason_code,
+       SET state='TERMINAL', outcome='FAILED', reason_code=p_reason_code,
            finished_at=applied_time
       FROM ingestion_work_items w
      WHERE a.attempt_id=p_attempt_id
@@ -575,25 +571,19 @@ CREATE TRIGGER economic_serving_control_decisions_immutable
        AND a.attempt_number=w.claim_generation;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'pause requires current claim ownership'
-            USING ERRCODE = '40001';
+        RAISE EXCEPTION 'pause requires current claim ownership' USING ERRCODE = '40001';
     END IF;
 
     UPDATE ingestion_work_items
-       SET state='PAUSED',
-           outcome=NULL,
-           reason_code=p_reason_code,
-           claim_token=NULL,
-           lease_until=NULL,
-           next_claim_at=NULL
+       SET state='PAUSED', outcome=NULL, reason_code=p_reason_code,
+           claim_token=NULL, lease_until=NULL, next_claim_at=NULL
      WHERE work_item_id=p_work_item_id
        AND state='CLAIMED'
        AND claim_generation=p_claim_generation
        AND claim_token=p_claim_token;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'pause lost current work ownership'
-            USING ERRCODE = '40001';
+        RAISE EXCEPTION 'pause lost current work ownership' USING ERRCODE = '40001';
     END IF;
 
     INSERT INTO business_audit_events (
@@ -610,7 +600,7 @@ CREATE TRIGGER economic_serving_control_decisions_immutable
         applied_time
     );
 END;
-$;
+$pause_work$;
 
 CREATE OR REPLACE FUNCTION resume_cpi_ingestion_work(
     p_work_item_id UUID,
@@ -619,27 +609,23 @@ CREATE OR REPLACE FUNCTION resume_cpi_ingestion_work(
 )
 RETURNS VOID
 LANGUAGE plpgsql
-AS $
+AS $resume_work$
 DECLARE
     prior_reason TEXT;
     applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
 BEGIN
     IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = ''
        OR p_actor_subject <> BTRIM(p_actor_subject) THEN
-        RAISE EXCEPTION 'resume actor must be canonical'
-            USING ERRCODE = '23514';
+        RAISE EXCEPTION 'resume actor must be canonical' USING ERRCODE = '23514';
     END IF;
     IF p_case_ref IS NULL OR BTRIM(p_case_ref) = ''
        OR p_case_ref <> BTRIM(p_case_ref) THEN
-        RAISE EXCEPTION 'resume requires canonical case reference'
-            USING ERRCODE = '23514';
+        RAISE EXCEPTION 'resume requires canonical case reference' USING ERRCODE = '23514';
     END IF;
 
-    SELECT reason_code
-      INTO STRICT prior_reason
+    SELECT reason_code INTO STRICT prior_reason
       FROM ingestion_work_items
-     WHERE work_item_id=p_work_item_id
-       AND state='PAUSED'
+     WHERE work_item_id=p_work_item_id AND state='PAUSED'
      FOR UPDATE;
 
     INSERT INTO business_audit_events (
@@ -653,16 +639,11 @@ BEGIN
     );
 
     UPDATE ingestion_work_items
-       SET state='PENDING',
-           outcome=NULL,
-           reason_code=NULL,
-           claim_token=NULL,
-           lease_until=NULL,
-           next_claim_at=applied_time
-     WHERE work_item_id=p_work_item_id
-       AND state='PAUSED';
+       SET state='PENDING', outcome=NULL, reason_code=NULL,
+           claim_token=NULL, lease_until=NULL, next_claim_at=applied_time
+     WHERE work_item_id=p_work_item_id AND state='PAUSED';
 END;
-$;
+$resume_work$;
 
 CREATE OR REPLACE FUNCTION lock_cpi_governance_subject_events(
     p_subject_id UUID
