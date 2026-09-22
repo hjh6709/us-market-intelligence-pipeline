@@ -96,6 +96,16 @@ class CollectCpiW1Test(unittest.TestCase):
         self.assertNotIn("webhook", SOURCE.lower())
         self.assertNotIn("trade", SOURCE.lower())
 
+    def test_reconciliation_reuses_existing_global_promotion_work(self) -> None:
+        self.assertIn("existing_promotion_work_items", SOURCE)
+        self.assertIn('"ALREADY_SCHEDULED"', SOURCE)
+        self.assertIn("missing = tuple", SOURCE)
+
+    def test_replay_run_records_capture_origin_and_mode(self) -> None:
+        self.assertIn('run_mode=("REPLAY" if only_artifact_id is not None else "BACKFILL")', SOURCE)
+        self.assertIn("replay_of_run_id=", SOURCE)
+        self.assertIn('f"artifact:{run_mode}:{artifact_id}:{extractor}', SOURCE)
+
     def test_reconciliation_uses_global_promotion_work_identity(self) -> None:
         self.assertIn("create_work_item", SOURCE)
         self.assertIn("promotion_work_key", SOURCE)

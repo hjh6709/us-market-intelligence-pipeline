@@ -115,6 +115,7 @@ class CpiW1CollectorOrchestrator:
         artifact_id: UUID,
         artifact_contract_kind: str,
         run_mode: str,
+        replay_of_run_id: UUID | None = None,
     ) -> tuple[str, tuple[UUID, ...], str | None]:
         extractor = _EXTRACTOR_BY_ARTIFACT_KIND.get(artifact_contract_kind)
         families = _FAMILIES_BY_ARTIFACT_KIND.get(artifact_contract_kind)
@@ -133,31 +134,58 @@ class CpiW1CollectorOrchestrator:
             )
             return "BLOCKED_BY_RELEASE_GATE", (), decision.reason_code
 
+        if run_mode == "REPLAY" and replay_of_run_id is None:
+            raise ValueError("REPLAY promotion scheduling requires replay_of_run_id")
+        if run_mode != "REPLAY" and replay_of_run_id is not None:
+            raise ValueError("only REPLAY promotion scheduling accepts replay_of_run_id")
+
+        work_keys = tuple(
+            promotion_work_key(family, artifact_id, extractor)
+            for family in families
+        )
+        existing = self.repository.existing_promotion_work_items(
+            connection,
+            artifact_id=artifact_id,
+            work_keys=work_keys,
+        )
+        missing = tuple(key for key in work_keys if key not in existing)
+        if not missing:
+            return (
+                "ALREADY_SCHEDULED",
+                tuple(existing[key] for key in work_keys),
+                None,
+            )
+
+        replay_token = (
+            f":replay-of:{replay_of_run_id}"
+            if replay_of_run_id is not None
+            else ""
+        )
         promote_run_id = self.repository.create_run(
             connection,
             execution_scope="ECONOMIC_PROMOTE",
             job_type="CPI_W1_PROMOTE",
             trigger_type="ARTIFACT_HANDOFF",
             run_mode=run_mode,
-            trigger_idempotency_key=f"artifact:{artifact_id}:{extractor}",
+            trigger_idempotency_key=(
+                f"artifact:{run_mode}:{artifact_id}:{extractor}{replay_token}"
+            ),
             scheduled_for=None,
-            replay_of_run_id=None,
+            replay_of_run_id=replay_of_run_id,
             source_revision=_SOURCE_REVISION,
             workload_artifact_digest=str(artifact_id),
             job_contract_version=_PROMOTE_JOB_CONTRACT,
             config_fingerprint=self._config_fingerprint(),
         )
-        work_ids: list[UUID] = []
-        for family in families:
-            work_id = self.repository.create_work_item(
+        for work_key in missing:
+            existing[work_key] = self.repository.create_work_item(
                 connection,
                 run_id=promote_run_id,
                 execution_scope="ECONOMIC_PROMOTE",
-                work_key=promotion_work_key(family, artifact_id, extractor),
+                work_key=work_key,
                 input_artifact_id=artifact_id,
             )
-            work_ids.append(work_id)
-        return "SCHEDULED", tuple(work_ids), None
+        return "SCHEDULED", tuple(existing[key] for key in work_keys), None
 
     def collect_locator(
         self,
@@ -329,28 +357,36 @@ class CpiW1CollectorOrchestrator:
         if only_artifact_id is None:
             rows = connection.execute(
                 """
-                SELECT artifact_id, artifact_contract_kind
-                  FROM source_artifacts
-                 WHERE data_domain='ECONOMIC'
-                   AND source_code='BLS'
-                 ORDER BY created_at, artifact_id
+                SELECT a.artifact_id, a.artifact_contract_kind, w.run_id
+                  FROM source_artifacts a
+                  JOIN ingestion_attempts att
+                    ON att.attempt_id = a.created_by_attempt_id
+                  JOIN ingestion_work_items w
+                    ON w.work_item_id = att.work_item_id
+                 WHERE a.data_domain='ECONOMIC'
+                   AND a.source_code='BLS'
+                 ORDER BY a.created_at, a.artifact_id
                 """
             ).fetchall()
         else:
             rows = connection.execute(
                 """
-                SELECT artifact_id, artifact_contract_kind
-                  FROM source_artifacts
-                 WHERE artifact_id=%s
-                   AND data_domain='ECONOMIC'
-                   AND source_code='BLS'
+                SELECT a.artifact_id, a.artifact_contract_kind, w.run_id
+                  FROM source_artifacts a
+                  JOIN ingestion_attempts att
+                    ON att.attempt_id = a.created_by_attempt_id
+                  JOIN ingestion_work_items w
+                    ON w.work_item_id = att.work_item_id
+                 WHERE a.artifact_id=%s
+                   AND a.data_domain='ECONOMIC'
+                   AND a.source_code='BLS'
                 """,
                 (only_artifact_id,),
             ).fetchall()
             if not rows:
                 raise KeyError(f"CPI source artifact not found: {only_artifact_id}")
         results: list[CollectionResult] = []
-        for artifact_id, artifact_contract_kind in rows:
+        for artifact_id, artifact_contract_kind, capture_run_id in rows:
             expected_extractor = _EXTRACTOR_BY_ARTIFACT_KIND.get(
                 artifact_contract_kind
             )
@@ -365,7 +401,10 @@ class CpiW1CollectorOrchestrator:
                 connection,
                 artifact_id=artifact_id,
                 artifact_contract_kind=artifact_contract_kind,
-                run_mode="BACKFILL",
+                run_mode=("REPLAY" if only_artifact_id is not None else "BACKFILL"),
+                replay_of_run_id=(
+                    capture_run_id if only_artifact_id is not None else None
+                ),
             )
             results.append(
                 CollectionResult(

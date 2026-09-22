@@ -295,6 +295,32 @@ class CpiW1Repository:
                 )
             return row[0]
 
+    def existing_promotion_work_items(
+        self,
+        connection: Any,
+        *,
+        artifact_id: UUID,
+        work_keys: tuple[str, ...],
+    ) -> dict[str, UUID]:
+        if not work_keys:
+            return {}
+        rows = connection.execute(
+            """
+            SELECT work_key, work_item_id
+              FROM ingestion_work_items
+             WHERE execution_scope='ECONOMIC_PROMOTE'
+               AND input_artifact_id=%s
+               AND work_key = ANY(%s::text[])
+            """,
+            (artifact_id, list(work_keys)),
+        ).fetchall()
+        result = {row[0]: row[1] for row in rows}
+        if len(result) != len(rows):
+            raise RepositoryInvariantError(
+                "promotion work identity resolved to duplicate work keys"
+            )
+        return result
+
     @staticmethod
     def lock_cpi_event(connection: Any, event_occurrence_id: UUID) -> None:
         connection.execute(
