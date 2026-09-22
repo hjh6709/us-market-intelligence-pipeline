@@ -302,6 +302,30 @@ class CpiW1Repository:
             (f"CPI_EVENT:{event_occurrence_id}",),
         )
 
+    def record_promotion_deferred(
+        self,
+        connection: Any,
+        *,
+        artifact_id: UUID,
+        extractor_contract_version: str,
+        reason_code: str,
+        review_ref: str,
+    ) -> UUID:
+        if _REASON_RE.fullmatch(reason_code) is None:
+            raise ValueError("promotion deferred reason must be canonical")
+        if not extractor_contract_version or extractor_contract_version != extractor_contract_version.strip():
+            raise ValueError("extractor_contract_version must be canonical")
+        if not review_ref or review_ref != review_ref.strip():
+            raise ValueError("review_ref must be canonical")
+        with connection.transaction():
+            row = connection.execute(
+                "SELECT record_cpi_promotion_deferred(%s, %s, %s, %s)",
+                (artifact_id, extractor_contract_version, reason_code, review_ref),
+            ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("promotion deferred audit returned no id")
+            return row[0]
+
     def claim_work_item(
         self,
         connection: Any,

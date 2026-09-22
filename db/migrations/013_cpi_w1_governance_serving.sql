@@ -130,7 +130,8 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
             'INTERPRETATION_DECISION_APPLIED',
             'ECONOMIC_SERVING_CONTROL_APPLIED',
             'INGESTION_WORK_PAUSED',
-            'INGESTION_WORK_RESUMED'
+            'INGESTION_WORK_RESUMED',
+            'CPI_PROMOTION_DEFERRED'
         )
     ),
     actor_subject TEXT NOT NULL CHECK (
@@ -141,6 +142,7 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
     control_decision_id UUID
         REFERENCES economic_serving_control_decisions(control_decision_id),
     work_item_id UUID REFERENCES ingestion_work_items(work_item_id),
+    source_artifact_id UUID REFERENCES source_artifacts(artifact_id),
     case_ref TEXT,
     verification_ref TEXT,
     event_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -152,6 +154,7 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
             AND interpretation_decision_id IS NOT NULL
             AND control_decision_id IS NULL
             AND work_item_id IS NULL
+            AND source_artifact_id IS NULL
         )
         OR
         (
@@ -159,6 +162,7 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
             AND interpretation_decision_id IS NULL
             AND control_decision_id IS NOT NULL
             AND work_item_id IS NULL
+            AND source_artifact_id IS NULL
         )
         OR
         (
@@ -166,9 +170,70 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
             AND interpretation_decision_id IS NULL
             AND control_decision_id IS NULL
             AND work_item_id IS NOT NULL
+            AND source_artifact_id IS NULL
+        )
+        OR
+        (
+            action_kind = 'CPI_PROMOTION_DEFERRED'
+            AND interpretation_decision_id IS NULL
+            AND control_decision_id IS NULL
+            AND work_item_id IS NULL
+            AND source_artifact_id IS NOT NULL
         )
     )
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS business_audit_cpi_promotion_deferred_identity
+    ON business_audit_events (source_artifact_id, verification_ref)
+    WHERE action_kind = 'CPI_PROMOTION_DEFERRED';
+
+CREATE OR REPLACE FUNCTION record_cpi_promotion_deferred(
+    p_source_artifact_id UUID,
+    p_extractor_contract_version TEXT,
+    p_reason_code TEXT,
+    p_review_ref TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+AS $promotion_deferred$
+DECLARE
+    event_id UUID;
+BEGIN
+    IF p_extractor_contract_version IS NULL
+       OR BTRIM(p_extractor_contract_version) = '' THEN
+        RAISE EXCEPTION 'deferred promotion extractor is required'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_reason_code IS NULL OR p_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'deferred promotion reason must be canonical'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_review_ref IS NULL OR BTRIM(p_review_ref) = '' THEN
+        RAISE EXCEPTION 'deferred promotion review reference is required'
+            USING ERRCODE = '23514';
+    END IF;
+
+    INSERT INTO business_audit_events (
+        audit_event_id, action_kind, actor_subject, source_artifact_id,
+        verification_ref, event_payload, occurred_at
+    ) VALUES (
+        gen_random_uuid(), 'CPI_PROMOTION_DEFERRED', 'system:cpi-orchestrator',
+        p_source_artifact_id, p_extractor_contract_version,
+        jsonb_build_object(
+            'reason_code', p_reason_code,
+            'review_ref', p_review_ref,
+            'extractor_contract_version', p_extractor_contract_version
+        ),
+        CURRENT_TIMESTAMP
+    )
+    ON CONFLICT (source_artifact_id, verification_ref)
+        WHERE action_kind = 'CPI_PROMOTION_DEFERRED'
+    DO UPDATE SET source_artifact_id = EXCLUDED.source_artifact_id
+    RETURNING audit_event_id INTO event_id;
+
+    RETURN event_id;
+END;
+$promotion_deferred$;
 
 CREATE OR REPLACE FUNCTION pause_cpi_ingestion_work(
     p_work_item_id UUID,

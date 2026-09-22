@@ -70,6 +70,10 @@ class CollectCpiW1Test(unittest.TestCase):
             "config/cpi_w1_extractor_release_gate.json"
         ).read_text(encoding="utf-8"))
 
+    def test_release_gate_block_is_durable_audit_evidence(self) -> None:
+        self.assertIn("record_promotion_deferred", SOURCE)
+        self.assertIn("BLOCKED_BY_RELEASE_GATE", SOURCE)
+
     def test_missing_source_is_data_not_available_not_canceled(self) -> None:
         self.assertIn('outcome="DATA_NOT_AVAILABLE"', SOURCE)
         self.assertIn('reason_code="SOURCE_NOT_FOUND"', SOURCE)

@@ -70,6 +70,12 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("pause requires current claim ownership", self.sql)
         self.assertIn("resume requires canonical case reference", self.sql)
 
+    def test_promotion_deferred_audit_is_artifact_and_extractor_idempotent(self) -> None:
+        self.assertIn("CPI_PROMOTION_DEFERRED", self.sql)
+        self.assertIn("source_artifact_id UUID REFERENCES source_artifacts", self.sql)
+        self.assertIn("business_audit_cpi_promotion_deferred_identity", self.sql)
+        self.assertIn("FUNCTION record_cpi_promotion_deferred", self.sql)
+
     def test_atomic_activation_functions_exist(self) -> None:
         self.assertIn("FUNCTION apply_interpretation_decision", self.sql)
         self.assertIn("FUNCTION apply_economic_serving_control", self.sql)

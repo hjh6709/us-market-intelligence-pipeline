@@ -115,6 +115,13 @@ class CpiW1CollectorOrchestrator:
 
         decision = self.release_gate.decision(extractor)
         if not decision.eligible:
+            self.repository.record_promotion_deferred(
+                connection,
+                artifact_id=artifact_id,
+                extractor_contract_version=extractor,
+                reason_code=decision.reason_code or "EXTRACTOR_NOT_REVIEWED",
+                review_ref=decision.review_ref or "NO_REVIEW_REFERENCE",
+            )
             return "BLOCKED_BY_RELEASE_GATE", (), decision.reason_code
 
         promote_run_id = self.repository.create_run(
