@@ -19,6 +19,11 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)
         self.assertIn("w.lease_until <= CURRENT_TIMESTAMP", SOURCE)
 
+    def test_pause_resume_uses_guarded_database_boundary(self) -> None:
+        self.assertIn("SELECT pause_cpi_ingestion_work", SOURCE)
+        self.assertIn("SELECT resume_cpi_ingestion_work", SOURCE)
+        self.assertNotIn("SET state='PAUSED'", SOURCE)
+
     def test_claim_can_filter_by_work_family_prefix(self) -> None:
         self.assertIn("CLAIM_SELECT_PREFIX_SQL", SOURCE)
         self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", SOURCE)

@@ -61,6 +61,15 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("'CPI_EVENT:' || affected_event::TEXT", self.sql)
         self.assertIn("'CPI_EVENT:' || p_event_occurrence_id::TEXT", self.sql)
 
+    def test_pause_resume_is_audited_and_guarded(self) -> None:
+        self.assertIn("FUNCTION pause_cpi_ingestion_work", self.sql)
+        self.assertIn("FUNCTION resume_cpi_ingestion_work", self.sql)
+        self.assertIn("INGESTION_WORK_PAUSED", self.sql)
+        self.assertIn("INGESTION_WORK_RESUMED", self.sql)
+        self.assertIn("work_item_id UUID REFERENCES ingestion_work_items", self.sql)
+        self.assertIn("pause requires current claim ownership", self.sql)
+        self.assertIn("resume requires canonical case reference", self.sql)
+
     def test_atomic_activation_functions_exist(self) -> None:
         self.assertIn("FUNCTION apply_interpretation_decision", self.sql)
         self.assertIn("FUNCTION apply_economic_serving_control", self.sql)

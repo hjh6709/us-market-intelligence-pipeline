@@ -31,6 +31,7 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
             "'TERMINAL'",
             "'PENDING'",
             "'CLAIMED'",
+            "'PAUSED'",
             "'QUARANTINED'",
             "'DATA_NOT_AVAILABLE'",
             "'SKIPPED'",
@@ -66,6 +67,13 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("new ingestion run must start CREATED", self.sql)
         self.assertIn("new ingestion work must start PENDING", self.sql)
         self.assertIn("new ingestion attempt must start RUNNING", self.sql)
+
+    def test_paused_work_is_structurally_nonclaimable_and_recoverable(self) -> None:
+        self.assertIn("state IN ('PENDING', 'CLAIMED', 'PAUSED', 'TERMINAL')", self.sql)
+        self.assertIn("paused work requires matching failed current attempt", self.sql)
+        self.assertIn("resumed work must clear pause reason and schedule next claim", self.sql)
+        self.assertIn("OLD.state = 'PAUSED'", self.sql)
+        self.assertNotIn("w.state = 'PAUSED'", self.sql.split("ingestion_work_items_claimable_idx")[0])
 
     def test_abnormal_terminal_outcomes_require_canonical_reason_codes(self) -> None:
         self.assertIn("ingestion_work_items_reason_valid", self.sql)

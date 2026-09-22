@@ -363,6 +363,56 @@ class CpiW1Repository:
         if work is None:
             raise StaleClaimError("claim lost before work terminalization")
 
+    def pause_claim(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        reason_code: str,
+        actor_subject: str,
+        case_ref: str | None = None,
+    ) -> None:
+        if _REASON_RE.fullmatch(reason_code) is None:
+            raise ValueError("pause reason_code must be canonical uppercase token")
+        if not actor_subject or actor_subject != actor_subject.strip():
+            raise ValueError("pause actor_subject must be canonical")
+        with connection.transaction():
+            self.assert_current_claim(connection, claim)
+            connection.execute(
+                """
+                SELECT pause_cpi_ingestion_work(
+                    %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    claim.work_item_id,
+                    claim.attempt_id,
+                    claim.claim_generation,
+                    claim.claim_token,
+                    reason_code,
+                    actor_subject,
+                    case_ref,
+                ),
+            )
+
+    def resume_paused_work(
+        self,
+        connection: Any,
+        *,
+        work_item_id: UUID,
+        actor_subject: str,
+        case_ref: str,
+    ) -> None:
+        if not actor_subject or actor_subject != actor_subject.strip():
+            raise ValueError("resume actor_subject must be canonical")
+        if not case_ref or case_ref != case_ref.strip():
+            raise ValueError("resume case_ref must be canonical")
+        with connection.transaction():
+            connection.execute(
+                "SELECT resume_cpi_ingestion_work(%s, %s, %s)",
+                (work_item_id, actor_subject, case_ref),
+            )
+
     def retry_claim(
         self,
         connection: Any,
