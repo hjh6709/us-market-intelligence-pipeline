@@ -951,6 +951,37 @@ git commit -m "feat: add fenced CPI W1 promotion workflow"
 
 ---
 
+### Task 10B: Add Guarded Schedule Assertion Promotion
+
+**Why this task exists:** Task 8 stopped at typed schedule candidates, leaving no
+guarded application path into canonical `event_schedule_assertions`.
+
+- [x] **Step 1: Separate source and extractor contracts**
+  - schedule HTML: `bls-cpi-schedule-html-v1`
+  - global ICS: `bls-cpi-global-ics-v1`
+  - revised release dates: `bls-cpi-revised-release-dates-v1`
+  - every candidate carries the exact artifact SHA-256.
+
+- [x] **Step 2: Add `CPI_SCHEDULE_ASSERTION_PROMOTE`**
+  - verify exact claim/work family, artifact/hash, extractor and artifact-derived
+    source role;
+  - use the shared event fence;
+  - revised-release-dates evidence can promote only explicit CANCELED material.
+
+- [x] **Step 3: Enforce deterministic retry**
+  - the same event + artifact + extractor identity must reproduce identical material
+    and source-effective chronology; drift is a determinism failure.
+
+- [x] **Step 4: Add PostgreSQL vectors**
+  - authoritative schedule promotion;
+  - forged source-role rejection;
+  - explicit cancellation promotion.
+
+Runtime release-gate approval remains separate and currently fail-closed pending
+reviewed official corpus evidence.
+
+---
+
 ### Task 11: Implement CPI Selector, PIT Reconstruction, and Serving Overlay
 
 **Files:**

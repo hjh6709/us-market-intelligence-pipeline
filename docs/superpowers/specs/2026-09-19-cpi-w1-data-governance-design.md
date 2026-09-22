@@ -1287,6 +1287,23 @@ Neither is the request timestamp.
 
 Representation identity must be derived from served semantics, not server instance, latency, trace ID, or request time.
 
+### 20A. Schedule assertion promotion boundary
+
+Schedule parsing and canonical schedule evidence are separated by an explicit
+`CPI_SCHEDULE_ASSERTION_PROMOTE` family. It consumes a typed `ScheduleCandidate`
+bound to the exact artifact SHA-256, requires an approved extractor for the artifact
+kind, derives source authority from the source contract, and rejects a candidate whose
+claimed role disagrees with the artifact contract. `CPI_SCHEDULE_HTML` is
+AUTHORITATIVE, `BLS_GLOBAL_ICS` is FALLBACK_CORROBORATION, and
+`BLS_REVISED_RELEASE_DATES_HTML` is AUTHORITATIVE only for explicit CPI
+cancellation evidence.
+
+The promotion creates or verifies the CPI event occurrence and immutable
+`event_schedule_assertions` row under the shared event fence. Repeating the same
+artifact+extractor parse with different schedule material or source-effective
+chronology is a determinism failure, never an overwrite. Source-contract and
+extractor-contract versions are distinct authorities and must never be conflated.
+
 ## 27. Promotion families, idempotency, and transaction boundaries
 
 Fetch, parse, and semantic validation occur outside short canonical promotion transactions.
@@ -1297,6 +1314,12 @@ rejects a candidate whose hash does not match the claimed input artifact. Promot
 also accepts only extractor-contract versions approved for that artifact contract kind.
 This prevents cross-wiring a valid candidate from one artifact into another same-period
 artifact.
+
+Runtime release-gate eligibility is a separate deployment decision from parser code
+existence. Collectors may retain official bytes while an extractor is blocked. A
+blocked extractor must not create canonical promotion work, and the deferral reason
+must remain durable operational evidence. Runtime orchestration consumes a checked-in
+release-gate snapshot rather than test-only corpus fixtures or replay code.
 
 One artifact may safely establish that a release occurred even when its numeric observation surface cannot yet be interpreted. CPI W1 therefore does not use one all-or-nothing promotion outcome for release envelope and observation bundle.
 

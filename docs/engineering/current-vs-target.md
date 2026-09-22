@@ -53,6 +53,9 @@ Current implemented foundation on the CPI W1 branch includes:
 - bounded BLS source retrieval and development/test filesystem artifact storage;
 - CPI schedule candidate parsing with authoritative HTML versus fallback ICS
   source-role separation;
+- guarded schedule-assertion promotion with artifact-hash binding, dedicated
+  extractor contracts, source-role verification, explicit-cancellation constraints,
+  and event fencing;
 - BLS release-envelope and Core 4 HTML extraction;
 - fenced CPI W1 repository/promotion primitives for release-envelope, secondary
   corroborating-representation topology, and atomic Core 4 promotion;
@@ -65,7 +68,12 @@ Current implemented foundation on the CPI W1 branch includes:
 - explicit CPI correction notice and correction-observation promotion boundaries
   with CORRECTION_NOTICE provenance and promoter-driven correction rehearsal;
 - CPI corpus inventory/replay tooling, staging capture boundary, reviewed-byte
-  promotion boundary, and fail-closed parser release gate infrastructure.
+  promotion boundary, and fail-closed parser release gate infrastructure;
+- runtime extractor release-gate snapshot separating official byte collection from
+  canonical promotion eligibility, with durable deferred-promotion audit evidence;
+- controlled CPI W1 collector/orchestrator skeleton for bounded capture, immutable
+  artifact persistence, gate-aware promotion scheduling, scoped replay
+  reconciliation, and run finalization.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
@@ -77,7 +85,9 @@ to Product, Marketing, Sales, CS, or users as production capability:
   therefore remains intentionally not ready;
 - production IdP/RBAC integration for the implemented governance application boundary;
 - golden-corpus differential replay and parser-change release gate;
-- controlled collector/orchestrator and reconciliation;
+- collector/orchestrator is implemented at the W1 development boundary, but live
+  canonical promotion remains intentionally blocked by the current extractor gate
+  until reviewed official corpus evidence is ready;
 - production object-storage retention, orphan cleanup, integrity repair, and
   restore procedures;
 - Product API/UI/SEO/cache/notification withholding integration;
