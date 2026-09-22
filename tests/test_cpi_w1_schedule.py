@@ -28,7 +28,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
         candidate = parse_cpi_schedule_html(
             self.read("exact.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         self.assertEqual(candidate.reference_month, REFERENCE_MONTH)
         self.assertEqual(candidate.scheduled_date, date(2026, 9, 11))
@@ -44,12 +44,12 @@ class CpiW1ScheduleTest(unittest.TestCase):
         exact = parse_cpi_schedule_html(
             self.read("exact.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         reordered = parse_cpi_schedule_html(
             self.read("reordered.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         self.assertEqual(exact.material_fingerprint, reordered.material_fingerprint)
 
@@ -57,7 +57,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
         candidate = parse_cpi_schedule_html(
             self.read("date_only.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         self.assertEqual(candidate.schedule_status, ScheduleStatus.SCHEDULED)
         self.assertEqual(candidate.time_precision, TimePrecision.DATE_ONLY)
@@ -68,7 +68,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
         candidate = parse_cpi_schedule_html(
             self.read("pending.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         self.assertEqual(candidate.schedule_status, ScheduleStatus.DATE_PENDING)
         self.assertIsNone(candidate.scheduled_date)
@@ -78,7 +78,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
         candidate = parse_cpi_schedule_html(
             self.read("canceled.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         self.assertEqual(candidate.schedule_status, ScheduleStatus.CANCELED)
         self.assertIsNone(candidate.scheduled_at)
@@ -88,7 +88,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
             parse_cpi_schedule_html(
                 self.read("absent.html"),
                 expected_reference_month=REFERENCE_MONTH,
-                contract_version="bls-cpi-source-v1",
+                extractor_contract_version="bls-cpi-schedule-html-v1",
             )
 
     def test_revised_release_dates_require_exact_cpi_cancellation_row(self) -> None:
@@ -173,22 +173,40 @@ class CpiW1ScheduleTest(unittest.TestCase):
         html = parse_cpi_schedule_html(
             self.read("exact.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         ics = parse_cpi_schedule_ics(
             self.read("stale.ics"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-global-ics-v1",
         )
         self.assertEqual(ics.source_role, SourceAuthorityRole.FALLBACK_CORROBORATION)
         self.assertEqual(ics.scheduled_date, date(2026, 9, 10))
         self.assertNotEqual(html.material_fingerprint, ics.material_fingerprint)
 
+    def test_schedule_candidates_are_bound_to_artifact_bytes(self) -> None:
+        import hashlib
+
+        body = self.read("exact.html")
+        candidate = parse_cpi_schedule_html(
+            body,
+            expected_reference_month=REFERENCE_MONTH,
+            extractor_contract_version="bls-cpi-schedule-html-v1",
+        )
+        self.assertEqual(
+            candidate.artifact_content_sha256,
+            hashlib.sha256(body).hexdigest(),
+        )
+        self.assertNotEqual(
+            candidate.extractor_contract_version,
+            "bls-cpi-source-v1",
+        )
+
     def test_source_effective_metadata_is_not_schedule_material(self) -> None:
         candidate = parse_cpi_schedule_html(
             self.read("exact.html"),
             expected_reference_month=REFERENCE_MONTH,
-            contract_version="bls-cpi-source-v1",
+            extractor_contract_version="bls-cpi-schedule-html-v1",
         )
         from dataclasses import replace
 
@@ -200,7 +218,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
             parse_cpi_schedule_html(
                 b"x" * (5 * 1024 * 1024 + 1),
                 expected_reference_month=REFERENCE_MONTH,
-                contract_version="bls-cpi-source-v1",
+                extractor_contract_version="bls-cpi-schedule-html-v1",
             )
         with self.assertRaises(ScheduleParseError):
             parse_bls_revised_release_dates_html(
@@ -211,7 +229,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
             parse_cpi_schedule_ics(
                 b"x" * (2 * 1024 * 1024 + 1),
                 expected_reference_month=REFERENCE_MONTH,
-                contract_version="bls-cpi-source-v1",
+                extractor_contract_version="bls-cpi-global-ics-v1",
             )
 
     def test_schedule_html_rejects_excessive_cell_count(self) -> None:
@@ -224,7 +242,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
             parse_cpi_schedule_html(
                 body,
                 expected_reference_month=REFERENCE_MONTH,
-                contract_version="bls-cpi-source-v1",
+                extractor_contract_version="bls-cpi-schedule-html-v1",
             )
 
     def test_ambiguous_duplicate_rows_are_rejected(self) -> None:
@@ -237,7 +255,7 @@ class CpiW1ScheduleTest(unittest.TestCase):
             parse_cpi_schedule_html(
                 body,
                 expected_reference_month=REFERENCE_MONTH,
-                contract_version="bls-cpi-source-v1",
+                extractor_contract_version="bls-cpi-schedule-html-v1",
             )
 
 

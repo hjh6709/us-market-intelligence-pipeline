@@ -6,6 +6,7 @@ never infer cancellation or date-pending state from absence.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -54,6 +55,7 @@ class ScheduleParseError(ValueError):
 
 @dataclass(frozen=True)
 class ScheduleCandidate:
+    artifact_content_sha256: str
     reference_month: date
     schedule_status: ScheduleStatus
     scheduled_date: date | None
@@ -183,7 +185,7 @@ def parse_cpi_schedule_html(
     body: bytes,
     *,
     expected_reference_month: date,
-    contract_version: str,
+    extractor_contract_version: str,
     timezone_name: str = "America/New_York",
 ) -> ScheduleCandidate:
     if len(body) > _MAX_SCHEDULE_HTML_BYTES:
@@ -234,6 +236,7 @@ def parse_cpi_schedule_html(
         if date_token in _CANCELED_TOKENS or time_token in _CANCELED_TOKENS:
             candidates.append(
                 ScheduleCandidate(
+                    artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                     reference_month=reference_month,
                     schedule_status=ScheduleStatus.CANCELED,
                     scheduled_date=None,
@@ -241,7 +244,7 @@ def parse_cpi_schedule_html(
                     schedule_timezone=None,
                     time_precision=None,
                     source_role=SourceAuthorityRole.AUTHORITATIVE,
-                    extractor_contract_version=contract_version,
+                    extractor_contract_version=extractor_contract_version,
                 )
             )
             continue
@@ -249,6 +252,7 @@ def parse_cpi_schedule_html(
         if date_token in _PENDING_TOKENS:
             candidates.append(
                 ScheduleCandidate(
+                    artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                     reference_month=reference_month,
                     schedule_status=ScheduleStatus.DATE_PENDING,
                     scheduled_date=None,
@@ -256,7 +260,7 @@ def parse_cpi_schedule_html(
                     schedule_timezone=None,
                     time_precision=None,
                     source_role=SourceAuthorityRole.AUTHORITATIVE,
-                    extractor_contract_version=contract_version,
+                    extractor_contract_version=extractor_contract_version,
                 )
             )
             continue
@@ -265,6 +269,7 @@ def parse_cpi_schedule_html(
         if not release_time_text:
             candidates.append(
                 ScheduleCandidate(
+                    artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                     reference_month=reference_month,
                     schedule_status=ScheduleStatus.SCHEDULED,
                     scheduled_date=release_date,
@@ -272,7 +277,7 @@ def parse_cpi_schedule_html(
                     schedule_timezone=timezone_name,
                     time_precision=TimePrecision.DATE_ONLY,
                     source_role=SourceAuthorityRole.AUTHORITATIVE,
-                    extractor_contract_version=contract_version,
+                    extractor_contract_version=extractor_contract_version,
                 )
             )
             continue
@@ -284,6 +289,7 @@ def parse_cpi_schedule_html(
         )
         candidates.append(
             ScheduleCandidate(
+                artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                 reference_month=reference_month,
                 schedule_status=ScheduleStatus.SCHEDULED,
                 scheduled_date=release_date,
@@ -291,7 +297,7 @@ def parse_cpi_schedule_html(
                 schedule_timezone=timezone_name,
                 time_precision=TimePrecision.EXACT,
                 source_role=SourceAuthorityRole.AUTHORITATIVE,
-                extractor_contract_version=contract_version,
+                extractor_contract_version=extractor_contract_version,
             )
         )
 
@@ -369,6 +375,7 @@ def parse_bls_revised_release_dates_html(
                 )
             matches.append(
                 ScheduleCandidate(
+                    artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                     reference_month=reference_month,
                     schedule_status=ScheduleStatus.CANCELED,
                     scheduled_date=None,
@@ -406,7 +413,7 @@ def parse_cpi_schedule_ics(
     body: bytes,
     *,
     expected_reference_month: date,
-    contract_version: str,
+    extractor_contract_version: str,
 ) -> ScheduleCandidate:
     if len(body) > _MAX_ICS_BYTES:
         raise ScheduleParseError("BLS ICS exceeds parser byte limit")
@@ -460,6 +467,7 @@ def parse_cpi_schedule_ics(
             release_date = datetime.strptime(value, "%Y%m%d").date()
             wanted.append(
                 ScheduleCandidate(
+                    artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                     reference_month=reference_month,
                     schedule_status=ScheduleStatus.SCHEDULED,
                     scheduled_date=release_date,
@@ -467,7 +475,7 @@ def parse_cpi_schedule_ics(
                     schedule_timezone=timezone_name or "America/New_York",
                     time_precision=TimePrecision.DATE_ONLY,
                     source_role=SourceAuthorityRole.FALLBACK_CORROBORATION,
-                    extractor_contract_version=contract_version,
+                    extractor_contract_version=extractor_contract_version,
                 )
             )
             continue
@@ -481,6 +489,7 @@ def parse_cpi_schedule_ics(
         scheduled_at = naive.replace(tzinfo=ZoneInfo(timezone_name))
         wanted.append(
             ScheduleCandidate(
+                artifact_content_sha256=hashlib.sha256(body).hexdigest(),
                 reference_month=reference_month,
                 schedule_status=ScheduleStatus.SCHEDULED,
                 scheduled_date=scheduled_at.date(),
@@ -488,7 +497,7 @@ def parse_cpi_schedule_ics(
                 schedule_timezone=timezone_name,
                 time_precision=TimePrecision.EXACT,
                 source_role=SourceAuthorityRole.FALLBACK_CORROBORATION,
-                extractor_contract_version=contract_version,
+                extractor_contract_version=extractor_contract_version,
             )
         )
 
