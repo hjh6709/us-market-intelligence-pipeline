@@ -134,8 +134,16 @@ def review_capture(
             raise CorpusReviewError("approved corpus path already contains different bytes")
     else:
         shutil.copyfile(data_path, approved_path)
+        copied_sha256 = hashlib.sha256(approved_path.read_bytes()).hexdigest()
+        if copied_sha256 != actual_sha256:
+            approved_path.unlink(missing_ok=True)
+            raise CorpusReviewError(
+                "approved copy changed after reviewer hash verification"
+            )
 
     reviewed_sidecar = approved_path.with_suffix(approved_path.suffix + ".review.json")
+    if reviewed_sidecar.is_symlink():
+        raise CorpusReviewError("review sidecar must not be a symlink")
     reviewed_payload = {
         "schema_version": "cpi-w1-corpus-review-v1",
         "corpus_id": corpus_id,
@@ -144,10 +152,16 @@ def review_capture(
         "capture_metadata": metadata,
         "status": "REVIEWED_BYTES_ONLY",
     }
-    reviewed_sidecar.write_text(
-        json.dumps(reviewed_payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    serialized_review = json.dumps(reviewed_payload, indent=2, sort_keys=True) + "\n"
+    if reviewed_sidecar.exists():
+        if not reviewed_sidecar.is_file():
+            raise CorpusReviewError("review sidecar must be a regular file")
+        if reviewed_sidecar.read_text(encoding="utf-8") != serialized_review:
+            raise CorpusReviewError(
+                "existing review evidence differs; append a new reviewed artifact instead"
+            )
+    else:
+        reviewed_sidecar.write_text(serialized_review, encoding="utf-8")
 
     candidate_entry = dict(entry)
     candidate_entry["materialization_status"] = "MATERIALIZED"

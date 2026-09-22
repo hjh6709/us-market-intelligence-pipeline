@@ -160,6 +160,42 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                     repo_root=root,
                 )
 
+    def test_existing_review_sidecar_cannot_be_overwritten_with_different_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data, meta, sha = self.staged(root)
+            approved_root = root / "tests/fixtures/cpi_w1/official"
+            result = review_capture(
+                manifest=self.manifest(),
+                contract=CONTRACT,
+                corpus_id="cpi:2026-08:release-html",
+                data_path=data,
+                metadata_path=meta,
+                reviewer_ref="REVIEW-123",
+                verified_sha256=sha,
+                approved_root=approved_root,
+                repo_root=root,
+            )
+            sidecar = Path(result["review_sidecar"])
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            payload["reviewer_ref"] = "REVIEW-TAMPERED"
+            sidecar.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(CorpusReviewError):
+                review_capture(
+                    manifest=self.manifest(),
+                    contract=CONTRACT,
+                    corpus_id="cpi:2026-08:release-html",
+                    data_path=data,
+                    metadata_path=meta,
+                    reviewer_ref="REVIEW-123",
+                    verified_sha256=sha,
+                    approved_root=approved_root,
+                    repo_root=root,
+                )
+
     def test_review_does_not_mutate_manifest(self) -> None:
         manifest = self.manifest()
         original = json.dumps(manifest, sort_keys=True)
