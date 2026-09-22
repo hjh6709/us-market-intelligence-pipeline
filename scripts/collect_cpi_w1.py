@@ -249,36 +249,37 @@ class CpiW1CollectorOrchestrator:
         artifact_id = uuid4()
         digest = hashlib.sha256(captured.body).hexdigest()
         stored = self.artifact_store.put(artifact_id, captured.body, digest)
-        committed = False
+        database_committed = False
         try:
-            db_artifact_id = self.repository.record_source_artifact(
-                connection,
-                claim,
-                artifact_id=artifact_id,
-                source_code="BLS",
-                artifact_contract_kind=locator.artifact_contract_kind,
-                source_contract_version=self.source_contract.contract_version,
-                locator_key=captured.locator_key,
-                retrieval_url=captured.final_url,
-                content_sha256=digest,
-                content_type=captured.headers.get(
-                    "content-type",
-                    "application/octet-stream",
-                ).split(";", 1)[0].strip().lower(),
-                captured_at=captured.captured_at,
-                storage_uri=stored.storage_uri,
-                storage_generation=stored.storage_generation,
-            )
-            if db_artifact_id != artifact_id:
-                raise RuntimeError("artifact identity did not converge")
-            self.repository.terminalize_claim(
-                connection,
-                claim,
-                outcome="SUCCEEDED",
-            )
-            committed = True
+            with connection.transaction():
+                db_artifact_id = self.repository.record_source_artifact(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    source_code="BLS",
+                    artifact_contract_kind=locator.artifact_contract_kind,
+                    source_contract_version=self.source_contract.contract_version,
+                    locator_key=captured.locator_key,
+                    retrieval_url=captured.final_url,
+                    content_sha256=digest,
+                    content_type=captured.headers.get(
+                        "content-type",
+                        "application/octet-stream",
+                    ).split(";", 1)[0].strip().lower(),
+                    captured_at=captured.captured_at,
+                    storage_uri=stored.storage_uri,
+                    storage_generation=stored.storage_generation,
+                )
+                if db_artifact_id != artifact_id:
+                    raise RuntimeError("artifact identity did not converge")
+                self.repository.terminalize_claim_in_transaction(
+                    connection,
+                    claim,
+                    outcome="SUCCEEDED",
+                )
+            database_committed = True
         finally:
-            if not committed:
+            if not database_committed:
                 self.artifact_store.delete_uncommitted(stored)
 
         promotion_status, promotion_work_ids, blocked_reason = self._schedule_promotions(

@@ -53,6 +53,14 @@ class CollectCpiW1Test(unittest.TestCase):
         self.assertNotIn("promote_release_envelope(", SOURCE)
         self.assertNotIn("promote_observation_bundle(", SOURCE)
 
+    def test_artifact_record_and_work_success_share_database_transaction(self) -> None:
+        record_pos = SOURCE.index("db_artifact_id = self.repository.record_source_artifact")
+        terminal_pos = SOURCE.index("terminalize_claim_in_transaction", record_pos)
+        transaction_pos = SOURCE.rfind("with connection.transaction():", 0, record_pos)
+        self.assertLess(transaction_pos, record_pos)
+        self.assertLess(record_pos, terminal_pos)
+        self.assertIn("if not database_committed:", SOURCE)
+
     def test_release_gate_blocks_unapproved_promotion_without_blocking_capture(self) -> None:
         record_pos = SOURCE.index("record_source_artifact")
         gate_pos = SOURCE.index("self.release_gate.decision")
