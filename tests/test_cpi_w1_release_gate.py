@@ -21,6 +21,15 @@ class CpiW1ReleaseGateTest(unittest.TestCase):
         self.assertFalse(decision.eligible)
         self.assertEqual(decision.reason_code, "EXTRACTOR_NOT_REVIEWED")
 
+    def test_schedule_extractors_are_explicitly_fail_closed(self) -> None:
+        gate = CpiW1ExtractorReleaseGate.from_json(GATE)
+        for version in (
+            "bls-cpi-schedule-html-v1",
+            "bls-cpi-global-ics-v1",
+            "bls-cpi-revised-release-dates-v1",
+        ):
+            self.assertFalse(gate.decision(version).eligible)
+
     def test_xlsx_and_correction_paths_are_explicitly_blocked(self) -> None:
         gate = CpiW1ExtractorReleaseGate.from_json(GATE)
         self.assertFalse(gate.decision("bls-cpi-table1-xlsx-v1").eligible)

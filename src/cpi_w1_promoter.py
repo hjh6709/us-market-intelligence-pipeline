@@ -20,6 +20,7 @@ from src.cpi_w1_release import (
     ObservationBundleCandidate,
     ReleaseEnvelopeCandidate,
 )
+from src.cpi_w1_schedule import ScheduleCandidate
 from src.cpi_w1_repository import (
     Claim,
     CpiW1Repository,
@@ -36,6 +37,9 @@ _CORE4 = {
 }
 
 _ALLOWED_EXTRACTORS_BY_ARTIFACT = {
+    "CPI_SCHEDULE_HTML": {"bls-cpi-schedule-html-v1"},
+    "BLS_GLOBAL_ICS": {"bls-cpi-global-ics-v1"},
+    "BLS_REVISED_RELEASE_DATES_HTML": {"bls-cpi-revised-release-dates-v1"},
     "CPI_RELEASE_HTML": {"bls-cpi-release-html-v1"},
     "CPI_TABLE1_XLSX": {"bls-cpi-table1-xlsx-v1"},
     "CPI_CORRECTION_HTML": {"bls-cpi-correction-html-v1"},
@@ -157,6 +161,211 @@ class CpiW1Promoter:
         ).fetchone()
         if row != (subject_type,):
             raise PromotionDeterminismError("stable subject UUID resolved to wrong type")
+
+    def promote_schedule_assertion(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        artifact_id: UUID,
+        candidate: ScheduleCandidate,
+    ) -> PromotionResult:
+        expected_work_key = promotion_work_key(
+            PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+        )
+        if claim.work_key != expected_work_key:
+            raise PromotionInvariantError("claim is not schedule-assertion promotion work")
+
+        with connection.transaction():
+            artifact_kind, _source_contract_version = self._verify_input_artifact(
+                connection,
+                claim,
+                artifact_id,
+                allowed_kinds={
+                    "CPI_SCHEDULE_HTML",
+                    "BLS_GLOBAL_ICS",
+                    "BLS_REVISED_RELEASE_DATES_HTML",
+                },
+                artifact_content_sha256=candidate.artifact_content_sha256,
+                extractor_contract_version=candidate.extractor_contract_version,
+            )
+            expected_role = {
+                "CPI_SCHEDULE_HTML": "AUTHORITATIVE",
+                "BLS_GLOBAL_ICS": "FALLBACK_CORROBORATION",
+                "BLS_REVISED_RELEASE_DATES_HTML": "AUTHORITATIVE",
+            }[artifact_kind]
+            if candidate.source_role.value != expected_role:
+                raise PromotionInvariantError(
+                    "schedule candidate source role does not match artifact contract"
+                )
+            if (
+                artifact_kind == "BLS_REVISED_RELEASE_DATES_HTML"
+                and candidate.schedule_status.value != "CANCELED"
+            ):
+                raise PromotionInvariantError(
+                    "revised-release-dates artifact may only promote explicit cancellation"
+                )
+
+            event_id = _stable_uuid(
+                "event",
+                "CPI",
+                candidate.reference_month.isoformat(),
+            )
+            connection.execute(
+                """
+                INSERT INTO core_event_occurrences (
+                    event_occurrence_id, event_type, reference_month,
+                    created_by_attempt_id
+                ) VALUES (%s, 'CPI', %s, %s)
+                ON CONFLICT (event_type, reference_month) DO NOTHING
+                """,
+                (event_id, candidate.reference_month, claim.attempt_id),
+            )
+            event_row = connection.execute(
+                """
+                SELECT event_occurrence_id
+                  FROM core_event_occurrences
+                 WHERE event_type='CPI' AND reference_month=%s
+                """,
+                (candidate.reference_month,),
+            ).fetchone()
+            if event_row is None:
+                raise PromotionInvariantError("CPI occurrence was not established")
+            event_id = event_row[0]
+            self.repository.lock_cpi_event(connection, event_id)
+
+            existing = connection.execute(
+                """
+                SELECT schedule_assertion_id, schedule_status, scheduled_date,
+                       scheduled_at, schedule_timezone, time_precision,
+                       source_effective_date, source_effective_at,
+                       source_effective_precision, material_fingerprint
+                  FROM event_schedule_assertions
+                 WHERE event_occurrence_id=%s
+                   AND source_artifact_id=%s
+                   AND extractor_contract_version=%s
+                """,
+                (
+                    event_id,
+                    artifact_id,
+                    candidate.extractor_contract_version,
+                ),
+            ).fetchone()
+
+            if existing is None:
+                assertion_id = _stable_uuid(
+                    "schedule",
+                    event_id,
+                    artifact_id,
+                    candidate.extractor_contract_version,
+                )
+                self._ensure_subject(
+                    connection,
+                    assertion_id,
+                    "SCHEDULE_ASSERTION",
+                )
+                connection.execute(
+                    """
+                    INSERT INTO event_schedule_assertions (
+                        schedule_assertion_id, event_occurrence_id,
+                        schedule_status, scheduled_date, scheduled_at,
+                        schedule_timezone, time_precision,
+                        source_effective_date, source_effective_at,
+                        source_effective_precision, source_code,
+                        source_artifact_id, extractor_contract_version,
+                        accepted_by_attempt_id, accepted_at,
+                        material_fingerprint
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, 'BLS', %s, %s, %s,
+                        CURRENT_TIMESTAMP, %s
+                    )
+                    ON CONFLICT (
+                        event_occurrence_id,
+                        source_artifact_id,
+                        extractor_contract_version
+                    ) DO NOTHING
+                    """,
+                    (
+                        assertion_id,
+                        event_id,
+                        candidate.schedule_status.value,
+                        candidate.scheduled_date,
+                        candidate.scheduled_at,
+                        candidate.schedule_timezone,
+                        (
+                            candidate.time_precision.value
+                            if candidate.time_precision is not None
+                            else None
+                        ),
+                        candidate.source_effective_date,
+                        candidate.source_effective_at,
+                        (
+                            candidate.source_effective_precision.value
+                            if candidate.source_effective_precision is not None
+                            else None
+                        ),
+                        artifact_id,
+                        candidate.extractor_contract_version,
+                        claim.attempt_id,
+                        candidate.material_fingerprint,
+                    ),
+                )
+                existing = connection.execute(
+                    """
+                    SELECT schedule_assertion_id, schedule_status, scheduled_date,
+                           scheduled_at, schedule_timezone, time_precision,
+                           source_effective_date, source_effective_at,
+                           source_effective_precision, material_fingerprint
+                      FROM event_schedule_assertions
+                     WHERE event_occurrence_id=%s
+                       AND source_artifact_id=%s
+                       AND extractor_contract_version=%s
+                    """,
+                    (
+                        event_id,
+                        artifact_id,
+                        candidate.extractor_contract_version,
+                    ),
+                ).fetchone()
+
+            expected = (
+                candidate.schedule_status.value,
+                candidate.scheduled_date,
+                candidate.scheduled_at,
+                candidate.schedule_timezone,
+                (
+                    candidate.time_precision.value
+                    if candidate.time_precision is not None
+                    else None
+                ),
+                candidate.source_effective_date,
+                candidate.source_effective_at,
+                (
+                    candidate.source_effective_precision.value
+                    if candidate.source_effective_precision is not None
+                    else None
+                ),
+                candidate.material_fingerprint,
+            )
+            if existing is None or tuple(existing[1:]) != expected:
+                raise PromotionDeterminismError(
+                    "same schedule parse identity produced different material or chronology"
+                )
+
+            self.repository.terminalize_claim_in_transaction(
+                connection,
+                claim,
+                outcome="SUCCEEDED",
+            )
+            return PromotionResult(
+                event_occurrence_id=event_id,
+                disclosure_id=None,
+                disclosure_link_id=None,
+                disclosure_artifact_link_id=None,
+            )
 
     def promote_release_envelope(
         self,

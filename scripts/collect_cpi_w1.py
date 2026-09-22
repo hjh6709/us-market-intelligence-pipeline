@@ -40,12 +40,20 @@ _COLLECT_JOB_CONTRACT = "cpi-w1-collector-v1"
 _PROMOTE_JOB_CONTRACT = "cpi-w1-promoter-v1"
 
 _EXTRACTOR_BY_ARTIFACT_KIND = {
+    "CPI_SCHEDULE_HTML": "bls-cpi-schedule-html-v1",
+    "BLS_GLOBAL_ICS": "bls-cpi-global-ics-v1",
+    "BLS_REVISED_RELEASE_DATES_HTML": "bls-cpi-revised-release-dates-v1",
     "CPI_RELEASE_HTML": "bls-cpi-release-html-v1",
     "CPI_TABLE1_XLSX": "bls-cpi-table1-xlsx-v1",
     "CPI_CORRECTION_HTML": "bls-cpi-correction-html-v1",
 }
 
 _FAMILIES_BY_ARTIFACT_KIND = {
+    "CPI_SCHEDULE_HTML": (PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,),
+    "BLS_GLOBAL_ICS": (PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,),
+    "BLS_REVISED_RELEASE_DATES_HTML": (
+        PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+    ),
     "CPI_RELEASE_HTML": (
         PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
         PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,

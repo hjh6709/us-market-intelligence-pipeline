@@ -27,6 +27,18 @@ class CpiW1PromoterTest(unittest.TestCase):
         self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", repository_source)
         self.assertNotIn("w.work_key LIKE %s", repository_source)
 
+    def test_schedule_promotion_is_guarded_and_role_bound(self) -> None:
+        body = method_source("promote_schedule_assertion")
+        self.assertIn("CPI_SCHEDULE_ASSERTION_PROMOTE", body)
+        self.assertIn("schedule candidate source role does not match artifact contract", body)
+        self.assertIn("BLS_REVISED_RELEASE_DATES_HTML", body)
+        self.assertIn("event_schedule_assertions", body)
+        self.assertIn("lock_cpi_event", body)
+        self.assertIn(
+            "same schedule parse identity produced different material or chronology",
+            body,
+        )
+
     def test_release_disclosure_key_is_platform_owned_and_deterministic(self) -> None:
         self.assertEqual(
             canonical_release_disclosure_key(date(2026, 8, 1)),

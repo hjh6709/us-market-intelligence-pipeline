@@ -47,6 +47,15 @@ class CollectCpiW1Test(unittest.TestCase):
     def test_collection_work_key_is_bound_to_exact_run(self) -> None:
         self.assertIn('f"COLLECT:{locator_key}:{run_id}"', SOURCE)
 
+    def test_schedule_artifacts_have_explicit_promotion_contract(self) -> None:
+        for artifact_kind in (
+            "CPI_SCHEDULE_HTML",
+            "BLS_GLOBAL_ICS",
+            "BLS_REVISED_RELEASE_DATES_HTML",
+        ):
+            self.assertIn(f'"{artifact_kind}"', SOURCE)
+        self.assertIn("CPI_SCHEDULE_ASSERTION_PROMOTE", SOURCE)
+
     def test_collection_and_promotion_are_separate(self) -> None:
         self.assertIn("record_source_artifact", SOURCE)
         self.assertIn("_schedule_promotions", SOURCE)
