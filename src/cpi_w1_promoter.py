@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID, UUID as UUIDType, uuid5
 
@@ -75,6 +76,7 @@ def promotion_work_key(
     family: PromotionFamily,
     artifact_id: UUID,
     extractor_contract_version: str,
+    target_reference_month: date,
 ) -> str:
     if (
         not extractor_contract_version
@@ -85,7 +87,12 @@ def promotion_work_key(
         )
     ):
         raise ValueError("extractor_contract_version must be a canonical token")
-    return f"{family.value}:{artifact_id}:{extractor_contract_version}"
+    if target_reference_month.day != 1:
+        raise ValueError("target_reference_month must be the first day of the month")
+    return (
+        f"{family.value}:{artifact_id}:{extractor_contract_version}:"
+        f"REF:{target_reference_month.isoformat()}"
+    )
 
 
 class CpiW1Promoter:
@@ -174,6 +181,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not schedule-assertion promotion work")
@@ -381,6 +389,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not release-envelope promotion work")
@@ -673,6 +682,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError(
@@ -820,6 +830,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not correction-notice promotion work")
@@ -1198,6 +1209,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not observation-bundle promotion work")
@@ -1286,6 +1298,7 @@ class CpiW1Promoter:
             PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
             artifact_id,
             candidate.extractor_contract_version,
+            candidate.reference_month,
         )
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError(

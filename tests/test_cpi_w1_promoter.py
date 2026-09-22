@@ -54,13 +54,25 @@ class CpiW1PromoterTest(unittest.TestCase):
                 PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
                 artifact_id,
                 "bls-cpi-release-html-v1",
+                date(2026, 8, 1),
             ),
             (
                 "CPI_RELEASE_ENVELOPE_PROMOTE:"
                 "00000000-0000-0000-0000-000000000123:"
-                "bls-cpi-release-html-v1"
+                "bls-cpi-release-html-v1:REF:2026-08-01"
             ),
         )
+
+    def test_promotion_work_key_requires_month_start_target(self) -> None:
+        from uuid import UUID
+
+        with self.assertRaises(ValueError):
+            promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                UUID(int=1),
+                "bls-cpi-release-html-v1",
+                date(2026, 8, 2),
+            )
 
     def test_promoter_binds_candidate_to_artifact_hash_and_approved_extractor(self) -> None:
         self.assertIn("parsed candidate does not match input artifact content hash", SOURCE)
