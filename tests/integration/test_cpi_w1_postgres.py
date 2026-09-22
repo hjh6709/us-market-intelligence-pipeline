@@ -2357,6 +2357,176 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ("TERMINAL", "FAILED", "TRANSIENT_DEPENDENCY"),
             )
 
+    def test_paused_promotion_is_not_claimable_and_resume_advances_generation(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            first = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            repository.pause_claim(
+                connection,
+                first,
+                reason_code="RETRY_BUDGET_EXHAUSTED",
+                actor_subject="idp:test:worker",
+                case_ref="INC-PAUSE-1",
+            )
+
+            paused = connection.execute(
+                """
+                SELECT state, outcome, reason_code, claim_generation,
+                       claim_token, lease_until, next_claim_at
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(
+                paused[:4],
+                ("PAUSED", None, "RETRY_BUDGET_EXHAUSTED", 1),
+            )
+            self.assertIsNone(paused[4])
+            self.assertIsNone(paused[5])
+            self.assertIsNone(paused[6])
+
+            self.assertIsNone(
+                repository.claim_work_item(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                )
+            )
+            self.assertFalse(
+                connection.execute(
+                    "SELECT finalize_ingestion_run_if_complete(%s)",
+                    (run_id,),
+                ).fetchone()[0]
+            )
+
+            pause_audit = connection.execute(
+                """
+                SELECT action_kind, actor_subject, case_ref,
+                       event_payload->>'reason_code'
+                  FROM business_audit_events
+                 WHERE work_item_id=%s
+                 ORDER BY occurred_at
+                """,
+                (work_id,),
+            ).fetchall()
+            self.assertEqual(
+                pause_audit,
+                [(
+                    "INGESTION_WORK_PAUSED",
+                    "idp:test:worker",
+                    "INC-PAUSE-1",
+                    "RETRY_BUDGET_EXHAUSTED",
+                )],
+            )
+
+            repository.resume_paused_work(
+                connection,
+                work_item_id=work_id,
+                actor_subject="idp:test:operator",
+                case_ref="INC-PAUSE-1",
+            )
+            resumed = connection.execute(
+                """
+                SELECT state, reason_code, claim_generation, next_claim_at
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(resumed[0], "PENDING")
+            self.assertIsNone(resumed[1])
+            self.assertEqual(resumed[2], 1)
+            self.assertIsNotNone(resumed[3])
+
+            second = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            self.assertEqual(second.work_item_id, work_id)
+            self.assertEqual(second.claim_generation, 2)
+            self.assertNotEqual(first.claim_token, second.claim_token)
+
+            audits = connection.execute(
+                """
+                SELECT action_kind
+                  FROM business_audit_events
+                 WHERE work_item_id=%s
+                 ORDER BY occurred_at
+                """,
+                (work_id,),
+            ).fetchall()
+            self.assertEqual(
+                audits,
+                [
+                    ("INGESTION_WORK_PAUSED",),
+                    ("INGESTION_WORK_RESUMED",),
+                ],
+            )
+
+    def test_stale_owner_cannot_pause_reclaimed_work(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            stale = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                lease_seconds=1,
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET lease_until=CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            current = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            self.assertEqual(current.claim_generation, 2)
+            with self.assertRaises(StaleClaimError):
+                repository.pause_claim(
+                    connection,
+                    stale,
+                    reason_code="RETRY_BUDGET_EXHAUSTED",
+                    actor_subject="idp:test:worker",
+                    case_ref="INC-PAUSE-2",
+                )
+            self.assertEqual(
+                connection.execute(
+                    """
+                    SELECT state, claim_generation
+                      FROM ingestion_work_items
+                     WHERE work_item_id=%s
+                    """,
+                    (work_id,),
+                ).fetchone(),
+                ("CLAIMED", 2),
+            )
+
     def test_artifact_same_identity_rejects_metadata_drift(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:
