@@ -101,3 +101,25 @@ class FilesystemArtifactStore:
             storage_generation=f"inode:{stat.st_ino}:mtime_ns:{stat.st_mtime_ns}",
             size_bytes=stat.st_size,
         )
+
+    def delete_uncommitted(self, stored: StoredArtifact) -> None:
+        """Delete only the exact object created for an uncommitted DB artifact."""
+        path = Path(stored.storage_uri.removeprefix("file://"))
+        expected_dir = self._artifact_dir(stored.artifact_id).resolve()
+        if path.parent.resolve() != expected_dir or path.is_symlink():
+            raise ArtifactIntegrityError("uncommitted artifact path escaped its UUID directory")
+        if not path.is_file():
+            return
+        stat = path.stat()
+        generation = f"inode:{stat.st_ino}:mtime_ns:{stat.st_mtime_ns}"
+        if generation != stored.storage_generation:
+            raise ArtifactIntegrityError("uncommitted artifact generation changed")
+        body = path.read_bytes()
+        if self._digest(body) != stored.sha256:
+            raise ArtifactIntegrityError("uncommitted artifact bytes changed")
+        path.unlink()
+        try:
+            expected_dir.rmdir()
+        except OSError:
+            pass
+        self._fsync_directory(self._root)

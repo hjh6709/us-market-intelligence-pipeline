@@ -49,6 +49,30 @@ class CpiW1ArtifactStoreTest(unittest.TestCase):
             artifact_dir = Path(temp_dir) / str(artifact_id)
             self.assertFalse(artifact_dir.exists())
 
+    def test_delete_uncommitted_requires_exact_generation_and_hash(self) -> None:
+        body = b"orphan"
+        sha = hashlib.sha256(body).hexdigest()
+        artifact_id = uuid4()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = FilesystemArtifactStore(temp_dir)
+            stored = store.put(artifact_id, body, sha)
+            path = Path(stored.storage_uri.removeprefix("file://"))
+            self.assertTrue(path.exists())
+            store.delete_uncommitted(stored)
+            self.assertFalse(path.exists())
+
+    def test_delete_uncommitted_rejects_changed_bytes(self) -> None:
+        body = b"orphan"
+        sha = hashlib.sha256(body).hexdigest()
+        artifact_id = uuid4()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = FilesystemArtifactStore(temp_dir)
+            stored = store.put(artifact_id, body, sha)
+            path = Path(stored.storage_uri.removeprefix("file://"))
+            path.write_bytes(b"tampered")
+            with self.assertRaises(ArtifactIntegrityError):
+                store.delete_uncommitted(stored)
+
     def test_existing_corrupt_object_is_not_silently_reused(self) -> None:
         body = b"expected"
         sha = hashlib.sha256(body).hexdigest()

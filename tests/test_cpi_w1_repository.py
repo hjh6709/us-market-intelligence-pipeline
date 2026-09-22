@@ -24,6 +24,11 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("SELECT resume_cpi_ingestion_work", SOURCE)
         self.assertNotIn("SET state='PAUSED'", SOURCE)
 
+    def test_artifact_recording_accepts_caller_owned_identity(self) -> None:
+        self.assertIn("artifact_id: UUID | None = None", SOURCE)
+        self.assertIn("artifact_id = artifact_id or uuid4()", SOURCE)
+        self.assertIn("changed artifact identity", SOURCE)
+
     def test_claim_can_filter_by_work_family_prefix(self) -> None:
         self.assertIn("CLAIM_SELECT_PREFIX_SQL", SOURCE)
         self.assertIn("LEFT(w.work_key, CHAR_LENGTH(%s)) = %s", SOURCE)

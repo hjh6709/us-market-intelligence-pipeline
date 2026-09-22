@@ -561,6 +561,7 @@ class CpiW1Repository:
         retrieval_url: str | None = None,
         storage_uri: str | None = None,
         storage_generation: str | None = None,
+        artifact_id: UUID | None = None,
     ) -> UUID:
         if claim.execution_scope != "ECONOMIC_COLLECT":
             raise ValueError("source artifacts require ECONOMIC_COLLECT ownership")
@@ -610,9 +611,13 @@ class CpiW1Repository:
                     raise RepositoryInvariantError(
                         "same collector attempt/locator retry changed immutable artifact metadata"
                     )
+                if artifact_id is not None and row[0] != artifact_id:
+                    raise RepositoryInvariantError(
+                        "same collector attempt/locator retry changed artifact identity"
+                    )
                 return row[0]
 
-            artifact_id = uuid4()
+            artifact_id = artifact_id or uuid4()
             connection.execute(
                 """
                 INSERT INTO source_artifacts (
