@@ -1392,6 +1392,12 @@ Fast path:
 
 - artifact commit -> authenticated handoff -> orchestrator creates the required promotion-family work items.
 
+Artifact collection does not imply parser readiness. Bounded official evidence may be
+captured and retained while a candidate extractor is blocked by corpus/conformance
+review. The orchestrator must consult the extractor release gate before creating
+automatic canonical promotion work. A blocked parser is an operational readiness
+condition, not an economic fact and not DATA_NOT_AVAILABLE.
+
 Recovery path:
 
 - reconciliation detects committed artifacts lacking expected promotion-family work and safely creates the missing work.

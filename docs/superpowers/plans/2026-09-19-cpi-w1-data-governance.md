@@ -1420,6 +1420,13 @@ For primary release HTML create both:
 
 Do not execute promoter logic inside the collector transaction.
 
+Collection readiness and promotion readiness are separate. The collector may preserve
+bounded official source bytes even while the parser release gate is not ready.
+Automatic canonical promotion work is created only when the exact extractor contract
+is release-gate eligible. A blocked extractor leaves the artifact durable and records
+an operational blocked/deferred condition; it must not be silently promoted or
+misreported as source DATA_NOT_AVAILABLE.
+
 - [ ] **Step 3: Add reconciliation command mode**
 
 `--reconcile-promotions` scans committed CPI artifacts and inserts missing deterministic
