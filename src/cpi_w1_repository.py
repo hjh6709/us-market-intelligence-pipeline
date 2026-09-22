@@ -298,8 +298,13 @@ class CpiW1Repository:
         *,
         outcome: str,
         reason_code: str | None = None,
+        irreversible_failure: bool = False,
     ) -> None:
         _validate_reason(outcome, reason_code)
+        if outcome == "FAILED" and not irreversible_failure:
+            raise ValueError(
+                "terminal FAILED is irreversible; use abandon_claim explicitly"
+            )
         self.assert_current_claim(connection, claim)
 
         attempt = connection.execute(
@@ -521,6 +526,24 @@ class CpiW1Repository:
                 claim,
                 outcome=outcome,
                 reason_code=reason_code,
+            )
+
+    def abandon_claim(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        reason_code: str,
+    ) -> None:
+        if _REASON_RE.fullmatch(reason_code) is None:
+            raise ValueError("abandon reason_code must be canonical uppercase token")
+        with connection.transaction():
+            self.terminalize_claim_in_transaction(
+                connection,
+                claim,
+                outcome="FAILED",
+                reason_code=reason_code,
+                irreversible_failure=True,
             )
 
     def record_source_artifact(

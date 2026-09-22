@@ -102,6 +102,14 @@ class CpiW1RepositoryTest(unittest.TestCase):
         work_pos = SOURCE.index("UPDATE ingestion_work_items", attempt_pos)
         self.assertLess(attempt_pos, work_pos)
 
+    def test_failed_terminalization_requires_explicit_abandon_boundary(self) -> None:
+        self.assertIn(
+            "terminal FAILED is irreversible; use abandon_claim explicitly",
+            SOURCE,
+        )
+        self.assertIn("def abandon_claim(", SOURCE)
+        self.assertIn("irreversible_failure=True", SOURCE)
+
     def test_reason_contract(self) -> None:
         _validate_reason("SUCCEEDED", None)
         _validate_reason("FAILED", "SOURCE_MISMATCH")

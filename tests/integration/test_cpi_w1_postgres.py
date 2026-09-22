@@ -2277,10 +2277,9 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(second.claim_generation, 2)
             self.assertNotEqual(first.claim_token, second.claim_token)
             with self.assertRaises(StaleClaimError):
-                repository.terminalize_claim(
+                repository.abandon_claim(
                     connection,
                     first,
-                    outcome="FAILED",
                     reason_code="STALE_OWNER",
                 )
 
