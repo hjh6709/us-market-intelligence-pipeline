@@ -36,6 +36,10 @@ from src.cpi_w1_release import (
     extract_release_envelope,
 )
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
+from src.cpi_w1_schedule import (
+    parse_bls_revised_release_dates_html,
+    parse_cpi_schedule_html,
+)
 from src.cpi_w1_selector import (
     CpiW1Selector,
     ObservationResolutionState,
@@ -2637,6 +2641,198 @@ class CpiW1PostgresTest(unittest.TestCase):
                     reason_code="TRANSIENT_DEPENDENCY",
                     retry_after_seconds=86401,
                 )
+
+    def test_schedule_assertion_promotion_persists_authoritative_evidence(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        body = Path("tests/fixtures/cpi_w1/schedule/exact.html").read_bytes()
+        candidate = parse_cpi_schedule_html(
+            body,
+            expected_reference_month=date(2026, 8, 1),
+            extractor_contract_version="bls-cpi-schedule-html-v1",
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"schedule:authoritative:{uuid4()}",
+                artifact_contract_kind="CPI_SCHEDULE_HTML",
+                content_sha256=hashlib.sha256(body).hexdigest(),
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE.value + ":"
+                ),
+            )
+            result = promoter.promote_schedule_assertion(
+                connection,
+                claim,
+                artifact_id=artifact_id,
+                candidate=candidate,
+            )
+            row = connection.execute(
+                """
+                SELECT schedule_status, scheduled_date, scheduled_at,
+                       schedule_timezone, time_precision,
+                       source_artifact_id, extractor_contract_version,
+                       material_fingerprint
+                  FROM event_schedule_assertions
+                 WHERE event_occurrence_id=%s
+                """,
+                (result.event_occurrence_id,),
+            ).fetchone()
+            self.assertEqual(row[0], "SCHEDULED")
+            self.assertEqual(row[1], date(2026, 9, 11))
+            self.assertIsNotNone(row[2])
+            self.assertEqual(row[3], "America/New_York")
+            self.assertEqual(row[4], "EXACT")
+            self.assertEqual(row[5], artifact_id)
+            self.assertEqual(row[6], "bls-cpi-schedule-html-v1")
+            self.assertEqual(row[7], candidate.material_fingerprint)
+
+    def test_schedule_promotion_rejects_forged_source_role(self) -> None:
+        from dataclasses import replace
+        from src.cpi_w1_contracts import SourceAuthorityRole
+
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        body = Path("tests/fixtures/cpi_w1/schedule/exact.html").read_bytes()
+        candidate = parse_cpi_schedule_html(
+            body,
+            expected_reference_month=date(2026, 8, 1),
+            extractor_contract_version="bls-cpi-schedule-html-v1",
+        )
+        forged = replace(
+            candidate,
+            source_role=SourceAuthorityRole.FALLBACK_CORROBORATION,
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"schedule:forged-role:{uuid4()}",
+                artifact_contract_kind="CPI_SCHEDULE_HTML",
+                content_sha256=hashlib.sha256(body).hexdigest(),
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+                artifact_id,
+                forged.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE.value + ":"
+                ),
+            )
+            with self.assertRaises(PromotionInvariantError):
+                promoter.promote_schedule_assertion(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=forged,
+                )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM event_schedule_assertions"
+                ).fetchone()[0],
+                0,
+            )
+
+    def test_explicit_cancellation_schedule_promotion_is_preserved(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        body = b"""<table>
+        <tr><th>Release</th><th>Reference period</th>
+        <th>Previously scheduled release date</th>
+        <th>Revised release date</th><th>Time</th></tr>
+        <tr><td>Consumer Price Index</td><td>October 2025</td>
+        <td>Thursday, November 13, 2025</td>
+        <td>Canceled (See CPI note)</td><td></td></tr>
+        </table>"""
+        candidate = parse_bls_revised_release_dates_html(
+            body,
+            expected_reference_month=date(2025, 10, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"schedule:cancellation:{uuid4()}",
+                artifact_contract_kind="BLS_REVISED_RELEASE_DATES_HTML",
+                content_sha256=hashlib.sha256(body).hexdigest(),
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            key = promotion_work_key(
+                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+            )
+            connection.execute(
+                """
+                INSERT INTO ingestion_work_items (
+                    work_item_id, run_id, execution_scope, data_domain,
+                    work_key, input_artifact_id
+                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                """,
+                (uuid4(), run_id, key, artifact_id),
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE.value + ":"
+                ),
+            )
+            result = promoter.promote_schedule_assertion(
+                connection,
+                claim,
+                artifact_id=artifact_id,
+                candidate=candidate,
+            )
+            row = connection.execute(
+                """
+                SELECT schedule_status, scheduled_date, scheduled_at, time_precision
+                  FROM event_schedule_assertions
+                 WHERE event_occurrence_id=%s
+                """,
+                (result.event_occurrence_id,),
+            ).fetchone()
+            self.assertEqual(row, ("CANCELED", None, None, None))
 
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
         repository = CpiW1Repository()
