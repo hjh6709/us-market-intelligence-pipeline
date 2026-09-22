@@ -1,6 +1,8 @@
 # Product API contracts
 
-Status: Phase 1 contract, audited 2026-09-09.
+Status: `CURRENT_IMPLEMENTATION` legacy FastAPI compatibility contract, audited
+2026-09-09. It does not define the future Product API or CPI W1 evidence semantics;
+see [the authority index](../architecture/AUTHORITY.md).
 
 All product endpoints use `/api/v1`. Decimal values remain JSON strings where
 binary floating-point conversion could change stored meaning. Timestamps are UTC

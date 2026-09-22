@@ -1,8 +1,11 @@
-# Current implementation versus approved target
+# Current implementation versus historical target
 
-Baseline revision: `63633a50c85c88e507be458067ecf6706220f813`.
+Status: `STATUS_LEDGER` only. This page records progress and gaps at baseline
+`63633a50c85c88e507be458067ecf6706220f813`; it is not semantic authority and
+cannot override current executable behavior or the CPI W1 canonical target. See
+[the authority index](../architecture/AUTHORITY.md).
 
-| Capability | Implemented now | Foundation added in this pass | Approved target, not yet implemented |
+| Capability | Implemented at baseline | Foundation added in that pass | Historical target, not yet implemented |
 | --- | --- | --- | --- |
 | event lifecycle | historical catalog writes legacy `economic_events` with release-first semantics | exact four-event universe; append-only lifecycle chain, transition checks, idempotency/conflict boundary, current view; no rows populated | official schedule/change adapter and compatibility migration |
 | event facts | legacy scalar event fields and FRED/ALFRED context | immutable canonical identity; exact event/code/unit ontology; append-only official revisions; provider-local consensus selector; historical surprises plus dynamic current-canonical projection; serialized idempotent writes; no rows populated | official/external provider adapters and historical consensus backfill |
@@ -29,3 +32,73 @@ Baseline revision: `63633a50c85c88e507be458067ecf6706220f813`.
 Permanent dual-write is not the canonical solution.
 
 “Foundation” means additive schema, pure contracts or tests. It does not mean an operational ingestion path exists.
+
+## CPI W1 working-branch status
+
+This section is a coordination snapshot for the CPI W1 working branch. It remains
+`STATUS_LEDGER`, not semantic authority. Always verify the branch HEAD and CI before
+using it for release decisions.
+
+Current implemented foundation on the CPI W1 branch includes:
+
+- additive migrations 010-013 for ingestion/artifact lineage, event/disclosure
+  evidence, Core 4 observations, interpretation governance, and serving-control
+  history;
+- DB enforcement that canonical CPI evidence is attributable to
+  `ECONOMIC_PROMOTE` attempts rather than collector attempts;
+- forensic source-artifact metadata immutability, with only the retained-object
+  lifecycle transition `RETAINED -> DELETED_BY_POLICY` allowed;
+- target-only Python semantic contracts and deterministic material
+  fingerprints;
+- bounded BLS source retrieval and development/test filesystem artifact storage;
+- CPI schedule candidate parsing with authoritative HTML versus fallback ICS
+  source-role separation;
+- guarded schedule-assertion promotion with artifact-hash binding, dedicated
+  extractor contracts, source-role verification, explicit-cancellation constraints,
+  and event fencing;
+- BLS release-envelope and Core 4 HTML extraction;
+- fenced CPI W1 repository/promotion primitives for release-envelope, secondary
+  corroborating-representation topology, and atomic Core 4 promotion;
+- CPI source reconstruction and SYSTEM_KNOWN_PIT selector with authority-tier
+  schedule selection, transitive provenance invalidation, semantic conflict
+  preservation, knowledge fingerprinting, and live serving-control overlay;
+- application governance boundary for interpretation requests/approvals/activation
+  and emergency serving control, with trusted workforce-principal objects and
+  event-fenced re-enable verification;
+- explicit CPI correction notice and correction-observation promotion boundaries
+  with CORRECTION_NOTICE provenance and promoter-driven correction rehearsal;
+- CPI corpus inventory/replay tooling, staging capture boundary, reviewed-byte
+  promotion boundary, and fail-closed parser release gate infrastructure;
+- runtime extractor release-gate snapshot separating official byte collection from
+  canonical promotion eligibility, with durable deferred-promotion audit evidence;
+- controlled CPI W1 collector/orchestrator skeleton for bounded capture, immutable
+  artifact persistence, gate-aware promotion scheduling, scoped replay
+  reconciliation, and run finalization.
+
+The following are **not implemented or not launch-ready** and must not be represented
+to Product, Marketing, Sales, CS, or users as production capability:
+
+- Table 1 XLSX binary parser/corpus validation and live corroboration ingestion path;
+- live correction source discovery/locator/parser path;
+- all replay-required official CPI corpus artifacts are still not materialized,
+  reviewed, SHA-256 pinned, and semantically approved; the parser release gate
+  therefore remains intentionally not ready;
+- production IdP/RBAC integration for the implemented governance application boundary;
+- golden-corpus differential replay and parser-change release gate;
+- collector/orchestrator is implemented at the W1 development boundary, but live
+  canonical promotion remains intentionally blocked by the current extractor gate
+  until reviewed official corpus evidence is ready;
+- production object-storage retention, orphan cleanup, integrity repair, and
+  restore procedures;
+- Product API/UI/SEO/cache/notification withholding integration;
+- production observability/SLO/on-call/runbook/DR evidence;
+- final legal/readiness sign-off and Public Beta/Paid Launch gates.
+
+The current filesystem artifact store is a deterministic development/test adapter,
+not a production immutable/versioned object-storage claim. Its local generation token
+must not be treated as a cloud object generation or as production recoverability
+evidence.
+
+A green CI run proves only the tested repository contract at that commit. It does not
+by itself prove deployment, source availability, legal approval, operational
+readiness, or customer-facing launch readiness.

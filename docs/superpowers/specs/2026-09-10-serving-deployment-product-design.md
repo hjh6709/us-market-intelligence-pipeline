@@ -1,4 +1,6 @@
-STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+STATUS: `HISTORICAL_SUPERSEDED` — former planning outline, retained for history.
+Future Product Serving and Runtime/Security targets remain separately specified;
+see [`docs/architecture/AUTHORITY.md`](../../architecture/AUTHORITY.md).
 
 # Serving, deployment and product design
 
