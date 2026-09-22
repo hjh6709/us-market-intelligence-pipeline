@@ -527,6 +527,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
             artifact_id,
             envelope.extractor_contract_version,
+            envelope.reference_month,
         )
         connection.execute(
             """
@@ -559,6 +560,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
             artifact_id,
             bundle.extractor_contract_version,
+            bundle.reference_month,
         )
         connection.execute(
             """
@@ -621,6 +623,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
             artifact_id,
             notice.extractor_contract_version,
+            notice.reference_month,
         )
         connection.execute(
             """
@@ -657,6 +660,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
             artifact_id,
             correction.extractor_contract_version,
+            correction.reference_month,
         )
         connection.execute(
             """
@@ -2717,10 +2721,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
-                artifact_id,
-                candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+            candidate.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -2791,10 +2796,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
-                artifact_id,
-                forged.extractor_contract_version,
-            )
+            PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+            artifact_id,
+            forged.extractor_contract_version,
+            forged.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -2852,10 +2858,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
-                artifact_id,
-                candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_SCHEDULE_ASSERTION_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+            candidate.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -2904,10 +2911,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             work_id = uuid4()
             work_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+            candidate.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -2962,15 +2970,17 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope_work = uuid4()
             observation_work = uuid4()
             envelope_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             observation_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3064,10 +3074,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             envelope_work = uuid4()
             envelope_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3100,10 +3111,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             observation_work = uuid4()
             observation_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                artifact_id,
-                bundle.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            bundle.extractor_contract_version,
+            bundle.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3152,10 +3164,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             wrong_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3193,10 +3206,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 content_sha256=hashlib.sha256(fixture).hexdigest(),
             )
             work_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+            candidate.reference_month,
+        )
             first_run = self.insert_run(
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
@@ -3300,10 +3314,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             envelope_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3332,10 +3347,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             observation_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                artifact_id,
-                bundle.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            bundle.extractor_contract_version,
+            bundle.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3382,10 +3398,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             self.assertEqual(
                 promotion_work_key(
-                    PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                    artifact_id,
-                    conflicting.extractor_contract_version,
-                ),
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            conflicting.extractor_contract_version,
+            conflicting.reference_month,
+        ),
                 observation_key,
             )
 
@@ -3436,10 +3453,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             envelope_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3483,10 +3501,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                artifact_id,
-                invalid_bundle.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            artifact_id,
+            invalid_bundle.extractor_contract_version,
+            invalid_bundle.reference_month,
+        )
             work_id = uuid4()
             connection.execute(
                 """
@@ -3549,10 +3568,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             envelope_key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                html_artifact,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            html_artifact,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3581,10 +3601,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             html_obs_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                html_artifact,
-                html_bundle.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            html_artifact,
+            html_bundle.extractor_contract_version,
+            html_bundle.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3629,10 +3650,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             topology_key = promotion_work_key(
-                PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE,
-                xlsx_artifact,
-                topology_candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_CORROBORATING_REPRESENTATION_PROMOTE,
+            xlsx_artifact,
+            topology_candidate.extractor_contract_version,
+            topology_candidate.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3685,10 +3707,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             xlsx_obs_key = promotion_work_key(
-                PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
-                xlsx_artifact,
-                xlsx_bundle.extractor_contract_version,
-            )
+            PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE,
+            xlsx_artifact,
+            xlsx_bundle.extractor_contract_version,
+            xlsx_bundle.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -3776,10 +3799,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
-                artifact_id,
-                envelope.extractor_contract_version,
-            )
+            PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+            artifact_id,
+            envelope.extractor_contract_version,
+            envelope.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -4209,10 +4233,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             key = promotion_work_key(
-                PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
-                artifact_id,
-                candidate.extractor_contract_version,
-            )
+            PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
+            artifact_id,
+            candidate.extractor_contract_version,
+            candidate.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -4273,10 +4298,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
             )
             notice_key = promotion_work_key(
-                PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
-                artifact_id,
-                notice.extractor_contract_version,
-            )
+            PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE,
+            artifact_id,
+            notice.extractor_contract_version,
+            notice.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
@@ -4322,10 +4348,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
             obs_work_id = uuid4()
             obs_key = promotion_work_key(
-                PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
-                artifact_id,
-                correction.extractor_contract_version,
-            )
+            PromotionFamily.CPI_CORRECTION_OBSERVATION_PROMOTE,
+            artifact_id,
+            correction.extractor_contract_version,
+            correction.reference_month,
+        )
             connection.execute(
                 """
                 INSERT INTO ingestion_work_items (
