@@ -101,19 +101,23 @@ def review_capture(
         raise CorpusReviewError("reviewer-verified hash does not match staged bytes")
 
     repo_root = repo_root.resolve()
-    allowed_root = (repo_root / "tests/fixtures/cpi_w1/official").resolve()
-    approved_root = (
+    allowed_input = repo_root / "tests/fixtures/cpi_w1/official"
+    if allowed_input.exists() and allowed_input.is_symlink():
+        raise CorpusReviewError("official corpus directory must not be a symlink")
+    approved_input = (
         approved_root
         if approved_root.is_absolute()
         else repo_root / approved_root
-    ).resolve()
+    )
+    if approved_input.exists() and approved_input.is_symlink():
+        raise CorpusReviewError("approved corpus root must not be a symlink")
+    allowed_root = allowed_input.resolve()
+    approved_root = approved_input.resolve()
     if approved_root != allowed_root:
         raise CorpusReviewError(
             "approved_root must be the repository official corpus directory"
         )
     approved_root.mkdir(parents=True, exist_ok=True)
-    if approved_root.is_symlink():
-        raise CorpusReviewError("approved corpus root must not be a symlink")
     suffix = ".xlsx" if entry["artifact_contract_kind"].endswith("_XLSX") else ".html"
     stable_name = (
         f"{entry['reference_month']}-"
