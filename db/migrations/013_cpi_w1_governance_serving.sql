@@ -228,8 +228,17 @@ BEGIN
     )
     ON CONFLICT (source_artifact_id, verification_ref)
         WHERE action_kind = 'CPI_PROMOTION_DEFERRED'
-    DO UPDATE SET source_artifact_id = EXCLUDED.source_artifact_id
+    DO NOTHING
     RETURNING audit_event_id INTO event_id;
+
+    IF event_id IS NULL THEN
+        SELECT audit_event_id
+          INTO STRICT event_id
+          FROM business_audit_events
+         WHERE action_kind = 'CPI_PROMOTION_DEFERRED'
+           AND source_artifact_id = p_source_artifact_id
+           AND verification_ref = p_extractor_contract_version;
+    END IF;
 
     RETURN event_id;
 END;
