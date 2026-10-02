@@ -79,6 +79,18 @@ class CpiW1RepositoryTest(unittest.TestCase):
             self.assertIn(field, claim_body)
         self.assertNotIn("str(input_artifact_id)", claim_body)
 
+    def test_claim_reclaim_and_heartbeat_recheck_runtime_authorization(self) -> None:
+        claim_pos = SOURCE.index("def claim_work_item(")
+        claim_body = SOURCE[claim_pos:SOURCE.index("def assert_current_claim", claim_pos)]
+        renew_pos = SOURCE.index("def renew_claim(")
+        renew_body = SOURCE[renew_pos:SOURCE.index("def terminalize_claim", renew_pos)]
+        self.assertIn("pause_pending_cpi_ingestion_work", claim_body)
+        self.assertIn("pause_reclaimed_cpi_ingestion_work", claim_body)
+        self.assertIn("RELEASE_AUTHORIZATION_UNAVAILABLE", claim_body)
+        self.assertIn("LEASE_EXPIRED_RECLAIM", claim_body)
+        self.assertIn("resolve_promotion_release_authorization", renew_body)
+        self.assertIn("RELEASE_AUTHORIZATION_REVOKED", renew_body)
+
     def test_pause_resume_uses_guarded_database_boundary(self) -> None:
         self.assertIn("SELECT pause_pending_cpi_ingestion_work", SOURCE)
         self.assertIn("SELECT pause_cpi_ingestion_work", SOURCE)

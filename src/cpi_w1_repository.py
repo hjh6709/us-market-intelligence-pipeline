@@ -55,6 +55,7 @@ SELECT
     w.input_artifact_id,
     w.claim_generation,
     w.state,
+    w.claim_token,
     w.work_key,
     w.promotion_capability_id,
     w.extractor_contract_version,
@@ -684,6 +685,7 @@ class CpiW1Repository:
                 input_artifact_id,
                 generation,
                 previous_state,
+                previous_claim_token,
                 work_key,
                 promotion_capability_id,
                 extractor_contract_version,
@@ -692,6 +694,29 @@ class CpiW1Repository:
             previous_generation = int(generation)
             release_authorization_id: UUID | None = None
             release_control_decision_id: UUID | None = None
+
+            expired_attempt_id: UUID | None = None
+            if previous_state == "CLAIMED":
+                closed = connection.execute(
+                    """
+                    UPDATE ingestion_attempts
+                       SET state='TERMINAL',
+                           outcome='FAILED',
+                           reason_code='LEASE_EXPIRED_RECLAIM',
+                           finished_at=CURRENT_TIMESTAMP
+                     WHERE work_item_id=%s
+                       AND attempt_number=%s
+                       AND state='RUNNING'
+                     RETURNING attempt_id
+                    """,
+                    (work_item_id, previous_generation),
+                ).fetchone()
+                if closed is None:
+                    raise RepositoryInvariantError(
+                        "expired claimed work has no running prior attempt"
+                    )
+                expired_attempt_id = closed[0]
+
             if execution_scope == "ECONOMIC_PROMOTE":
                 if release_subject_digest is None:
                     raise RepositoryInvariantError(
@@ -703,9 +728,33 @@ class CpiW1Repository:
                     executor=executor,
                 )
                 if release_authorization_id is None:
-                    raise RepositoryInvariantError(
-                        "promotion executor has no active exact release authorization"
-                    )
+                    if previous_state == "PENDING":
+                        connection.execute(
+                            """
+                            SELECT pause_pending_cpi_ingestion_work(
+                                %s, 'RELEASE_AUTHORIZATION_UNAVAILABLE',
+                                'system:cpi-claim-admission', NULL
+                            )
+                            """,
+                            (work_item_id,),
+                        )
+                    else:
+                        connection.execute(
+                            """
+                            SELECT pause_reclaimed_cpi_ingestion_work(
+                                %s, %s, %s, %s,
+                                'RELEASE_AUTHORIZATION_UNAVAILABLE',
+                                'system:cpi-claim-admission', NULL
+                            )
+                            """,
+                            (
+                                work_item_id,
+                                expired_attempt_id,
+                                previous_generation,
+                                previous_claim_token,
+                            ),
+                        )
+                    return None
                 control_row = connection.execute(
                     """
                     SELECT control_decision_id
@@ -735,26 +784,6 @@ class CpiW1Repository:
                 """,
                 (run_id,),
             )
-
-            if previous_state == "CLAIMED":
-                closed = connection.execute(
-                    """
-                    UPDATE ingestion_attempts
-                       SET state='TERMINAL',
-                           outcome='FAILED',
-                           reason_code='LEASE_EXPIRED_RECLAIM',
-                           finished_at=CURRENT_TIMESTAMP
-                     WHERE work_item_id=%s
-                       AND attempt_number=%s
-                       AND state='RUNNING'
-                     RETURNING attempt_id
-                    """,
-                    (work_item_id, previous_generation),
-                ).fetchone()
-                if closed is None:
-                    raise RepositoryInvariantError(
-                        "expired claimed work has no running prior attempt"
-                    )
 
             updated = connection.execute(
                 """
@@ -877,47 +906,92 @@ class CpiW1Repository:
         if lease_seconds < 1 or lease_seconds > 3600:
             raise ValueError("lease_seconds must be in [1, 3600]")
 
+        authorization_lost = False
+        row = None
         with connection.transaction():
-            row = connection.execute(
-                """
-                UPDATE ingestion_work_items w
-                   SET lease_until = GREATEST(
-                           w.lease_until,
-                           CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
-                       )
-                  FROM ingestion_attempts a
-                 WHERE w.work_item_id=%s
-                   AND w.execution_scope=%s
-                   AND w.data_domain='ECONOMIC'
-                   AND w.state='CLAIMED'
-                   AND w.claim_generation=%s
-                   AND w.claim_token=%s
-                   AND w.lease_until > CURRENT_TIMESTAMP
-                   AND a.attempt_id=%s
-                   AND a.work_item_id=w.work_item_id
-                   AND a.execution_scope=w.execution_scope
-                   AND a.data_domain=w.data_domain
-                   AND a.state='RUNNING'
-                   AND a.attempt_number=w.claim_generation
-                 RETURNING w.lease_until, w.claim_token, w.claim_generation
-                """,
-                (
-                    lease_seconds,
-                    claim.work_item_id,
-                    claim.execution_scope,
-                    claim.claim_generation,
-                    claim.claim_token,
-                    claim.attempt_id,
-                ),
-            ).fetchone()
-            if row is None:
-                raise StaleClaimError("claim is stale or expired and cannot be renewed")
-            lease_until, claim_token, claim_generation = row
-            if claim_token != claim.claim_token:
-                raise RepositoryInvariantError("lease renewal changed claim token")
-            if int(claim_generation) != claim.claim_generation:
-                raise RepositoryInvariantError("lease renewal changed claim generation")
-            return lease_until
+            if claim.execution_scope == "ECONOMIC_PROMOTE":
+                self.assert_current_claim(connection, claim)
+                if claim.release_subject_digest is None:
+                    raise RepositoryInvariantError(
+                        "promotion claim has no release subject"
+                    )
+                active_authorization_id = (
+                    self.resolve_promotion_release_authorization(
+                        connection,
+                        release_subject_digest=claim.release_subject_digest,
+                        executor=ExecutorProvenanceV1(
+                            source_revision=claim.executor_source_revision,
+                            workload_artifact_digest=(
+                                claim.executor_workload_artifact_digest
+                            ),
+                            job_contract_version=claim.executor_job_contract_version,
+                        ),
+                    )
+                )
+                if active_authorization_id != claim.release_authorization_id:
+                    connection.execute(
+                        """
+                        SELECT pause_cpi_ingestion_work(
+                            %s, %s, %s, %s,
+                            'RELEASE_AUTHORIZATION_REVOKED',
+                            'RELEASE_AUTHORIZATION_REVOKED',
+                            'system:cpi-heartbeat', NULL
+                        )
+                        """,
+                        (
+                            claim.work_item_id,
+                            claim.attempt_id,
+                            claim.claim_generation,
+                            claim.claim_token,
+                        ),
+                    )
+                    authorization_lost = True
+
+            if not authorization_lost:
+                row = connection.execute(
+                    """
+                    UPDATE ingestion_work_items w
+                       SET lease_until = GREATEST(
+                               w.lease_until,
+                               CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
+                           )
+                      FROM ingestion_attempts a
+                     WHERE w.work_item_id=%s
+                       AND w.execution_scope=%s
+                       AND w.data_domain='ECONOMIC'
+                       AND w.state='CLAIMED'
+                       AND w.claim_generation=%s
+                       AND w.claim_token=%s
+                       AND w.lease_until > CURRENT_TIMESTAMP
+                       AND a.attempt_id=%s
+                       AND a.work_item_id=w.work_item_id
+                       AND a.execution_scope=w.execution_scope
+                       AND a.data_domain=w.data_domain
+                       AND a.state='RUNNING'
+                       AND a.attempt_number=w.claim_generation
+                     RETURNING w.lease_until, w.claim_token, w.claim_generation
+                    """,
+                    (
+                        lease_seconds,
+                        claim.work_item_id,
+                        claim.execution_scope,
+                        claim.claim_generation,
+                        claim.claim_token,
+                        claim.attempt_id,
+                    ),
+                ).fetchone()
+        if authorization_lost:
+            raise RepositoryInvariantError(
+                "promotion claim authorization is no longer active"
+            )
+        if row is None:
+            raise StaleClaimError("claim is stale or expired and cannot be renewed")
+        lease_until, claim_token, claim_generation = row
+        if claim_token != claim.claim_token:
+            raise RepositoryInvariantError("lease renewal changed claim token")
+        if int(claim_generation) != claim.claim_generation:
+            raise RepositoryInvariantError("lease renewal changed claim generation")
+        return lease_until
 
     def terminalize_claim_in_transaction(
         self,

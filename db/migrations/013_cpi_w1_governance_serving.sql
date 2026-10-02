@@ -759,6 +759,89 @@ BEGIN
 END;
 $pause_pending_work$;
 
+CREATE OR REPLACE FUNCTION pause_reclaimed_cpi_ingestion_work(
+    p_work_item_id UUID,
+    p_attempt_id UUID,
+    p_claim_generation INTEGER,
+    p_claim_token UUID,
+    p_work_reason_code TEXT,
+    p_actor_subject TEXT,
+    p_case_ref TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $pause_reclaimed_work$
+DECLARE
+    applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
+BEGIN
+    IF p_work_reason_code IS NULL
+       OR p_work_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'work pause reason must be canonical'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = ''
+       OR p_actor_subject <> BTRIM(p_actor_subject) THEN
+        RAISE EXCEPTION 'pause actor must be canonical' USING ERRCODE = '23514';
+    END IF;
+
+    PERFORM 1
+      FROM ingestion_work_items w
+     WHERE w.work_item_id=p_work_item_id
+       AND w.state='CLAIMED'
+       AND w.claim_generation=p_claim_generation
+       AND w.claim_token=p_claim_token
+       AND w.lease_until <= CURRENT_TIMESTAMP;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'reclaim pause requires expired current ownership'
+            USING ERRCODE = '40001';
+    END IF;
+
+    PERFORM 1
+      FROM ingestion_attempts a
+     WHERE a.attempt_id=p_attempt_id
+       AND a.work_item_id=p_work_item_id
+       AND a.attempt_number=p_claim_generation
+       AND a.state='TERMINAL'
+       AND a.outcome='FAILED'
+       AND a.reason_code='LEASE_EXPIRED_RECLAIM';
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'reclaim pause requires closed expired attempt'
+            USING ERRCODE = '40001';
+    END IF;
+
+    UPDATE ingestion_work_items
+       SET state='PAUSED', outcome=NULL, reason_code=p_work_reason_code,
+           claim_token=NULL, lease_until=NULL, next_claim_at=NULL
+     WHERE work_item_id=p_work_item_id
+       AND state='CLAIMED'
+       AND claim_generation=p_claim_generation
+       AND claim_token=p_claim_token;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'reclaim pause lost current work ownership'
+            USING ERRCODE = '40001';
+    END IF;
+
+    INSERT INTO business_audit_events (
+        audit_event_id, action_kind, actor_subject, work_item_id,
+        case_ref, event_payload, occurred_at
+    ) VALUES (
+        gen_random_uuid(), 'INGESTION_WORK_PAUSED', p_actor_subject,
+        p_work_item_id, p_case_ref,
+        jsonb_build_object(
+            'source_state', 'CLAIMED',
+            'claim_generation', p_claim_generation,
+            'attempt_reason_code', 'LEASE_EXPIRED_RECLAIM',
+            'work_reason_code', p_work_reason_code,
+            'attempt_id', p_attempt_id
+        ),
+        applied_time
+    );
+END;
+$pause_reclaimed_work$;
+
 DROP FUNCTION IF EXISTS pause_cpi_ingestion_work(
     UUID, UUID, INTEGER, UUID, TEXT, TEXT, TEXT
 );

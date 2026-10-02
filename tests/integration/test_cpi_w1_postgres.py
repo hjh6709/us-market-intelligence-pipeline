@@ -2833,15 +2833,12 @@ class CpiW1PostgresTest(unittest.TestCase):
                 actor_subject="idp:test:operator",
                 case_ref="ADMISSION-PAUSE-1",
             )
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "no active exact release authorization",
-            ):
-                repository.claim_work_item(
-                    connection,
-                    execution_scope="ECONOMIC_PROMOTE",
-                    executor=TEST_EXECUTOR,
-                )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                executor=TEST_EXECUTOR,
+            )
+            self.assertIsNone(claim)
             state = connection.execute(
                 """
                 SELECT state, claim_generation
@@ -2850,7 +2847,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (work_id,),
             ).fetchone()
-            self.assertEqual(state, ("PENDING", 0))
+            self.assertEqual(state, ("PAUSED", 0))
 
     def test_approval_does_not_auto_resume_pending_pause(self) -> None:
         repository = CpiW1Repository()
@@ -5195,7 +5192,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (digest("changed-executable"), claim.attempt_id),
                 )
 
-    def test_unauthorized_executor_cannot_create_promotion_attempt(self) -> None:
+    def test_unauthorized_executor_pauses_pending_work_without_attempt(self) -> None:
         repository = CpiW1Repository()
         unauthorized = ExecutorProvenanceV1(
             source_revision=digest("unauthorized-source"),
@@ -5218,15 +5215,12 @@ class CpiW1PostgresTest(unittest.TestCase):
                 release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
                 promotion_capability_id=TEST_RELEASE_SUBJECT.promotion_capability_id,
             )
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "no active exact release authorization",
-            ):
-                repository.claim_work_item(
-                    connection,
-                    execution_scope="ECONOMIC_PROMOTE",
-                    executor=unauthorized,
-                )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                executor=unauthorized,
+            )
+            self.assertIsNone(claim)
             state = connection.execute(
                 """
                 SELECT state, claim_generation
@@ -5239,8 +5233,171 @@ class CpiW1PostgresTest(unittest.TestCase):
                 "SELECT COUNT(*) FROM ingestion_attempts WHERE work_item_id=%s",
                 (work_id,),
             ).fetchone()[0]
-            self.assertEqual(state, ("PENDING", 0))
+            self.assertEqual(state, ("PAUSED", 0))
             self.assertEqual(attempt_count, 0)
+
+    def test_reclaim_revoked_authorization_closes_old_attempt_and_pauses(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            first = self.claim_work_item(
+                repository,
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                lease_seconds=1,
+            )
+            repository.apply_promotion_release_control(
+                connection,
+                authorization_id=first.release_authorization_id,
+                expected_control_version=1,
+                state="REVOKED",
+                reason_code="TEST_RUNTIME_REVOKE",
+                actor_subject="test:release-operator",
+                review_ref="TEST-REVOKE:reclaim",
+                review_digest=digest("test-revoke-reclaim"),
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET lease_until=CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            )
+            reclaimed = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                executor=TEST_EXECUTOR,
+            )
+            self.assertIsNone(reclaimed)
+            work = connection.execute(
+                """
+                SELECT state, reason_code, claim_generation, claim_token, lease_until
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            attempt = connection.execute(
+                """
+                SELECT state, outcome, reason_code
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (first.attempt_id,),
+            ).fetchone()
+            attempt_count = connection.execute(
+                "SELECT COUNT(*) FROM ingestion_attempts WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+            audit_payload = connection.execute(
+                """
+                SELECT event_payload
+                  FROM business_audit_events
+                 WHERE work_item_id=%s
+                   AND action_kind='INGESTION_WORK_PAUSED'
+                 ORDER BY occurred_at DESC
+                 LIMIT 1
+                """,
+                (work_id,),
+            ).fetchone()[0]
+            self.assertEqual(
+                work,
+                (
+                    "PAUSED",
+                    "RELEASE_AUTHORIZATION_UNAVAILABLE",
+                    1,
+                    None,
+                    None,
+                ),
+            )
+            self.assertEqual(
+                attempt,
+                ("TERMINAL", "FAILED", "LEASE_EXPIRED_RECLAIM"),
+            )
+            self.assertEqual(attempt_count, 1)
+            self.assertEqual(
+                audit_payload["attempt_reason_code"],
+                "LEASE_EXPIRED_RECLAIM",
+            )
+            self.assertEqual(
+                audit_payload["work_reason_code"],
+                "RELEASE_AUTHORIZATION_UNAVAILABLE",
+            )
+            self.assertEqual(audit_payload["claim_generation"], 1)
+
+    def test_heartbeat_revocation_pauses_current_claim(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            claim = self.claim_work_item(
+                repository,
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            repository.apply_promotion_release_control(
+                connection,
+                authorization_id=claim.release_authorization_id,
+                expected_control_version=1,
+                state="REVOKED",
+                reason_code="TEST_RUNTIME_REVOKE",
+                actor_subject="test:release-operator",
+                review_ref="TEST-REVOKE:heartbeat",
+                review_digest=digest("test-revoke-heartbeat"),
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "authorization is no longer active",
+            ):
+                repository.renew_claim(connection, claim, lease_seconds=120)
+            work = connection.execute(
+                """
+                SELECT state, reason_code, claim_generation, claim_token, lease_until
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            attempt = connection.execute(
+                """
+                SELECT state, outcome, reason_code
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (claim.attempt_id,),
+            ).fetchone()
+            self.assertEqual(
+                work,
+                (
+                    "PAUSED",
+                    "RELEASE_AUTHORIZATION_REVOKED",
+                    1,
+                    None,
+                    None,
+                ),
+            )
+            self.assertEqual(
+                attempt,
+                ("TERMINAL", "FAILED", "RELEASE_AUTHORIZATION_REVOKED"),
+            )
 
     def test_input_artifact_uuid_is_not_valid_executor_workload_digest(self) -> None:
         with self.assertRaises(PromotionAuthorizationError):

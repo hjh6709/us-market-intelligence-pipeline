@@ -93,6 +93,12 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("'attempt_reason_code', p_attempt_reason_code", self.sql)
         self.assertIn("'work_reason_code', p_work_reason_code", self.sql)
 
+    def test_expired_reclaim_pause_is_fenced_and_audited(self) -> None:
+        self.assertIn("pause_reclaimed_cpi_ingestion_work", self.sql)
+        self.assertIn("reclaim pause requires expired current ownership", self.sql)
+        self.assertIn("reclaim pause requires closed expired attempt", self.sql)
+        self.assertIn("'attempt_reason_code', 'LEASE_EXPIRED_RECLAIM'", self.sql)
+
     def test_revoked_release_authorization_cannot_be_reactivated(self) -> None:
         self.assertIn("revoked promotion authorization cannot be reactivated", self.sql)
         self.assertIn("promotion release control expected version mismatch", self.sql)
