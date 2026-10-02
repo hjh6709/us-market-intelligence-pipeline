@@ -38,6 +38,11 @@ class Claim:
     claim_token: UUID
     input_artifact_id: UUID | None
     work_key: str
+    release_authorization_id: UUID | None
+    release_control_decision_id: UUID | None
+    executor_source_revision: str
+    executor_workload_artifact_digest: str
+    executor_job_contract_version: str
     promotion_capability_id: str | None = None
     extractor_contract_version: str | None = None
     release_subject_digest: str | None = None
@@ -93,7 +98,12 @@ SELECT
     w.extractor_contract_version,
     w.release_subject_digest,
     a.state,
-    a.attempt_number
+    a.attempt_number,
+    a.release_authorization_id,
+    a.release_control_decision_id,
+    a.executor_source_revision,
+    a.executor_workload_artifact_digest,
+    a.executor_job_contract_version
   FROM ingestion_work_items w
   JOIN ingestion_attempts a
     ON a.attempt_id = %s
@@ -645,6 +655,7 @@ class CpiW1Repository:
         connection: Any,
         *,
         execution_scope: str,
+        executor: ExecutorProvenanceV1,
         lease_seconds: int = 300,
         work_key_prefix: str | None = None,
     ) -> Claim | None:
@@ -679,6 +690,37 @@ class CpiW1Repository:
                 release_subject_digest,
             ) = row
             previous_generation = int(generation)
+            release_authorization_id: UUID | None = None
+            release_control_decision_id: UUID | None = None
+            if execution_scope == "ECONOMIC_PROMOTE":
+                if release_subject_digest is None:
+                    raise RepositoryInvariantError(
+                        "promotion work has no structured release subject"
+                    )
+                release_authorization_id = self.resolve_promotion_release_authorization(
+                    connection,
+                    release_subject_digest=release_subject_digest,
+                    executor=executor,
+                )
+                if release_authorization_id is None:
+                    raise RepositoryInvariantError(
+                        "promotion executor has no active exact release authorization"
+                    )
+                control_row = connection.execute(
+                    """
+                    SELECT control_decision_id
+                      FROM promotion_release_control_decisions
+                     WHERE authorization_id=%s
+                     ORDER BY control_version DESC
+                     LIMIT 1
+                    """,
+                    (release_authorization_id,),
+                ).fetchone()
+                if control_row is None:
+                    raise RepositoryInvariantError(
+                        "promotion authorization has no effective control decision"
+                    )
+                release_control_decision_id = control_row[0]
             generation = previous_generation + 1
             claim_token = uuid4()
             attempt_id = uuid4()
@@ -734,10 +776,23 @@ class CpiW1Repository:
                 """
                 INSERT INTO ingestion_attempts (
                     attempt_id, work_item_id, execution_scope, data_domain,
-                    attempt_number
-                ) VALUES (%s, %s, %s, 'ECONOMIC', %s)
+                    attempt_number, release_authorization_id,
+                    release_control_decision_id, executor_source_revision,
+                    executor_workload_artifact_digest,
+                    executor_job_contract_version
+                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s, %s)
                 """,
-                (attempt_id, work_item_id, execution_scope, generation),
+                (
+                    attempt_id,
+                    work_item_id,
+                    execution_scope,
+                    generation,
+                    release_authorization_id,
+                    release_control_decision_id,
+                    executor.source_revision,
+                    executor.workload_artifact_digest,
+                    executor.job_contract_version,
+                ),
             )
 
             return Claim(
@@ -749,6 +804,11 @@ class CpiW1Repository:
                 claim_token=claim_token,
                 input_artifact_id=input_artifact_id,
                 work_key=work_key,
+                release_authorization_id=release_authorization_id,
+                release_control_decision_id=release_control_decision_id,
+                executor_source_revision=executor.source_revision,
+                executor_workload_artifact_digest=executor.workload_artifact_digest,
+                executor_job_contract_version=executor.job_contract_version,
                 promotion_capability_id=promotion_capability_id,
                 extractor_contract_version=extractor_contract_version,
                 release_subject_digest=release_subject_digest,
@@ -776,6 +836,11 @@ class CpiW1Repository:
             release_subject_digest,
             attempt_state,
             attempt_number,
+            release_authorization_id,
+            release_control_decision_id,
+            executor_source_revision,
+            executor_workload_artifact_digest,
+            executor_job_contract_version,
         ) = row
         if run_id != claim.run_id:
             raise RepositoryInvariantError("claim run identity changed")
@@ -789,6 +854,17 @@ class CpiW1Repository:
             raise RepositoryInvariantError("claim release subject identity changed")
         if attempt_state != "RUNNING" or int(attempt_number) != claim.claim_generation:
             raise RepositoryInvariantError("attempt ownership does not match claim")
+        if (
+            release_authorization_id != claim.release_authorization_id
+            or release_control_decision_id != claim.release_control_decision_id
+            or executor_source_revision != claim.executor_source_revision
+            or executor_workload_artifact_digest
+            != claim.executor_workload_artifact_digest
+            or executor_job_contract_version != claim.executor_job_contract_version
+        ):
+            raise RepositoryInvariantError(
+                "attempt authorization or executor provenance changed unexpectedly"
+            )
         return run_id, input_artifact_id
 
     def renew_claim(

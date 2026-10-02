@@ -11,6 +11,7 @@ import psycopg
 
 from src.cpi_w1_authorization import (
     ExecutorProvenanceV1,
+    PromotionAuthorizationError,
     PromotionAuthorizationMaterialV1,
 )
 from src.cpi_w1_contracts import (
@@ -80,6 +81,13 @@ TEST_OBSERVATION_SUBJECT = ReleaseSubjectV1(
 
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+TEST_EXECUTOR = ExecutorProvenanceV1(
+    source_revision=digest("test-executor-source"),
+    workload_artifact_digest=digest("test-executor-workload"),
+    job_contract_version="cpi-w1-promoter-v1",
+)
 
 
 @unittest.skipUnless(
@@ -179,6 +187,74 @@ class CpiW1PostgresTest(unittest.TestCase):
         )
         return work_item_id
 
+    def insert_promotion_work(
+        self,
+        connection,
+        run_id,
+        work_key,
+        artifact_id,
+        *,
+        work_item_id=None,
+    ):
+        family, _artifact_token, extractor_contract_version, _ref, _month = (
+            work_key.split(":")
+        )
+        artifact = connection.execute(
+            """
+            SELECT source_code, artifact_contract_kind, source_contract_version
+              FROM source_artifacts
+             WHERE artifact_id=%s
+            """,
+            (artifact_id,),
+        ).fetchone()
+        if artifact is None:
+            raise AssertionError("promotion artifact missing")
+        source_code, artifact_contract_kind, source_contract_version = artifact
+        capability_by_family_and_artifact = {
+            ("CPI_SCHEDULE_ASSERTION_PROMOTE", "CPI_SCHEDULE_HTML"):
+                "BLS_CPI_SCHEDULE_HTML",
+            ("CPI_SCHEDULE_ASSERTION_PROMOTE", "BLS_GLOBAL_ICS"):
+                "BLS_CPI_GLOBAL_ICS_SCHEDULE",
+            ("CPI_SCHEDULE_ASSERTION_PROMOTE", "BLS_REVISED_RELEASE_DATES_HTML"):
+                "BLS_CPI_REVISED_RELEASE_DATES",
+            ("CPI_RELEASE_ENVELOPE_PROMOTE", "CPI_RELEASE_HTML"):
+                "BLS_CPI_RELEASE_ENVELOPE_HTML",
+            ("CPI_OBSERVATION_BUNDLE_PROMOTE", "CPI_RELEASE_HTML"):
+                "BLS_CPI_CORE4_HTML",
+            ("CPI_CORROBORATING_REPRESENTATION_PROMOTE", "CPI_TABLE1_XLSX"):
+                "BLS_CPI_TABLE1_REPRESENTATION_XLSX",
+            ("CPI_OBSERVATION_BUNDLE_PROMOTE", "CPI_TABLE1_XLSX"):
+                "BLS_CPI_CORE4_XLSX",
+            ("CPI_CORRECTION_NOTICE_PROMOTE", "CPI_CORRECTION_HTML"):
+                "BLS_CPI_CORRECTION_NOTICE_HTML",
+            ("CPI_CORRECTION_OBSERVATION_PROMOTE", "CPI_CORRECTION_HTML"):
+                "BLS_CPI_CORRECTED_OBSERVATIONS_HTML",
+        }
+        capability = capability_by_family_and_artifact.get(
+            (family, artifact_contract_kind)
+        )
+        if capability is None:
+            raise AssertionError(
+                f"unsupported test promotion subject: {family}/{artifact_contract_kind}"
+            )
+        release_subject = ReleaseSubjectV1(
+            source_code=source_code,
+            artifact_contract_kind=artifact_contract_kind,
+            source_contract_version=source_contract_version,
+            promotion_capability_id=capability,
+            extractor_contract_version=extractor_contract_version,
+            promotion_family=family,
+        )
+        return self.insert_work(
+            connection,
+            run_id,
+            work_item_id=work_item_id,
+            execution_scope="ECONOMIC_PROMOTE",
+            work_key=work_key,
+            input_artifact_id=artifact_id,
+            release_subject=release_subject,
+        )
+
     def insert_attempt(
         self,
         connection,
@@ -216,16 +292,160 @@ class CpiW1PostgresTest(unittest.TestCase):
             claim_generation = attempt_number
         if state == "CLAIMED" and claim_generation != attempt_number:
             raise AssertionError("attempt_number must match existing claim_generation")
+        release_authorization_id = None
+        release_control_decision_id = None
+        if execution_scope == "ECONOMIC_PROMOTE":
+            subject_row = connection.execute(
+                """
+                SELECT release_subject_digest, promotion_capability_id
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_item_id,),
+            ).fetchone()
+            if subject_row is None or subject_row[0] is None:
+                raise AssertionError("promotion work requires a release subject")
+            release_authorization_id = self.authorize_release_subject(
+                connection,
+                release_subject_digest=subject_row[0],
+                promotion_capability_id=subject_row[1],
+            )
+            release_control_decision_id = connection.execute(
+                """
+                SELECT control_decision_id
+                  FROM promotion_release_control_decisions
+                 WHERE authorization_id=%s
+                 ORDER BY control_version DESC
+                 LIMIT 1
+                """,
+                (release_authorization_id,),
+            ).fetchone()[0]
         connection.execute(
             """
             INSERT INTO ingestion_attempts (
                 attempt_id, work_item_id, execution_scope, data_domain,
-                attempt_number
-            ) VALUES (%s, %s, %s, 'ECONOMIC', %s)
+                attempt_number, release_authorization_id,
+                release_control_decision_id, executor_source_revision,
+                executor_workload_artifact_digest,
+                executor_job_contract_version
+            ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s, %s)
             """,
-            (attempt_id, work_item_id, execution_scope, attempt_number),
+            (
+                attempt_id,
+                work_item_id,
+                execution_scope,
+                attempt_number,
+                release_authorization_id,
+                release_control_decision_id,
+                TEST_EXECUTOR.source_revision,
+                TEST_EXECUTOR.workload_artifact_digest,
+                TEST_EXECUTOR.job_contract_version,
+            ),
         )
         return attempt_id
+
+    def authorize_release_subject(
+        self,
+        connection,
+        *,
+        release_subject_digest,
+        promotion_capability_id,
+        executor=TEST_EXECUTOR,
+    ):
+        repository = CpiW1Repository()
+        existing = repository.resolve_promotion_release_authorization(
+            connection,
+            release_subject_digest=release_subject_digest,
+            executor=executor,
+        )
+        if existing is not None:
+            return existing
+        snapshot = PromotionEvidenceSnapshotV1(
+            release_subject_digest=release_subject_digest,
+            corpus_snapshot_digest=digest(f"corpus:{release_subject_digest}"),
+            expected_diff_approvals_digest=digest(f"diffs:{release_subject_digest}"),
+            replay_result_digest=digest(f"replay:{release_subject_digest}"),
+            tested_job_contract_version=executor.job_contract_version,
+            tested_source_revision=executor.source_revision,
+            tested_workload_artifact_digest=executor.workload_artifact_digest,
+            evidence_policy_version="cpi-w1-evidence-v1",
+        )
+        gate = CapabilityGateDecision(
+            promotion_capability_id=promotion_capability_id,
+            release_subject_digest=release_subject_digest,
+            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
+            gate_policy_version="cpi-w1-gate-v2",
+            decision="ELIGIBLE",
+            reason_code="TEST_REVIEWED_ELIGIBLE",
+            review_ref=f"TEST-GATE:{release_subject_digest}",
+            review_digest=digest(f"gate-review:{release_subject_digest}"),
+            gate_decision_digest=digest(f"gate-decision:{release_subject_digest}"),
+        )
+        material = PromotionAuthorizationMaterialV1.from_review(
+            evidence=snapshot,
+            gate_decision=gate,
+            executor=executor,
+            review_ref=f"TEST-AUTH:{release_subject_digest}",
+            review_digest=digest(f"auth-review:{release_subject_digest}"),
+        )
+        snapshot_id = repository.create_promotion_evidence_snapshot(
+            connection,
+            snapshot=snapshot,
+            created_by_subject="test:evidence-reviewer",
+        )
+        material_id = repository.create_promotion_authorization_material(
+            connection,
+            evidence_snapshot_id=snapshot_id,
+            material=material,
+            created_by_subject="test:authorization-reviewer",
+        )
+        authorization_id = repository.create_promotion_authorization(
+            connection,
+            authorization_material_id=material_id,
+            release_subject_digest=release_subject_digest,
+            grant_reason_code="TEST_REVIEW_APPROVED",
+            created_by_subject="test:grant-operator",
+        )
+        repository.apply_promotion_release_control(
+            connection,
+            authorization_id=authorization_id,
+            expected_control_version=0,
+            state="APPROVED",
+            reason_code="TEST_INITIAL_APPROVAL",
+            actor_subject="test:grant-operator",
+            review_ref=f"TEST-CONTROL:{release_subject_digest}",
+            review_digest=digest(f"control-review:{release_subject_digest}"),
+        )
+        return authorization_id
+
+    def claim_work_item(self, repository, connection, **kwargs):
+        if kwargs["execution_scope"] == "ECONOMIC_PROMOTE":
+            prefix = kwargs.get("work_key_prefix")
+            params = ["ECONOMIC_PROMOTE"]
+            prefix_sql = ""
+            if prefix is not None:
+                prefix_sql = " AND LEFT(work_key, CHAR_LENGTH(%s)) = %s"
+                params.extend((prefix, prefix))
+            rows = connection.execute(
+                """
+                SELECT DISTINCT release_subject_digest, promotion_capability_id
+                  FROM ingestion_work_items
+                 WHERE execution_scope=%s
+                   AND state IN ('PENDING', 'CLAIMED')
+                """ + prefix_sql,
+                tuple(params),
+            ).fetchall()
+            for release_subject_digest, promotion_capability_id in rows:
+                self.authorize_release_subject(
+                    connection,
+                    release_subject_digest=release_subject_digest,
+                    promotion_capability_id=promotion_capability_id,
+                )
+        return repository.claim_work_item(
+            connection,
+            executor=TEST_EXECUTOR,
+            **kwargs,
+        )
 
     def test_bls_reference_source_is_seeded(self) -> None:
         with self.connection() as connection:
@@ -574,16 +794,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-        connection.execute(
-            """
-            INSERT INTO ingestion_work_items (
-                work_item_id, run_id, execution_scope, data_domain,
-                work_key, input_artifact_id
-            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-            """,
-            (uuid4(), envelope_run, envelope_key, artifact_id),
+        self.insert_promotion_work(
+            connection, envelope_run, envelope_key, artifact_id,
         )
-        envelope_claim = repository.claim_work_item(
+        envelope_claim = self.claim_work_item(
+            repository,
             connection,
             execution_scope="ECONOMIC_PROMOTE",
             work_key_prefix=(
@@ -607,16 +822,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             bundle.extractor_contract_version,
             bundle.reference_month,
         )
-        connection.execute(
-            """
-            INSERT INTO ingestion_work_items (
-                work_item_id, run_id, execution_scope, data_domain,
-                work_key, input_artifact_id
-            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-            """,
-            (uuid4(), observation_run, observation_key, artifact_id),
+        self.insert_promotion_work(
+            connection, observation_run, observation_key, artifact_id,
         )
-        observation_claim = repository.claim_work_item(
+        observation_claim = self.claim_work_item(
+            repository,
             connection,
             execution_scope="ECONOMIC_PROMOTE",
             work_key_prefix=(
@@ -670,16 +880,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             notice.extractor_contract_version,
             notice.reference_month,
         )
-        connection.execute(
-            """
-            INSERT INTO ingestion_work_items (
-                work_item_id, run_id, execution_scope, data_domain,
-                work_key, input_artifact_id
-            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-            """,
-            (uuid4(), notice_run, notice_key, artifact_id),
+        self.insert_promotion_work(
+            connection, notice_run, notice_key, artifact_id,
         )
-        notice_claim = repository.claim_work_item(
+        notice_claim = self.claim_work_item(
+            repository,
             connection,
             execution_scope="ECONOMIC_PROMOTE",
             work_key_prefix=PromotionFamily.CPI_CORRECTION_NOTICE_PROMOTE.value + ":",
@@ -707,16 +912,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             correction.extractor_contract_version,
             correction.reference_month,
         )
-        connection.execute(
-            """
-            INSERT INTO ingestion_work_items (
-                work_item_id, run_id, execution_scope, data_domain,
-                work_key, input_artifact_id
-            ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-            """,
-            (uuid4(), observation_run, observation_key, artifact_id),
+        self.insert_promotion_work(
+            connection, observation_run, observation_key, artifact_id,
         )
-        observation_claim = repository.claim_work_item(
+        observation_claim = self.claim_work_item(
+            repository,
             connection,
             execution_scope="ECONOMIC_PROMOTE",
             work_key_prefix=(
@@ -2206,7 +2406,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2242,7 +2443,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 lease_seconds=30,
@@ -2286,7 +2488,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 lease_seconds=30,
@@ -2319,7 +2522,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            first = repository.claim_work_item(
+            first = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 lease_seconds=1,
@@ -2332,7 +2536,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (work_id,),
             )
-            second = repository.claim_work_item(
+            second = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2358,7 +2563,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            first = repository.claim_work_item(
+            first = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 lease_seconds=1,
@@ -2371,7 +2577,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (work_id,),
             )
-            second = repository.claim_work_item(
+            second = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2431,7 +2638,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            first = repository.claim_work_item(
+            first = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2461,7 +2669,8 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertIsNone(paused[6])
 
             self.assertIsNone(
-                repository.claim_work_item(
+                self.claim_work_item(
+                    repository,
                     connection,
                     execution_scope="ECONOMIC_PROMOTE",
                 )
@@ -2512,7 +2721,8 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(resumed[2], 1)
             self.assertIsNotNone(resumed[3])
 
-            second = repository.claim_work_item(
+            second = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2550,7 +2760,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            stale = repository.claim_work_item(
+            stale = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 lease_seconds=1,
@@ -2563,7 +2774,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (work_id,),
             )
-            current = repository.claim_work_item(
+            current = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2597,7 +2809,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 run_id,
                 work_key=f"collect:artifact-idempotency:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_COLLECT",
             )
@@ -2656,7 +2869,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2688,7 +2902,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -2815,16 +3030,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -2890,16 +3100,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             forged.extractor_contract_version,
             forged.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -2952,16 +3157,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3005,16 +3205,15 @@ class CpiW1PostgresTest(unittest.TestCase):
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (work_id, run_id, work_key, artifact_id),
+            self.insert_promotion_work(
+                connection,
+                run_id,
+                work_key,
+                artifact_id,
+                work_item_id=work_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
@@ -3070,27 +3269,22 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES
-                    (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s),
-                    (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (
-                    envelope_work,
-                    run_id,
-                    envelope_key,
-                    artifact_id,
-                    observation_work,
-                    run_id,
-                    observation_key,
-                    artifact_id,
-                ),
+            self.insert_promotion_work(
+                connection,
+                run_id,
+                envelope_key,
+                artifact_id,
+                work_item_id=envelope_work,
             )
-            envelope_claim = repository.claim_work_item(
+            self.insert_promotion_work(
+                connection,
+                run_id,
+                observation_key,
+                artifact_id,
+                work_item_id=observation_work,
+            )
+            envelope_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
@@ -3101,7 +3295,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 artifact_id=artifact_id,
                 candidate=envelope,
             )
-            observation_claim = repository.claim_work_item(
+            observation_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
@@ -3168,21 +3363,15 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (
-                    envelope_work,
-                    envelope_run,
-                    envelope_key,
-                    artifact_id,
-                ),
+            self.insert_promotion_work(
+                connection,
+                envelope_run,
+                envelope_key,
+                artifact_id,
+                work_item_id=envelope_work,
             )
-            envelope_claim = repository.claim_work_item(
+            envelope_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
@@ -3205,21 +3394,15 @@ class CpiW1PostgresTest(unittest.TestCase):
             bundle.extractor_contract_version,
             bundle.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (
-                    observation_work,
-                    observation_run,
-                    observation_key,
-                    artifact_id,
-                ),
+            self.insert_promotion_work(
+                connection,
+                observation_run,
+                observation_key,
+                artifact_id,
+                work_item_id=observation_work,
             )
-            observation_claim = repository.claim_work_item(
+            observation_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
@@ -3258,16 +3441,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, wrong_key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, wrong_key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
@@ -3312,7 +3490,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 input_artifact_id=artifact_id,
                 release_subject=TEST_RELEASE_SUBJECT,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3419,16 +3598,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), envelope_run, envelope_key, artifact_id),
+            self.insert_promotion_work(
+                connection, envelope_run, envelope_key, artifact_id,
             )
-            envelope_claim = repository.claim_work_item(
+            envelope_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3460,7 +3634,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 input_artifact_id=artifact_id,
                 release_subject=TEST_OBSERVATION_SUBJECT,
             )
-            observation_claim = repository.claim_work_item(
+            observation_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3569,16 +3744,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), envelope_run, envelope_key, artifact_id),
+            self.insert_promotion_work(
+                connection, envelope_run, envelope_key, artifact_id,
             )
-            envelope_claim = repository.claim_work_item(
+            envelope_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":",
@@ -3618,16 +3788,15 @@ class CpiW1PostgresTest(unittest.TestCase):
             invalid_bundle.reference_month,
         )
             work_id = uuid4()
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (work_id, run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection,
+                run_id,
+                key,
+                artifact_id,
+                work_item_id=work_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=PromotionFamily.CPI_OBSERVATION_BUNDLE_PROMOTE.value + ":",
@@ -3684,16 +3853,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), envelope_run, envelope_key, html_artifact),
+            self.insert_promotion_work(
+                connection, envelope_run, envelope_key, html_artifact,
             )
-            envelope_claim = repository.claim_work_item(
+            envelope_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3717,16 +3881,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             html_bundle.extractor_contract_version,
             html_bundle.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), html_obs_run, html_obs_key, html_artifact),
+            self.insert_promotion_work(
+                connection, html_obs_run, html_obs_key, html_artifact,
             )
-            html_obs_claim = repository.claim_work_item(
+            html_obs_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3766,16 +3925,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             topology_candidate.extractor_contract_version,
             topology_candidate.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), topology_run, topology_key, xlsx_artifact),
+            self.insert_promotion_work(
+                connection, topology_run, topology_key, xlsx_artifact,
             )
-            topology_claim = repository.claim_work_item(
+            topology_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3823,16 +3977,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             xlsx_bundle.extractor_contract_version,
             xlsx_bundle.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), xlsx_obs_run, xlsx_obs_key, xlsx_artifact),
+            self.insert_promotion_work(
+                connection, xlsx_obs_run, xlsx_obs_key, xlsx_artifact,
             )
-            xlsx_obs_claim = repository.claim_work_item(
+            xlsx_obs_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3915,16 +4064,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             envelope.extractor_contract_version,
             envelope.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -3958,7 +4102,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
@@ -4349,16 +4494,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), run_id, key, artifact_id),
+            self.insert_promotion_work(
+                connection, run_id, key, artifact_id,
             )
-            claim = repository.claim_work_item(
+            claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -4414,16 +4554,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             notice.extractor_contract_version,
             notice.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), notice_run, notice_key, artifact_id),
+            self.insert_promotion_work(
+                connection, notice_run, notice_key, artifact_id,
             )
-            notice_claim = repository.claim_work_item(
+            notice_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -4464,16 +4599,15 @@ class CpiW1PostgresTest(unittest.TestCase):
             correction.extractor_contract_version,
             correction.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (obs_work_id, obs_run, obs_key, artifact_id),
+            self.insert_promotion_work(
+                connection,
+                obs_run,
+                obs_key,
+                artifact_id,
+                work_item_id=obs_work_id,
             )
-            obs_claim = repository.claim_work_item(
+            obs_claim = self.claim_work_item(
+                repository,
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
                 work_key_prefix=(
@@ -4816,10 +4950,20 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """
                     INSERT INTO ingestion_attempts (
                         attempt_id, work_item_id, execution_scope,
-                        data_domain, attempt_number
-                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1)
+                        data_domain, attempt_number, executor_source_revision,
+                        executor_workload_artifact_digest,
+                        executor_job_contract_version
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1, %s, %s, %s
+                    )
                     """,
-                    (uuid4(), work_id),
+                    (
+                        uuid4(),
+                        work_id,
+                        TEST_EXECUTOR.source_revision,
+                        TEST_EXECUTOR.workload_artifact_digest,
+                        TEST_EXECUTOR.job_contract_version,
+                    ),
                 )
 
         with self.connection() as connection:
@@ -4840,10 +4984,224 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """
                     INSERT INTO ingestion_attempts (
                         attempt_id, work_item_id, execution_scope,
-                        data_domain, attempt_number
-                    ) VALUES (%s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 2)
+                        data_domain, attempt_number, executor_source_revision,
+                        executor_workload_artifact_digest,
+                        executor_job_contract_version
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 2, %s, %s, %s
+                    )
                     """,
-                    (uuid4(), work_id),
+                    (
+                        uuid4(),
+                        work_id,
+                        TEST_EXECUTOR.source_revision,
+                        TEST_EXECUTOR.workload_artifact_digest,
+                        TEST_EXECUTOR.job_contract_version,
+                    ),
+                )
+
+    def test_promotion_attempt_binds_exact_authorization_control_and_executor(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            authorization_id = self.authorize_release_subject(
+                connection,
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                promotion_capability_id=TEST_RELEASE_SUBJECT.promotion_capability_id,
+            )
+            claim = repository.claim_work_item(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                executor=TEST_EXECUTOR,
+            )
+            self.assertIsNotNone(claim)
+            self.assertEqual(claim.work_item_id, work_id)
+            self.assertEqual(claim.release_authorization_id, authorization_id)
+            row = connection.execute(
+                """
+                SELECT release_authorization_id, release_control_decision_id,
+                       executor_source_revision,
+                       executor_workload_artifact_digest,
+                       executor_job_contract_version
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (claim.attempt_id,),
+            ).fetchone()
+            self.assertEqual(row[0], authorization_id)
+            self.assertEqual(row[1], claim.release_control_decision_id)
+            self.assertEqual(tuple(row[2:]), (
+                TEST_EXECUTOR.source_revision,
+                TEST_EXECUTOR.workload_artifact_digest,
+                TEST_EXECUTOR.job_contract_version,
+            ))
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    UPDATE ingestion_attempts
+                       SET executor_workload_artifact_digest=%s
+                     WHERE attempt_id=%s
+                    """,
+                    (digest("changed-executable"), claim.attempt_id),
+                )
+
+    def test_unauthorized_executor_cannot_create_promotion_attempt(self) -> None:
+        repository = CpiW1Repository()
+        unauthorized = ExecutorProvenanceV1(
+            source_revision=digest("unauthorized-source"),
+            workload_artifact_digest=digest("unauthorized-workload"),
+            job_contract_version="cpi-w1-promoter-v1",
+        )
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            self.authorize_release_subject(
+                connection,
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                promotion_capability_id=TEST_RELEASE_SUBJECT.promotion_capability_id,
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "no active exact release authorization",
+            ):
+                repository.claim_work_item(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                    executor=unauthorized,
+                )
+            state = connection.execute(
+                """
+                SELECT state, claim_generation
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            attempt_count = connection.execute(
+                "SELECT COUNT(*) FROM ingestion_attempts WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+            self.assertEqual(state, ("PENDING", 0))
+            self.assertEqual(attempt_count, 0)
+
+    def test_input_artifact_uuid_is_not_valid_executor_workload_digest(self) -> None:
+        with self.assertRaises(PromotionAuthorizationError):
+            ExecutorProvenanceV1(
+                source_revision=digest("source"),
+                workload_artifact_digest=str(uuid4()),
+                job_contract_version="cpi-w1-promoter-v1",
+            )
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            work_id = self.insert_work(connection, run_id)
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_attempts (
+                        attempt_id, work_item_id, execution_scope, data_domain,
+                        attempt_number, executor_source_revision,
+                        executor_workload_artifact_digest,
+                        executor_job_contract_version
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_COLLECT', 'ECONOMIC', 1, %s, %s, %s
+                    )
+                    """,
+                    (
+                        uuid4(),
+                        work_id,
+                        TEST_EXECUTOR.source_revision,
+                        str(uuid4()),
+                        TEST_EXECUTOR.job_contract_version,
+                    ),
+                )
+
+    def test_database_rejects_attempt_authorization_for_another_subject(self) -> None:
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                release_subject=TEST_RELEASE_SUBJECT,
+            )
+            authorization_id = self.authorize_release_subject(
+                connection,
+                release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
+                promotion_capability_id=TEST_OBSERVATION_SUBJECT.promotion_capability_id,
+            )
+            control_id = connection.execute(
+                """
+                SELECT control_decision_id
+                  FROM promotion_release_control_decisions
+                 WHERE authorization_id=%s
+                 ORDER BY control_version DESC
+                 LIMIT 1
+                """,
+                (authorization_id,),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET state='CLAIMED', claim_generation=1,
+                       claim_token=%s,
+                       lease_until=CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+                 WHERE work_item_id=%s
+                """,
+                (uuid4(), work_id),
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_attempts (
+                        attempt_id, work_item_id, execution_scope, data_domain,
+                        attempt_number, release_authorization_id,
+                        release_control_decision_id, executor_source_revision,
+                        executor_workload_artifact_digest,
+                        executor_job_contract_version
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', 1,
+                        %s, %s, %s, %s, %s
+                    )
+                    """,
+                    (
+                        uuid4(),
+                        work_id,
+                        authorization_id,
+                        control_id,
+                        TEST_EXECUTOR.source_revision,
+                        TEST_EXECUTOR.workload_artifact_digest,
+                        TEST_EXECUTOR.job_contract_version,
+                    ),
                 )
 
     def test_release_authorization_control_is_exact_append_only_and_revocable(self) -> None:

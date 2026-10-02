@@ -62,6 +62,10 @@ class CollectCpiW1Test(unittest.TestCase):
         self.assertNotIn("promote_release_envelope(", SOURCE)
         self.assertNotIn("promote_observation_bundle(", SOURCE)
 
+    def test_promotion_workload_identity_is_not_the_input_artifact_uuid(self) -> None:
+        self.assertNotIn("workload_artifact_digest=str(artifact_id)", SOURCE)
+        self.assertIn("_PROMOTE_WORKLOAD_ARTIFACT_DIGEST", SOURCE)
+
     def test_artifact_record_and_work_success_share_database_transaction(self) -> None:
         record_pos = SOURCE.index("db_artifact_id = self.repository.record_source_artifact")
         terminal_pos = SOURCE.index("terminalize_claim_in_transaction", record_pos)

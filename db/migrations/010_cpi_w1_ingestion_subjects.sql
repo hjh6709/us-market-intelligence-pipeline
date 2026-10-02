@@ -202,6 +202,11 @@ CREATE TABLE IF NOT EXISTS ingestion_attempts (
     ),
     data_domain TEXT NOT NULL CHECK (data_domain = 'ECONOMIC'),
     attempt_number INTEGER NOT NULL CHECK (attempt_number >= 1),
+    release_authorization_id UUID,
+    release_control_decision_id UUID,
+    executor_source_revision TEXT NOT NULL,
+    executor_workload_artifact_digest TEXT NOT NULL,
+    executor_job_contract_version TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'RUNNING' CHECK (state IN ('RUNNING', 'TERMINAL')),
     outcome TEXT CHECK (
         outcome IN ('SUCCEEDED', 'FAILED', 'QUARANTINED', 'DATA_NOT_AVAILABLE')
@@ -216,6 +221,24 @@ CREATE TABLE IF NOT EXISTS ingestion_attempts (
         UNIQUE (attempt_id, execution_scope, data_domain),
     CONSTRAINT ingestion_attempts_execution_identity
         UNIQUE (work_item_id, attempt_number),
+    CONSTRAINT ingestion_attempts_executor_provenance_valid CHECK (
+        BTRIM(executor_source_revision) <> ''
+        AND executor_source_revision = BTRIM(executor_source_revision)
+        AND executor_workload_artifact_digest ~ '^[0-9a-f]{64}$'
+        AND executor_job_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+    ),
+    CONSTRAINT ingestion_attempts_authorization_scope_valid CHECK (
+        (
+            execution_scope = 'ECONOMIC_COLLECT'
+            AND release_authorization_id IS NULL
+            AND release_control_decision_id IS NULL
+        )
+        OR (
+            execution_scope = 'ECONOMIC_PROMOTE'
+            AND release_authorization_id IS NOT NULL
+            AND release_control_decision_id IS NOT NULL
+        )
+    ),
     CONSTRAINT ingestion_attempts_state_timestamps_valid CHECK (
         (state = 'RUNNING' AND outcome IS NULL AND finished_at IS NULL)
         OR (state = 'TERMINAL' AND outcome IS NOT NULL AND finished_at IS NOT NULL)
@@ -704,6 +727,11 @@ BEGIN
        OR NEW.execution_scope IS DISTINCT FROM OLD.execution_scope
        OR NEW.data_domain IS DISTINCT FROM OLD.data_domain
        OR NEW.attempt_number IS DISTINCT FROM OLD.attempt_number
+       OR NEW.release_authorization_id IS DISTINCT FROM OLD.release_authorization_id
+       OR NEW.release_control_decision_id IS DISTINCT FROM OLD.release_control_decision_id
+       OR NEW.executor_source_revision IS DISTINCT FROM OLD.executor_source_revision
+       OR NEW.executor_workload_artifact_digest IS DISTINCT FROM OLD.executor_workload_artifact_digest
+       OR NEW.executor_job_contract_version IS DISTINCT FROM OLD.executor_job_contract_version
        OR NEW.started_at IS DISTINCT FROM OLD.started_at
     THEN
         RAISE EXCEPTION 'ingestion attempt identity and lineage are immutable'

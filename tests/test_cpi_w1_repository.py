@@ -65,6 +65,20 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)
         self.assertIn("w.lease_until <= CURRENT_TIMESTAMP", SOURCE)
 
+    def test_claim_binds_exact_authorization_and_executor_to_attempt(self) -> None:
+        claim_pos = SOURCE.index("def claim_work_item(")
+        claim_body = SOURCE[claim_pos:SOURCE.index("def assert_current_claim", claim_pos)]
+        self.assertIn("executor: ExecutorProvenanceV1", claim_body)
+        self.assertIn("resolve_promotion_release_authorization", claim_body)
+        for field in (
+            "release_authorization_id",
+            "executor_source_revision",
+            "executor_workload_artifact_digest",
+            "executor_job_contract_version",
+        ):
+            self.assertIn(field, claim_body)
+        self.assertNotIn("str(input_artifact_id)", claim_body)
+
     def test_pause_resume_uses_guarded_database_boundary(self) -> None:
         self.assertIn("SELECT pause_cpi_ingestion_work", SOURCE)
         self.assertIn("SELECT resume_cpi_ingestion_work", SOURCE)
@@ -181,6 +195,11 @@ class CpiW1RepositoryTest(unittest.TestCase):
             claim_token=UUID(int=4),
             input_artifact_id=UUID(int=5),
             work_key="CPI_RELEASE_ENVELOPE_PROMOTE:test",
+            release_authorization_id=UUID(int=6),
+            release_control_decision_id=UUID(int=7),
+            executor_source_revision="deadbeef",
+            executor_workload_artifact_digest="7" * 64,
+            executor_job_contract_version="cpi-w1-promoter-v1",
         )
         with self.assertRaises(Exception):
             claim.claim_generation = 2  # type: ignore[misc]

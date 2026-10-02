@@ -86,6 +86,24 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("ingestion attempt requires claimed work ownership", self.sql)
         self.assertIn("attempt number must equal current claim generation", self.sql)
 
+    def test_attempt_binds_immutable_executor_and_optional_release_authorization(self) -> None:
+        for field in (
+            "release_authorization_id UUID",
+            "executor_source_revision TEXT",
+            "executor_workload_artifact_digest TEXT",
+            "executor_job_contract_version TEXT",
+        ):
+            self.assertIn(field, self.sql)
+        self.assertIn("ingestion_attempts_executor_provenance_valid", self.sql)
+        self.assertIn("ingestion_attempts_authorization_scope_valid", self.sql)
+        for field in (
+            "NEW.release_authorization_id IS DISTINCT FROM OLD.release_authorization_id",
+            "NEW.executor_source_revision IS DISTINCT FROM OLD.executor_source_revision",
+            "NEW.executor_workload_artifact_digest IS DISTINCT FROM OLD.executor_workload_artifact_digest",
+            "NEW.executor_job_contract_version IS DISTINCT FROM OLD.executor_job_contract_version",
+        ):
+            self.assertIn(field, self.sql)
+
     def test_work_updated_at_is_database_owned(self) -> None:
         self.assertIn("NEW.updated_at := CURRENT_TIMESTAMP", self.sql)
 

@@ -286,6 +286,170 @@ BEGIN
 END;
 $resolve_promotion_release_authorization$;
 
+ALTER TABLE ingestion_attempts
+    ADD COLUMN IF NOT EXISTS release_authorization_id UUID,
+    ADD COLUMN IF NOT EXISTS release_control_decision_id UUID,
+    ADD COLUMN IF NOT EXISTS executor_source_revision TEXT,
+    ADD COLUMN IF NOT EXISTS executor_workload_artifact_digest TEXT,
+    ADD COLUMN IF NOT EXISTS executor_job_contract_version TEXT;
+
+DO $attempt_authorization_constraints$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'promotion_release_control_decisions'::regclass
+           AND conname = 'promotion_release_control_decision_authorization_reference'
+    ) THEN
+        ALTER TABLE promotion_release_control_decisions
+            ADD CONSTRAINT promotion_release_control_decision_authorization_reference
+            UNIQUE (control_decision_id, authorization_id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_attempts'::regclass
+           AND conname = 'ingestion_attempts_executor_provenance_valid'
+    ) THEN
+        ALTER TABLE ingestion_attempts
+            ADD CONSTRAINT ingestion_attempts_executor_provenance_valid CHECK (
+                BTRIM(executor_source_revision) <> ''
+                AND executor_source_revision = BTRIM(executor_source_revision)
+                AND executor_workload_artifact_digest ~ '^[0-9a-f]{64}$'
+                AND executor_job_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+            ) NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_attempts'::regclass
+           AND conname = 'ingestion_attempts_authorization_scope_valid'
+    ) THEN
+        ALTER TABLE ingestion_attempts
+            ADD CONSTRAINT ingestion_attempts_authorization_scope_valid CHECK (
+                (
+                    execution_scope = 'ECONOMIC_COLLECT'
+                    AND release_authorization_id IS NULL
+                    AND release_control_decision_id IS NULL
+                )
+                OR (
+                    execution_scope = 'ECONOMIC_PROMOTE'
+                    AND release_authorization_id IS NOT NULL
+                    AND release_control_decision_id IS NOT NULL
+                )
+            ) NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_attempts'::regclass
+           AND conname = 'ingestion_attempts_release_authorization_fk'
+    ) THEN
+        ALTER TABLE ingestion_attempts
+            ADD CONSTRAINT ingestion_attempts_release_authorization_fk
+            FOREIGN KEY (release_authorization_id)
+            REFERENCES promotion_release_authorizations(authorization_id)
+            NOT VALID;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_attempts'::regclass
+           AND conname = 'ingestion_attempts_release_control_decision_fk'
+    ) THEN
+        ALTER TABLE ingestion_attempts
+            ADD CONSTRAINT ingestion_attempts_release_control_decision_fk
+            FOREIGN KEY (release_control_decision_id, release_authorization_id)
+            REFERENCES promotion_release_control_decisions(
+                control_decision_id, authorization_id
+            ) NOT VALID;
+    END IF;
+END;
+$attempt_authorization_constraints$;
+
+CREATE OR REPLACE FUNCTION enforce_cpi_attempt_release_authorization()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $attempt_release_authorization$
+DECLARE
+    work_subject_digest TEXT;
+    authorization_subject_digest TEXT;
+    authorized_source_revision TEXT;
+    authorized_workload_digest TEXT;
+    authorized_job_contract_version TEXT;
+    effective_control_decision_id UUID;
+    effective_control_state TEXT;
+BEGIN
+    IF NEW.execution_scope = 'ECONOMIC_COLLECT' THEN
+        IF NEW.release_authorization_id IS NOT NULL
+           OR NEW.release_control_decision_id IS NOT NULL THEN
+            RAISE EXCEPTION 'collect attempt cannot bind release authorization'
+                USING ERRCODE = '23514';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF NEW.release_authorization_id IS NULL
+       OR NEW.release_control_decision_id IS NULL THEN
+        RAISE EXCEPTION 'promotion attempt requires exact release authorization'
+            USING ERRCODE = '23514';
+    END IF;
+
+    SELECT release_subject_digest
+      INTO STRICT work_subject_digest
+      FROM ingestion_work_items
+     WHERE work_item_id = NEW.work_item_id;
+
+    SELECT a.release_subject_digest,
+           m.executor_source_revision,
+           m.executor_workload_artifact_digest,
+           m.executor_job_contract_version
+      INTO authorization_subject_digest,
+           authorized_source_revision,
+           authorized_workload_digest,
+           authorized_job_contract_version
+      FROM promotion_release_authorizations a
+      JOIN promotion_release_authorization_materials m
+        ON m.authorization_material_id = a.authorization_material_id
+     WHERE a.authorization_id = NEW.release_authorization_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'promotion attempt requires exact release authorization'
+            USING ERRCODE = '23514';
+    END IF;
+    IF authorization_subject_digest IS DISTINCT FROM work_subject_digest THEN
+        RAISE EXCEPTION 'attempt release authorization subject mismatch'
+            USING ERRCODE = '23514';
+    END IF;
+    IF authorized_source_revision IS DISTINCT FROM NEW.executor_source_revision
+       OR authorized_workload_digest IS DISTINCT FROM NEW.executor_workload_artifact_digest
+       OR authorized_job_contract_version IS DISTINCT FROM NEW.executor_job_contract_version THEN
+        RAISE EXCEPTION 'attempt executor provenance does not match authorization'
+            USING ERRCODE = '23514';
+    END IF;
+
+    SELECT control_decision_id, state
+      INTO effective_control_decision_id, effective_control_state
+      FROM promotion_release_control_decisions
+     WHERE authorization_id = NEW.release_authorization_id
+     ORDER BY control_version DESC
+     LIMIT 1;
+
+    IF effective_control_state IS DISTINCT FROM 'APPROVED'
+       OR effective_control_decision_id IS DISTINCT FROM NEW.release_control_decision_id THEN
+        RAISE EXCEPTION 'attempt release authorization is not approved'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$attempt_release_authorization$;
+
+DROP TRIGGER IF EXISTS ingestion_attempts_release_authorization_guard
+    ON ingestion_attempts;
+CREATE TRIGGER ingestion_attempts_release_authorization_guard
+    BEFORE INSERT ON ingestion_attempts
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_attempt_release_authorization();
+
 CREATE TABLE IF NOT EXISTS interpretation_requests (
     request_id UUID PRIMARY KEY,
     subject_id UUID NOT NULL REFERENCES interpretation_subjects(subject_id),

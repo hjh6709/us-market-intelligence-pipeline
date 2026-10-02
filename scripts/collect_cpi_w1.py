@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 import psycopg
 
 from src.cpi_w1_artifacts import FilesystemArtifactStore
+from src.cpi_w1_authorization import ExecutorProvenanceV1
 from src.cpi_w1_contracts import PromotionFamily
 from src.cpi_w1_promoter import promotion_work_key
 from src.cpi_w1_release_gate import CpiW1ExtractorReleaseGate
@@ -38,6 +39,17 @@ DEFAULT_ARTIFACT_ROOT = ROOT / ".cpi-w1-artifacts"
 _SOURCE_REVISION = "cpi-w1-source-v1"
 _COLLECT_JOB_CONTRACT = "cpi-w1-collector-v1"
 _PROMOTE_JOB_CONTRACT = "cpi-w1-promoter-v1"
+_COLLECT_WORKLOAD_ARTIFACT_DIGEST = hashlib.sha256(
+    Path(__file__).read_bytes()
+).hexdigest()
+_PROMOTE_WORKLOAD_ARTIFACT_DIGEST = hashlib.sha256(
+    (ROOT / "src/cpi_w1_promoter.py").read_bytes()
+).hexdigest()
+_COLLECT_EXECUTOR = ExecutorProvenanceV1(
+    source_revision=_SOURCE_REVISION,
+    workload_artifact_digest=_COLLECT_WORKLOAD_ARTIFACT_DIGEST,
+    job_contract_version=_COLLECT_JOB_CONTRACT,
+)
 
 _EXTRACTOR_BY_ARTIFACT_KIND = {
     "CPI_SCHEDULE_HTML": "bls-cpi-schedule-html-v1",
@@ -173,7 +185,7 @@ class CpiW1CollectorOrchestrator:
             scheduled_for=None,
             replay_of_run_id=replay_of_run_id,
             source_revision=_SOURCE_REVISION,
-            workload_artifact_digest=str(artifact_id),
+            workload_artifact_digest=_PROMOTE_WORKLOAD_ARTIFACT_DIGEST,
             job_contract_version=_PROMOTE_JOB_CONTRACT,
             config_fingerprint=self._config_fingerprint(),
         )
@@ -235,6 +247,7 @@ class CpiW1CollectorOrchestrator:
         claim = self.repository.claim_work_item(
             connection,
             execution_scope="ECONOMIC_COLLECT",
+            executor=_COLLECT_EXECUTOR,
             work_key_prefix=collection_work_key,
         )
         if claim is None or claim.work_item_id != work_id:

@@ -77,6 +77,14 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         )
         self.assertIn("ambiguous active promotion authorization", self.sql)
 
+    def test_attempt_authorization_guard_matches_subject_executor_and_active_control(self) -> None:
+        self.assertIn("enforce_cpi_attempt_release_authorization", self.sql)
+        self.assertIn("promotion attempt requires exact release authorization", self.sql)
+        self.assertIn("attempt release authorization subject mismatch", self.sql)
+        self.assertIn("attempt executor provenance does not match authorization", self.sql)
+        self.assertIn("attempt release authorization is not approved", self.sql)
+        self.assertIn("FOREIGN KEY (release_authorization_id)", self.sql)
+
     def test_revoked_release_authorization_cannot_be_reactivated(self) -> None:
         self.assertIn("revoked promotion authorization cannot be reactivated", self.sql)
         self.assertIn("promotion release control expected version mismatch", self.sql)
