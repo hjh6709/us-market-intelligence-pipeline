@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from src.cpi_w1_evidence_snapshot import PromotionEvidenceSnapshotV1
 from src.cpi_w1_release_subject import ReleaseSubjectV1
 
 
@@ -120,6 +121,72 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    def create_promotion_evidence_snapshot(
+        self,
+        connection: Any,
+        *,
+        snapshot: PromotionEvidenceSnapshotV1,
+        created_by_subject: str,
+    ) -> UUID:
+        if (
+            not created_by_subject
+            or created_by_subject != created_by_subject.strip()
+        ):
+            raise ValueError("created_by_subject must be canonical and non-empty")
+        candidate_id = uuid4()
+        expected = (
+            snapshot.release_subject_digest,
+            snapshot.corpus_snapshot_digest,
+            snapshot.expected_diff_approvals_digest,
+            snapshot.replay_result_digest,
+            snapshot.tested_job_contract_version,
+            snapshot.tested_source_revision,
+            snapshot.tested_workload_artifact_digest,
+            snapshot.evidence_policy_version,
+        )
+        with connection.transaction():
+            connection.execute(
+                """
+                INSERT INTO promotion_release_evidence_snapshots (
+                    evidence_snapshot_id, schema_version,
+                    release_subject_digest, corpus_snapshot_digest,
+                    expected_diff_approvals_digest, replay_result_digest,
+                    tested_job_contract_version, tested_source_revision,
+                    tested_workload_artifact_digest, evidence_policy_version,
+                    evidence_snapshot_digest, created_by_subject
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (evidence_snapshot_digest) DO NOTHING
+                """,
+                (
+                    candidate_id,
+                    snapshot.SCHEMA,
+                    *expected,
+                    snapshot.evidence_snapshot_digest,
+                    created_by_subject,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT evidence_snapshot_id, release_subject_digest,
+                       corpus_snapshot_digest, expected_diff_approvals_digest,
+                       replay_result_digest, tested_job_contract_version,
+                       tested_source_revision, tested_workload_artifact_digest,
+                       evidence_policy_version
+                  FROM promotion_release_evidence_snapshots
+                 WHERE evidence_snapshot_digest=%s
+                """,
+                (snapshot.evidence_snapshot_digest,),
+            ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("evidence snapshot did not converge")
+            if tuple(row[1:]) != expected:
+                raise RepositoryInvariantError(
+                    "same evidence snapshot digest changed immutable material"
+                )
+            return row[0]
+
     def create_run(
         self,
         connection: Any,

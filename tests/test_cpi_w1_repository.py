@@ -42,6 +42,12 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("release_subject_digest=%s", create_body)
         self.assertNotIn("AND work_key=%s", promotion_lookup)
 
+    def test_repository_persists_immutable_evidence_snapshot_by_semantic_digest(self) -> None:
+        self.assertIn("def create_promotion_evidence_snapshot(", SOURCE)
+        self.assertIn("promotion_release_evidence_snapshots", SOURCE)
+        self.assertIn("evidence_snapshot_digest", SOURCE)
+        self.assertIn("same evidence snapshot digest changed immutable material", SOURCE)
+
     def test_claim_sql_uses_skip_locked_and_due_or_expired_work(self) -> None:
         self.assertIn("FOR UPDATE OF w SKIP LOCKED", SOURCE)
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)

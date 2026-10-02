@@ -20,6 +20,7 @@ from src.cpi_w1_contracts import (
     TimePrecision,
 )
 from src.cpi_w1_governance import CpiW1Governance, WorkforcePrincipal
+from src.cpi_w1_evidence_snapshot import PromotionEvidenceSnapshotV1
 from src.cpi_w1_promoter import (
     CpiW1Promoter,
     PromotionDeterminismError,
@@ -2746,6 +2747,41 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (gate_b, "EXTRACTOR_NOT_REVIEWED"),
                 ],
             )
+
+    def test_evidence_snapshot_converges_by_digest_and_is_immutable(self) -> None:
+        repository = CpiW1Repository()
+        snapshot = PromotionEvidenceSnapshotV1(
+            release_subject_digest="1" * 64,
+            corpus_snapshot_digest="2" * 64,
+            expected_diff_approvals_digest="3" * 64,
+            replay_result_digest="4" * 64,
+            tested_job_contract_version="cpi-w1-promoter-v1",
+            tested_source_revision="b24eb6436494d0081a35b4098d222f0c20fd7ed3",
+            tested_workload_artifact_digest=None,
+            evidence_policy_version="cpi-w1-evidence-v1",
+        )
+        with self.connection() as connection:
+            first = repository.create_promotion_evidence_snapshot(
+                connection,
+                snapshot=snapshot,
+                created_by_subject="workforce:reviewer@example.com",
+            )
+            second = repository.create_promotion_evidence_snapshot(
+                connection,
+                snapshot=snapshot,
+                created_by_subject="workforce:reviewer@example.com",
+            )
+            self.assertEqual(first, second)
+            with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
+                connection.execute(
+                    "UPDATE promotion_release_evidence_snapshots SET tested_source_revision='changed' WHERE evidence_snapshot_id=%s",
+                    (first,),
+                )
+            with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
+                connection.execute(
+                    "DELETE FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_id=%s",
+                    (first,),
+                )
 
     def test_schedule_assertion_promotion_persists_authoritative_evidence(self) -> None:
         repository = CpiW1Repository()

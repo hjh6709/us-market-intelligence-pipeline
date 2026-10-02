@@ -1,6 +1,47 @@
 -- CPI W1 interpretation governance and economic serving-control history.
 -- Additive above migration 012; production IAM/GRANT topology is intentionally deferred.
 
+CREATE TABLE IF NOT EXISTS promotion_release_evidence_snapshots (
+    evidence_snapshot_id UUID PRIMARY KEY,
+    schema_version TEXT NOT NULL CHECK (
+        schema_version = 'cpi-w1-promotion-evidence-snapshot-v1'
+    ),
+    release_subject_digest TEXT NOT NULL CHECK (
+        release_subject_digest ~ '^[0-9a-f]{64}$'
+    ),
+    corpus_snapshot_digest TEXT NOT NULL CHECK (
+        corpus_snapshot_digest ~ '^[0-9a-f]{64}$'
+    ),
+    expected_diff_approvals_digest TEXT NOT NULL CHECK (
+        expected_diff_approvals_digest ~ '^[0-9a-f]{64}$'
+    ),
+    replay_result_digest TEXT NOT NULL CHECK (
+        replay_result_digest ~ '^[0-9a-f]{64}$'
+    ),
+    tested_job_contract_version TEXT NOT NULL CHECK (
+        tested_job_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+    ),
+    tested_source_revision TEXT NOT NULL CHECK (
+        BTRIM(tested_source_revision) <> ''
+        AND tested_source_revision = BTRIM(tested_source_revision)
+    ),
+    tested_workload_artifact_digest TEXT CHECK (
+        tested_workload_artifact_digest IS NULL
+        OR tested_workload_artifact_digest ~ '^[0-9a-f]{64}$'
+    ),
+    evidence_policy_version TEXT NOT NULL CHECK (
+        evidence_policy_version = 'cpi-w1-evidence-v1'
+    ),
+    evidence_snapshot_digest TEXT NOT NULL UNIQUE CHECK (
+        evidence_snapshot_digest ~ '^[0-9a-f]{64}$'
+    ),
+    created_by_subject TEXT NOT NULL CHECK (
+        BTRIM(created_by_subject) <> ''
+        AND created_by_subject = BTRIM(created_by_subject)
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS interpretation_requests (
     request_id UUID PRIMARY KEY,
     subject_id UUID NOT NULL REFERENCES interpretation_subjects(subject_id),
@@ -713,6 +754,12 @@ $$;
 DROP TRIGGER IF EXISTS interpretation_requests_immutable ON interpretation_requests;
 CREATE TRIGGER interpretation_requests_immutable
     BEFORE UPDATE OR DELETE ON interpretation_requests
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS promotion_release_evidence_snapshots_immutable
+    ON promotion_release_evidence_snapshots;
+CREATE TRIGGER promotion_release_evidence_snapshots_immutable
+    BEFORE UPDATE OR DELETE ON promotion_release_evidence_snapshots
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
 
 DROP TRIGGER IF EXISTS interpretation_approvals_immutable ON interpretation_approvals;

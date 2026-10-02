@@ -20,6 +20,30 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         ):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", self.sql)
 
+    def test_immutable_evidence_snapshot_is_acyclic_and_digest_bound(self) -> None:
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS promotion_release_evidence_snapshots",
+            self.sql,
+        )
+        for field in (
+            "release_subject_digest",
+            "corpus_snapshot_digest",
+            "expected_diff_approvals_digest",
+            "replay_result_digest",
+            "tested_job_contract_version",
+            "tested_source_revision",
+            "tested_workload_artifact_digest",
+            "evidence_policy_version",
+            "evidence_snapshot_digest",
+        ):
+            self.assertIn(field, self.sql)
+        table = self.sql[
+            self.sql.index("CREATE TABLE IF NOT EXISTS promotion_release_evidence_snapshots"):
+            self.sql.index(";", self.sql.index("CREATE TABLE IF NOT EXISTS promotion_release_evidence_snapshots"))
+        ]
+        self.assertNotIn("gate_decision", table)
+        self.assertIn("promotion_release_evidence_snapshots_immutable", self.sql)
+
     def test_two_person_and_one_vote_constraints_are_structural(self) -> None:
         self.assertIn("CHECK (approver_subject <> proposer_subject)", self.sql)
         self.assertIn("UNIQUE (request_id, approver_subject)", self.sql)
