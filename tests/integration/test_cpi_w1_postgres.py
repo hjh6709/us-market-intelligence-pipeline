@@ -36,6 +36,7 @@ from src.cpi_w1_release import (
     extract_release_envelope,
 )
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
+from src.cpi_w1_release_subject import ReleaseSubjectV1
 from src.cpi_w1_schedule import (
     parse_bls_revised_release_dates_html,
     parse_cpi_schedule_html,
@@ -50,6 +51,24 @@ from src.cpi_w1_selector import (
 RUN_POSTGRES_INTEGRATION = os.environ.get("RUN_POSTGRES_INTEGRATION") == "1"
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://market:market@localhost:55432/market"
+)
+
+TEST_RELEASE_SUBJECT = ReleaseSubjectV1(
+    source_code="BLS",
+    artifact_contract_kind="CPI_RELEASE_HTML",
+    source_contract_version="bls-cpi-source-v1",
+    promotion_capability_id="BLS_CPI_RELEASE_ENVELOPE_HTML",
+    extractor_contract_version="bls-cpi-release-envelope-html-v1",
+    promotion_family="CPI_RELEASE_ENVELOPE_PROMOTE",
+)
+
+TEST_OBSERVATION_SUBJECT = ReleaseSubjectV1(
+    source_code="BLS",
+    artifact_contract_kind="CPI_RELEASE_HTML",
+    source_contract_version="bls-cpi-source-v1",
+    promotion_capability_id="BLS_CPI_CORE4_HTML",
+    extractor_contract_version="bls-cpi-core4-html-v1",
+    promotion_family="CPI_OBSERVATION_BUNDLE_PROMOTE",
 )
 
 
@@ -122,15 +141,34 @@ class CpiW1PostgresTest(unittest.TestCase):
         work_item_id=None,
         execution_scope="ECONOMIC_COLLECT",
         work_key="collect:cpi:2026-08",
+        input_artifact_id=None,
+        release_subject=None,
     ):
         work_item_id = work_item_id or uuid4()
+        if execution_scope == "ECONOMIC_PROMOTE":
+            input_artifact_id = input_artifact_id or self.make_artifact(
+                connection,
+                f"structured-work:{uuid4()}",
+            )
+            release_subject = release_subject or TEST_RELEASE_SUBJECT
         connection.execute(
             """
             INSERT INTO ingestion_work_items (
-                work_item_id, run_id, execution_scope, data_domain, work_key
-            ) VALUES (%s, %s, %s, 'ECONOMIC', %s)
+                work_item_id, run_id, execution_scope, data_domain, work_key,
+                input_artifact_id, promotion_capability_id,
+                extractor_contract_version, release_subject_digest
+            ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s)
             """,
-            (work_item_id, run_id, execution_scope, work_key),
+            (
+                work_item_id,
+                run_id,
+                execution_scope,
+                work_key,
+                input_artifact_id,
+                release_subject.promotion_capability_id if release_subject else None,
+                release_subject.extractor_contract_version if release_subject else None,
+                release_subject.release_subject_digest if release_subject else None,
+            ),
         )
         return work_item_id
 
@@ -2117,26 +2155,35 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), first_run, work_key, artifact_id),
+            self.insert_work(
+                connection,
+                first_run,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=work_key,
+                input_artifact_id=artifact_id,
+                release_subject=TEST_RELEASE_SUBJECT,
             )
             with self.assertRaises(psycopg.errors.UniqueViolation):
                 connection.execute(
                     """
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
-                        work_key, input_artifact_id
+                        work_key, input_artifact_id, promotion_capability_id,
+                        extractor_contract_version, release_subject_digest
                     ) VALUES (
-                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s
+                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
+                        %s, %s, %s
                     )
                     """,
-                    (uuid4(), second_run, work_key, artifact_id),
+                    (
+                        uuid4(),
+                        second_run,
+                        work_key + ":retry",
+                        artifact_id,
+                        TEST_RELEASE_SUBJECT.promotion_capability_id,
+                        TEST_RELEASE_SUBJECT.extractor_contract_version,
+                        TEST_RELEASE_SUBJECT.release_subject_digest,
+                    ),
                 )
 
     def test_repository_claim_starts_run_and_creates_aligned_attempt(self) -> None:
@@ -3215,14 +3262,13 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection,
                 execution_scope="ECONOMIC_PROMOTE",
             )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), first_run, work_key, artifact_id),
+            self.insert_work(
+                connection,
+                first_run,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=work_key,
+                input_artifact_id=artifact_id,
+                release_subject=TEST_RELEASE_SUBJECT,
             )
             claim = repository.claim_work_item(
                 connection,
@@ -3247,10 +3293,22 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
-                        work_key, input_artifact_id
-                    ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                        work_key, input_artifact_id, promotion_capability_id,
+                        extractor_contract_version, release_subject_digest
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
+                        %s, %s, %s
+                    )
                     """,
-                    (uuid4(), retry_run, work_key, artifact_id),
+                    (
+                        uuid4(),
+                        retry_run,
+                        work_key,
+                        artifact_id,
+                        TEST_RELEASE_SUBJECT.promotion_capability_id,
+                        TEST_RELEASE_SUBJECT.extractor_contract_version,
+                        TEST_RELEASE_SUBJECT.release_subject_digest,
+                    ),
                 )
 
             finalized = connection.execute(
@@ -3352,14 +3410,13 @@ class CpiW1PostgresTest(unittest.TestCase):
             bundle.extractor_contract_version,
             bundle.reference_month,
         )
-            connection.execute(
-                """
-                INSERT INTO ingestion_work_items (
-                    work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
-                """,
-                (uuid4(), observation_run, observation_key, artifact_id),
+            self.insert_work(
+                connection,
+                observation_run,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=observation_key,
+                input_artifact_id=artifact_id,
+                release_subject=TEST_OBSERVATION_SUBJECT,
             )
             observation_claim = repository.claim_work_item(
                 connection,
@@ -3415,10 +3472,22 @@ class CpiW1PostgresTest(unittest.TestCase):
                     """
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
-                        work_key, input_artifact_id
-                    ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s)
+                        work_key, input_artifact_id, promotion_capability_id,
+                        extractor_contract_version, release_subject_digest
+                    ) VALUES (
+                        %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
+                        %s, %s, %s
+                    )
                     """,
-                    (uuid4(), retry_run, observation_key, artifact_id),
+                    (
+                        uuid4(),
+                        retry_run,
+                        observation_key,
+                        artifact_id,
+                        TEST_OBSERVATION_SUBJECT.promotion_capability_id,
+                        TEST_OBSERVATION_SUBJECT.extractor_contract_version,
+                        TEST_OBSERVATION_SUBJECT.release_subject_digest,
+                    ),
                 )
 
             rows = connection.execute(

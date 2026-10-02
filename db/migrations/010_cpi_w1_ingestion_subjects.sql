@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
     data_domain TEXT NOT NULL CHECK (data_domain = 'ECONOMIC'),
     work_key TEXT NOT NULL,
     input_artifact_id UUID,
+    promotion_capability_id TEXT,
+    extractor_contract_version TEXT,
+    release_subject_digest TEXT,
     state TEXT NOT NULL DEFAULT 'PENDING' CHECK (
         state IN ('PENDING', 'CLAIMED', 'PAUSED', 'TERMINAL')
     ),
@@ -94,6 +97,22 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
         UNIQUE (work_item_id, execution_scope, data_domain),
     CONSTRAINT ingestion_work_items_business_identity
         UNIQUE (run_id, work_key),
+    CONSTRAINT ingestion_work_items_release_subject_valid CHECK (
+        (
+            execution_scope = 'ECONOMIC_COLLECT'
+            AND input_artifact_id IS NULL
+            AND promotion_capability_id IS NULL
+            AND extractor_contract_version IS NULL
+            AND release_subject_digest IS NULL
+        )
+        OR (
+            execution_scope = 'ECONOMIC_PROMOTE'
+            AND input_artifact_id IS NOT NULL
+            AND promotion_capability_id ~ '^[A-Z][A-Z0-9_]*$'
+            AND extractor_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+            AND release_subject_digest ~ '^[0-9a-f]{64}$'
+        )
+    ),
     CONSTRAINT ingestion_work_items_state_claim_valid CHECK (
         (
             state = 'PENDING' AND outcome IS NULL
@@ -135,10 +154,45 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
 CREATE INDEX IF NOT EXISTS ingestion_work_items_claimable_idx
     ON ingestion_work_items (data_domain, execution_scope, state, next_claim_at, lease_until);
 
-CREATE UNIQUE INDEX IF NOT EXISTS ingestion_work_items_promotion_identity
-    ON ingestion_work_items (input_artifact_id, work_key)
+ALTER TABLE ingestion_work_items
+    ADD COLUMN IF NOT EXISTS promotion_capability_id TEXT,
+    ADD COLUMN IF NOT EXISTS extractor_contract_version TEXT,
+    ADD COLUMN IF NOT EXISTS release_subject_digest TEXT;
+
+DO $structured_promotion_identity$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_work_items'::regclass
+           AND conname = 'ingestion_work_items_release_subject_valid'
+    ) THEN
+        ALTER TABLE ingestion_work_items
+            ADD CONSTRAINT ingestion_work_items_release_subject_valid CHECK (
+                (
+                    execution_scope = 'ECONOMIC_COLLECT'
+                    AND input_artifact_id IS NULL
+                    AND promotion_capability_id IS NULL
+                    AND extractor_contract_version IS NULL
+                    AND release_subject_digest IS NULL
+                )
+                OR (
+                    execution_scope = 'ECONOMIC_PROMOTE'
+                    AND input_artifact_id IS NOT NULL
+                    AND promotion_capability_id ~ '^[A-Z][A-Z0-9_]*$'
+                    AND extractor_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+                    AND release_subject_digest ~ '^[0-9a-f]{64}$'
+                )
+            ) NOT VALID;
+    END IF;
+END;
+$structured_promotion_identity$;
+
+DROP INDEX IF EXISTS ingestion_work_items_promotion_identity;
+CREATE UNIQUE INDEX ingestion_work_items_promotion_identity
+    ON ingestion_work_items (input_artifact_id, release_subject_digest)
     WHERE execution_scope = 'ECONOMIC_PROMOTE'
-      AND input_artifact_id IS NOT NULL;
+      AND input_artifact_id IS NOT NULL
+      AND release_subject_digest IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS ingestion_attempts (
     attempt_id UUID PRIMARY KEY,
@@ -510,6 +564,9 @@ BEGIN
        OR NEW.data_domain IS DISTINCT FROM OLD.data_domain
        OR NEW.work_key IS DISTINCT FROM OLD.work_key
        OR NEW.input_artifact_id IS DISTINCT FROM OLD.input_artifact_id
+       OR NEW.promotion_capability_id IS DISTINCT FROM OLD.promotion_capability_id
+       OR NEW.extractor_contract_version IS DISTINCT FROM OLD.extractor_contract_version
+       OR NEW.release_subject_digest IS DISTINCT FROM OLD.release_subject_digest
        OR NEW.created_at IS DISTINCT FROM OLD.created_at
     THEN
         RAISE EXCEPTION 'ingestion work identity and lineage are immutable'

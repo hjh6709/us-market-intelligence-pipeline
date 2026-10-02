@@ -27,6 +27,21 @@ class CpiW1RepositoryTest(unittest.TestCase):
             SOURCE,
         )
 
+    def test_promotion_work_uses_structured_release_subject_not_work_key(self) -> None:
+        create_pos = SOURCE.index("def create_work_item(")
+        create_body = SOURCE[create_pos:SOURCE.index("def existing_promotion", create_pos)]
+        promotion_lookup = create_body[
+            create_body.index('if execution_scope == "ECONOMIC_PROMOTE":', 200):
+            create_body.index("else:", create_body.index("SELECT work_item_id"))
+        ]
+        self.assertIn("release_subject: ReleaseSubjectV1 | None", create_body)
+        self.assertIn("release_subject_digest", create_body)
+        self.assertIn("promotion_capability_id", create_body)
+        self.assertIn("extractor_contract_version", create_body)
+        self.assertIn("input_artifact_id=%s", create_body)
+        self.assertIn("release_subject_digest=%s", create_body)
+        self.assertNotIn("AND work_key=%s", promotion_lookup)
+
     def test_claim_sql_uses_skip_locked_and_due_or_expired_work(self) -> None:
         self.assertIn("FOR UPDATE OF w SKIP LOCKED", SOURCE)
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)

@@ -106,7 +106,21 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
 
     def test_promotion_work_identity_is_global_across_runs(self) -> None:
         self.assertIn("ingestion_work_items_promotion_identity", self.sql)
+
+    def test_promotion_work_has_structured_release_subject_identity(self) -> None:
+        for field in (
+            "promotion_capability_id TEXT",
+            "extractor_contract_version TEXT",
+            "release_subject_digest TEXT",
+        ):
+            self.assertIn(field, self.sql)
+        self.assertIn("ingestion_work_items_release_subject_valid", self.sql)
+        self.assertIn("release_subject_digest ~ '^[0-9a-f]{64}$'", self.sql)
         self.assertIn(
+            "(input_artifact_id, release_subject_digest)",
+            self.sql,
+        )
+        self.assertNotIn(
             "ON ingestion_work_items (input_artifact_id, work_key)",
             self.sql,
         )

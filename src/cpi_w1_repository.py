@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from src.cpi_w1_release_subject import ReleaseSubjectV1
+
 
 _REASON_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 MAX_RETRY_DELAY_SECONDS = 24 * 60 * 60
@@ -31,6 +33,9 @@ class Claim:
     claim_token: UUID
     input_artifact_id: UUID | None
     work_key: str
+    promotion_capability_id: str | None = None
+    extractor_contract_version: str | None = None
+    release_subject_digest: str | None = None
 
 
 CLAIM_SELECT_SQL = """
@@ -40,7 +45,10 @@ SELECT
     w.input_artifact_id,
     w.claim_generation,
     w.state,
-    w.work_key
+    w.work_key,
+    w.promotion_capability_id,
+    w.extractor_contract_version,
+    w.release_subject_digest
   FROM ingestion_work_items w
   JOIN ingestion_runs r
     ON r.run_id = w.run_id
@@ -76,6 +84,9 @@ SELECT
     w.run_id,
     w.input_artifact_id,
     w.work_key,
+    w.promotion_capability_id,
+    w.extractor_contract_version,
+    w.release_subject_digest,
     a.state,
     a.attempt_number
   FROM ingestion_work_items w
@@ -245,13 +256,29 @@ class CpiW1Repository:
         execution_scope: str,
         work_key: str,
         input_artifact_id: UUID | None = None,
+        release_subject: ReleaseSubjectV1 | None = None,
     ) -> UUID:
         if execution_scope not in {"ECONOMIC_COLLECT", "ECONOMIC_PROMOTE"}:
             raise ValueError("unsupported execution_scope")
         if not work_key or work_key != work_key.strip():
             raise ValueError("work_key must be canonical and non-empty")
-        if execution_scope == "ECONOMIC_PROMOTE" and input_artifact_id is None:
-            raise ValueError("promotion work requires input_artifact_id")
+        if execution_scope == "ECONOMIC_PROMOTE":
+            if input_artifact_id is None or release_subject is None:
+                raise ValueError(
+                    "promotion work requires input_artifact_id and release_subject"
+                )
+        elif input_artifact_id is not None or release_subject is not None:
+            raise ValueError("collection work must not carry promotion identity")
+
+        promotion_capability_id = (
+            release_subject.promotion_capability_id if release_subject else None
+        )
+        extractor_contract_version = (
+            release_subject.extractor_contract_version if release_subject else None
+        )
+        release_subject_digest = (
+            release_subject.release_subject_digest if release_subject else None
+        )
 
         candidate_id = uuid4()
         with connection.transaction():
@@ -259,29 +286,43 @@ class CpiW1Repository:
                 """
                 INSERT INTO ingestion_work_items (
                     work_item_id, run_id, execution_scope, data_domain,
-                    work_key, input_artifact_id
-                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s)
+                    work_key, input_artifact_id, promotion_capability_id,
+                    extractor_contract_version, release_subject_digest
+                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
-                (candidate_id, run_id, execution_scope, work_key, input_artifact_id),
+                (
+                    candidate_id,
+                    run_id,
+                    execution_scope,
+                    work_key,
+                    input_artifact_id,
+                    promotion_capability_id,
+                    extractor_contract_version,
+                    release_subject_digest,
+                ),
             )
             if execution_scope == "ECONOMIC_PROMOTE":
                 row = connection.execute(
                     """
                     SELECT work_item_id, run_id, execution_scope,
-                           input_artifact_id, work_key
+                           input_artifact_id, work_key,
+                           promotion_capability_id, extractor_contract_version,
+                           release_subject_digest
                       FROM ingestion_work_items
                      WHERE execution_scope='ECONOMIC_PROMOTE'
                        AND input_artifact_id=%s
-                       AND work_key=%s
+                       AND release_subject_digest=%s
                     """,
-                    (input_artifact_id, work_key),
+                    (input_artifact_id, release_subject_digest),
                 ).fetchone()
             else:
                 row = connection.execute(
                     """
                     SELECT work_item_id, run_id, execution_scope,
-                           input_artifact_id, work_key
+                           input_artifact_id, work_key,
+                           promotion_capability_id, extractor_contract_version,
+                           release_subject_digest
                       FROM ingestion_work_items
                      WHERE run_id=%s AND work_key=%s
                     """,
@@ -289,7 +330,15 @@ class CpiW1Repository:
                 ).fetchone()
             if row is None:
                 raise RepositoryInvariantError("ingestion work identity did not converge")
-            if row[2] != execution_scope or row[3] != input_artifact_id or row[4] != work_key:
+            expected = (
+                execution_scope,
+                input_artifact_id,
+                work_key,
+                promotion_capability_id,
+                extractor_contract_version,
+                release_subject_digest,
+            )
+            if tuple(row[2:]) != expected:
                 raise RepositoryInvariantError(
                     "same ingestion work identity changed immutable metadata"
                 )
@@ -388,7 +437,17 @@ class CpiW1Repository:
             if row is None:
                 return None
 
-            work_item_id, run_id, input_artifact_id, generation, previous_state, work_key = row
+            (
+                work_item_id,
+                run_id,
+                input_artifact_id,
+                generation,
+                previous_state,
+                work_key,
+                promotion_capability_id,
+                extractor_contract_version,
+                release_subject_digest,
+            ) = row
             previous_generation = int(generation)
             generation = previous_generation + 1
             claim_token = uuid4()
@@ -460,6 +519,9 @@ class CpiW1Repository:
                 claim_token=claim_token,
                 input_artifact_id=input_artifact_id,
                 work_key=work_key,
+                promotion_capability_id=promotion_capability_id,
+                extractor_contract_version=extractor_contract_version,
+                release_subject_digest=release_subject_digest,
             )
 
     def assert_current_claim(self, connection: Any, claim: Claim) -> tuple[UUID, UUID | None]:
@@ -475,11 +537,26 @@ class CpiW1Repository:
         ).fetchone()
         if row is None:
             raise StaleClaimError("claim is stale, expired, or no longer running")
-        run_id, input_artifact_id, work_key, attempt_state, attempt_number = row
+        (
+            run_id,
+            input_artifact_id,
+            work_key,
+            promotion_capability_id,
+            extractor_contract_version,
+            release_subject_digest,
+            attempt_state,
+            attempt_number,
+        ) = row
         if run_id != claim.run_id:
             raise RepositoryInvariantError("claim run identity changed")
         if work_key != claim.work_key:
             raise RepositoryInvariantError("claim work identity changed")
+        if (
+            promotion_capability_id != claim.promotion_capability_id
+            or extractor_contract_version != claim.extractor_contract_version
+            or release_subject_digest != claim.release_subject_digest
+        ):
+            raise RepositoryInvariantError("claim release subject identity changed")
         if attempt_state != "RUNNING" or int(attempt_number) != claim.claim_generation:
             raise RepositoryInvariantError("attempt ownership does not match claim")
         return run_id, input_artifact_id
