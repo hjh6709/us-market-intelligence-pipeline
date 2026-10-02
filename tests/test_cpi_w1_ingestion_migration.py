@@ -70,7 +70,7 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
 
     def test_paused_work_is_structurally_nonclaimable_and_recoverable(self) -> None:
         self.assertIn("state IN ('PENDING', 'CLAIMED', 'PAUSED', 'TERMINAL')", self.sql)
-        self.assertIn("paused work requires matching failed current attempt", self.sql)
+        self.assertIn("paused claimed work requires failed current attempt", self.sql)
         self.assertIn("resumed work must clear pause reason and schedule next claim", self.sql)
         self.assertIn("OLD.state = 'PAUSED'", self.sql)
         self.assertNotIn("w.state = 'PAUSED'", self.sql.split("ingestion_work_items_claimable_idx")[0])
@@ -103,6 +103,15 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
             "NEW.executor_job_contract_version IS DISTINCT FROM OLD.executor_job_contract_version",
         ):
             self.assertIn(field, self.sql)
+
+    def test_pending_and_claimed_work_have_distinct_pause_invariants(self) -> None:
+        self.assertIn(
+            "OLD.state = 'PENDING' AND NEW.state IN ('CLAIMED', 'PAUSED')",
+            self.sql,
+        )
+        self.assertIn("pending pause cannot have an execution attempt", self.sql)
+        self.assertIn("paused claimed work requires failed current attempt", self.sql)
+        self.assertNotIn("AND reason_code = NEW.reason_code", self.sql)
 
     def test_work_updated_at_is_database_owned(self) -> None:
         self.assertIn("NEW.updated_at := CURRENT_TIMESTAMP", self.sql)

@@ -608,7 +608,7 @@ BEGIN
     END IF;
 
     IF NEW.state <> OLD.state AND NOT (
-        (OLD.state = 'PENDING' AND NEW.state = 'CLAIMED')
+        (OLD.state = 'PENDING' AND NEW.state IN ('CLAIMED', 'PAUSED'))
         OR (OLD.state = 'PENDING' AND NEW.state = 'TERMINAL' AND NEW.outcome = 'SKIPPED')
         OR (OLD.state = 'CLAIMED' AND NEW.state IN ('PENDING', 'PAUSED', 'TERMINAL'))
         OR (OLD.state = 'PAUSED' AND NEW.state = 'PENDING')
@@ -649,6 +649,10 @@ BEGIN
     END IF;
 
     IF (
+           OLD.state = 'PENDING'
+           AND NEW.state = 'PAUSED'
+       )
+       OR (
            OLD.state = 'CLAIMED'
            AND NEW.state IN ('PENDING', 'PAUSED', 'TERMINAL')
        )
@@ -664,16 +668,25 @@ BEGIN
     END IF;
 
     IF NEW.state = 'PAUSED' THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM ingestion_attempts
-             WHERE work_item_id = NEW.work_item_id
-               AND attempt_number = OLD.claim_generation
-               AND state = 'TERMINAL'
-               AND outcome = 'FAILED'
-               AND reason_code = NEW.reason_code
-        ) THEN
-            RAISE EXCEPTION 'paused work requires matching failed current attempt'
-                USING ERRCODE = '23514';
+        IF OLD.state = 'PENDING' THEN
+            IF EXISTS (
+                SELECT 1 FROM ingestion_attempts
+                 WHERE work_item_id = NEW.work_item_id
+            ) THEN
+                RAISE EXCEPTION 'pending pause cannot have an execution attempt'
+                    USING ERRCODE = '23514';
+            END IF;
+        ELSIF OLD.state = 'CLAIMED' THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM ingestion_attempts
+                 WHERE work_item_id = NEW.work_item_id
+                   AND attempt_number = OLD.claim_generation
+                   AND state = 'TERMINAL'
+                   AND outcome = 'FAILED'
+            ) THEN
+                RAISE EXCEPTION 'paused claimed work requires failed current attempt'
+                    USING ERRCODE = '23514';
+            END IF;
         END IF;
     END IF;
 

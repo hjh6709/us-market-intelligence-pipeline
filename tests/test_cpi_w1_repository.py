@@ -80,8 +80,11 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertNotIn("str(input_artifact_id)", claim_body)
 
     def test_pause_resume_uses_guarded_database_boundary(self) -> None:
+        self.assertIn("SELECT pause_pending_cpi_ingestion_work", SOURCE)
         self.assertIn("SELECT pause_cpi_ingestion_work", SOURCE)
         self.assertIn("SELECT resume_cpi_ingestion_work", SOURCE)
+        self.assertIn("attempt_reason_code", SOURCE)
+        self.assertIn("work_reason_code", SOURCE)
         self.assertNotIn("SET state='PAUSED'", SOURCE)
 
     def test_artifact_recording_accepts_caller_owned_identity(self) -> None:

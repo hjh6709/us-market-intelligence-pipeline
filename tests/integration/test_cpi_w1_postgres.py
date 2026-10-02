@@ -2646,7 +2646,8 @@ class CpiW1PostgresTest(unittest.TestCase):
             repository.pause_claim(
                 connection,
                 first,
-                reason_code="RETRY_BUDGET_EXHAUSTED",
+                attempt_reason_code="TRANSIENT_DEPENDENCY",
+                work_reason_code="RETRY_BUDGET_EXHAUSTED",
                 actor_subject="idp:test:worker",
                 case_ref="INC-PAUSE-1",
             )
@@ -2667,6 +2668,18 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertIsNone(paused[4])
             self.assertIsNone(paused[5])
             self.assertIsNone(paused[6])
+            attempt = connection.execute(
+                """
+                SELECT state, outcome, reason_code
+                  FROM ingestion_attempts
+                 WHERE attempt_id=%s
+                """,
+                (first.attempt_id,),
+            ).fetchone()
+            self.assertEqual(
+                attempt,
+                ("TERMINAL", "FAILED", "TRANSIENT_DEPENDENCY"),
+            )
 
             self.assertIsNone(
                 self.claim_work_item(
@@ -2685,7 +2698,8 @@ class CpiW1PostgresTest(unittest.TestCase):
             pause_audit = connection.execute(
                 """
                 SELECT action_kind, actor_subject, case_ref,
-                       event_payload->>'reason_code'
+                       event_payload->>'attempt_reason_code',
+                       event_payload->>'work_reason_code'
                   FROM business_audit_events
                  WHERE work_item_id=%s
                  ORDER BY occurred_at
@@ -2698,6 +2712,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                     "INGESTION_WORK_PAUSED",
                     "idp:test:worker",
                     "INC-PAUSE-1",
+                    "TRANSIENT_DEPENDENCY",
                     "RETRY_BUDGET_EXHAUSTED",
                 )],
             )
@@ -2747,6 +2762,131 @@ class CpiW1PostgresTest(unittest.TestCase):
                 ],
             )
 
+    def test_pending_pause_creates_zero_attempts_and_resume_does_not_authorize(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            repository.pause_pending_work(
+                connection,
+                work_item_id=work_id,
+                reason_code="RELEASE_AUTHORIZATION_MISSING",
+                actor_subject="system:cpi-claim-admission",
+                case_ref="ADMISSION-PAUSE-1",
+            )
+            paused = connection.execute(
+                """
+                SELECT state, reason_code, claim_generation,
+                       claim_token, lease_until, next_claim_at
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            attempt_count = connection.execute(
+                "SELECT COUNT(*) FROM ingestion_attempts WHERE work_item_id=%s",
+                (work_id,),
+            ).fetchone()[0]
+            self.assertEqual(
+                paused,
+                (
+                    "PAUSED",
+                    "RELEASE_AUTHORIZATION_MISSING",
+                    0,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            self.assertEqual(attempt_count, 0)
+            pause_audit = connection.execute(
+                """
+                SELECT action_kind, event_payload->>'source_state',
+                       event_payload->>'work_reason_code',
+                       event_payload->>'attempt_reason_code'
+                  FROM business_audit_events
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(
+                pause_audit,
+                (
+                    "INGESTION_WORK_PAUSED",
+                    "PENDING",
+                    "RELEASE_AUTHORIZATION_MISSING",
+                    None,
+                ),
+            )
+
+            repository.resume_paused_work(
+                connection,
+                work_item_id=work_id,
+                actor_subject="idp:test:operator",
+                case_ref="ADMISSION-PAUSE-1",
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "no active exact release authorization",
+            ):
+                repository.claim_work_item(
+                    connection,
+                    execution_scope="ECONOMIC_PROMOTE",
+                    executor=TEST_EXECUTOR,
+                )
+            state = connection.execute(
+                """
+                SELECT state, claim_generation
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(state, ("PENDING", 0))
+
+    def test_approval_does_not_auto_resume_pending_pause(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_id = self.insert_work(
+                connection,
+                run_id,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key=f"CPI_RELEASE_ENVELOPE_PROMOTE:{uuid4()}",
+            )
+            repository.pause_pending_work(
+                connection,
+                work_item_id=work_id,
+                reason_code="RELEASE_AUTHORIZATION_MISSING",
+                actor_subject="system:cpi-claim-admission",
+                case_ref="ADMISSION-PAUSE-2",
+            )
+            self.authorize_release_subject(
+                connection,
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                promotion_capability_id=TEST_RELEASE_SUBJECT.promotion_capability_id,
+            )
+            state = connection.execute(
+                """
+                SELECT state, claim_generation
+                  FROM ingestion_work_items
+                 WHERE work_item_id=%s
+                """,
+                (work_id,),
+            ).fetchone()
+            self.assertEqual(state, ("PAUSED", 0))
+
     def test_stale_owner_cannot_pause_reclaimed_work(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:
@@ -2784,7 +2924,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 repository.pause_claim(
                     connection,
                     stale,
-                    reason_code="RETRY_BUDGET_EXHAUSTED",
+                    attempt_reason_code="LEASE_EXPIRED_RECLAIM",
+                    work_reason_code="RELEASE_AUTHORIZATION_REVOKED",
                     actor_subject="idp:test:worker",
                     case_ref="INC-PAUSE-2",
                 )

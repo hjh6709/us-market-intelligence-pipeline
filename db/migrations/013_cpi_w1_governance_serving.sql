@@ -709,12 +709,67 @@ BEGIN
 END;
 $promotion_deferred$;
 
+CREATE OR REPLACE FUNCTION pause_pending_cpi_ingestion_work(
+    p_work_item_id UUID,
+    p_work_reason_code TEXT,
+    p_actor_subject TEXT,
+    p_case_ref TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $pause_pending_work$
+DECLARE
+    applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
+    paused_generation INTEGER;
+BEGIN
+    IF p_work_reason_code IS NULL
+       OR p_work_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'pause reason must be canonical' USING ERRCODE = '23514';
+    END IF;
+    IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = ''
+       OR p_actor_subject <> BTRIM(p_actor_subject) THEN
+        RAISE EXCEPTION 'pause actor must be canonical' USING ERRCODE = '23514';
+    END IF;
+
+    UPDATE ingestion_work_items
+       SET state='PAUSED', outcome=NULL, reason_code=p_work_reason_code,
+           claim_token=NULL, lease_until=NULL, next_claim_at=NULL
+     WHERE work_item_id=p_work_item_id
+       AND state='PENDING'
+     RETURNING claim_generation INTO paused_generation;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'admission pause requires pending work'
+            USING ERRCODE = '40001';
+    END IF;
+
+    INSERT INTO business_audit_events (
+        audit_event_id, action_kind, actor_subject, work_item_id,
+        case_ref, event_payload, occurred_at
+    ) VALUES (
+        gen_random_uuid(), 'INGESTION_WORK_PAUSED', p_actor_subject,
+        p_work_item_id, p_case_ref,
+        jsonb_build_object(
+            'source_state', 'PENDING',
+            'claim_generation', paused_generation,
+            'work_reason_code', p_work_reason_code
+        ),
+        applied_time
+    );
+END;
+$pause_pending_work$;
+
+DROP FUNCTION IF EXISTS pause_cpi_ingestion_work(
+    UUID, UUID, INTEGER, UUID, TEXT, TEXT, TEXT
+);
+
 CREATE OR REPLACE FUNCTION pause_cpi_ingestion_work(
     p_work_item_id UUID,
     p_attempt_id UUID,
     p_claim_generation INTEGER,
     p_claim_token UUID,
-    p_reason_code TEXT,
+    p_attempt_reason_code TEXT,
+    p_work_reason_code TEXT,
     p_actor_subject TEXT,
     p_case_ref TEXT DEFAULT NULL
 )
@@ -724,8 +779,15 @@ AS $pause_work$
 DECLARE
     applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
 BEGIN
-    IF p_reason_code IS NULL OR p_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
-        RAISE EXCEPTION 'pause reason must be canonical' USING ERRCODE = '23514';
+    IF p_attempt_reason_code IS NULL
+       OR p_attempt_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'attempt pause reason must be canonical'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_work_reason_code IS NULL
+       OR p_work_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'work pause reason must be canonical'
+            USING ERRCODE = '23514';
     END IF;
     IF p_actor_subject IS NULL OR BTRIM(p_actor_subject) = ''
        OR p_actor_subject <> BTRIM(p_actor_subject) THEN
@@ -733,7 +795,7 @@ BEGIN
     END IF;
 
     UPDATE ingestion_attempts a
-       SET state='TERMINAL', outcome='FAILED', reason_code=p_reason_code,
+       SET state='TERMINAL', outcome='FAILED', reason_code=p_attempt_reason_code,
            finished_at=applied_time
       FROM ingestion_work_items w
      WHERE a.attempt_id=p_attempt_id
@@ -751,7 +813,7 @@ BEGIN
     END IF;
 
     UPDATE ingestion_work_items
-       SET state='PAUSED', outcome=NULL, reason_code=p_reason_code,
+       SET state='PAUSED', outcome=NULL, reason_code=p_work_reason_code,
            claim_token=NULL, lease_until=NULL, next_claim_at=NULL
      WHERE work_item_id=p_work_item_id
        AND state='CLAIMED'
@@ -769,8 +831,10 @@ BEGIN
         gen_random_uuid(), 'INGESTION_WORK_PAUSED', p_actor_subject,
         p_work_item_id, p_case_ref,
         jsonb_build_object(
+            'source_state', 'CLAIMED',
             'claim_generation', p_claim_generation,
-            'reason_code', p_reason_code,
+            'attempt_reason_code', p_attempt_reason_code,
+            'work_reason_code', p_work_reason_code,
             'attempt_id', p_attempt_id
         ),
         applied_time

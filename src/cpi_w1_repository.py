@@ -996,11 +996,11 @@ class CpiW1Repository:
         if work is None:
             raise StaleClaimError("claim lost before work terminalization")
 
-    def pause_claim(
+    def pause_pending_work(
         self,
         connection: Any,
-        claim: Claim,
         *,
+        work_item_id: UUID,
         reason_code: str,
         actor_subject: str,
         case_ref: str | None = None,
@@ -1010,11 +1010,35 @@ class CpiW1Repository:
         if not actor_subject or actor_subject != actor_subject.strip():
             raise ValueError("pause actor_subject must be canonical")
         with connection.transaction():
+            connection.execute(
+                "SELECT pause_pending_cpi_ingestion_work(%s, %s, %s, %s)",
+                (work_item_id, reason_code, actor_subject, case_ref),
+            )
+
+    def pause_claim(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        attempt_reason_code: str,
+        work_reason_code: str,
+        actor_subject: str,
+        case_ref: str | None = None,
+    ) -> None:
+        if _REASON_RE.fullmatch(attempt_reason_code) is None:
+            raise ValueError(
+                "pause attempt_reason_code must be canonical uppercase token"
+            )
+        if _REASON_RE.fullmatch(work_reason_code) is None:
+            raise ValueError("pause work_reason_code must be canonical uppercase token")
+        if not actor_subject or actor_subject != actor_subject.strip():
+            raise ValueError("pause actor_subject must be canonical")
+        with connection.transaction():
             self.assert_current_claim(connection, claim)
             connection.execute(
                 """
                 SELECT pause_cpi_ingestion_work(
-                    %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -1022,7 +1046,8 @@ class CpiW1Repository:
                     claim.attempt_id,
                     claim.claim_generation,
                     claim.claim_token,
-                    reason_code,
+                    attempt_reason_code,
+                    work_reason_code,
                     actor_subject,
                     case_ref,
                 ),

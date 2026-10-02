@@ -85,6 +85,14 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("attempt release authorization is not approved", self.sql)
         self.assertIn("FOREIGN KEY (release_authorization_id)", self.sql)
 
+    def test_pause_boundaries_distinguish_admission_and_owned_work(self) -> None:
+        self.assertIn("pause_pending_cpi_ingestion_work", self.sql)
+        self.assertIn("p_attempt_reason_code TEXT", self.sql)
+        self.assertIn("p_work_reason_code TEXT", self.sql)
+        self.assertIn("'source_state', 'PENDING'", self.sql)
+        self.assertIn("'attempt_reason_code', p_attempt_reason_code", self.sql)
+        self.assertIn("'work_reason_code', p_work_reason_code", self.sql)
+
     def test_revoked_release_authorization_cannot_be_reactivated(self) -> None:
         self.assertIn("revoked promotion authorization cannot be reactivated", self.sql)
         self.assertIn("promotion release control expected version mismatch", self.sql)
