@@ -4266,6 +4266,78 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertIsNotNone(after[2])
             self.assertFalse(repository.finalize_run_if_complete(connection, run_id))
 
+    def test_revoked_authorization_blocks_final_canonical_commit(self) -> None:
+        repository = CpiW1Repository()
+        promoter = CpiW1Promoter(repository)
+        fixture = Path(
+            "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
+        ).read_bytes()
+        candidate = extract_release_envelope(
+            fixture,
+            expected_reference_month=date(2026, 8, 1),
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"release:revoked-final-commit:{uuid4()}",
+                content_sha256=hashlib.sha256(fixture).hexdigest(),
+            )
+            run_id = self.insert_run(
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+            )
+            work_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                artifact_id,
+                candidate.extractor_contract_version,
+                candidate.reference_month,
+            )
+            self.insert_promotion_work(
+                connection,
+                run_id,
+                work_key,
+                artifact_id,
+            )
+            claim = self.claim_work_item(
+                repository,
+                connection,
+                execution_scope="ECONOMIC_PROMOTE",
+                work_key_prefix=(
+                    PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE.value + ":"
+                ),
+            )
+            repository.apply_promotion_release_control(
+                connection,
+                authorization_id=claim.release_authorization_id,
+                expected_control_version=1,
+                state="REVOKED",
+                reason_code="TEST_FINAL_COMMIT_REVOKE",
+                actor_subject="test:release-operator",
+                review_ref="TEST-REVOKE:final-commit",
+                review_digest=digest("test-final-commit-revoke"),
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "authorization is not currently approved",
+            ):
+                promoter.promote_release_envelope(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    candidate=candidate,
+                )
+            for table in (
+                "core_event_occurrences",
+                "event_disclosures",
+                "event_disclosure_links",
+                "event_disclosure_artifacts",
+                "disclosure_marker_assertions",
+            ):
+                count = connection.execute(
+                    f"SELECT COUNT(*) FROM {table}"
+                ).fetchone()[0]
+                self.assertEqual(count, 0, table)
+
     def test_repository_does_not_finalize_run_with_pending_work(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:

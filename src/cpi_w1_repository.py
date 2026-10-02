@@ -319,6 +319,20 @@ class CpiW1Repository:
         review_digest: str,
     ) -> UUID:
         with connection.transaction():
+            subject_row = connection.execute(
+                """
+                SELECT release_subject_digest
+                  FROM promotion_release_authorizations
+                 WHERE authorization_id=%s
+                """,
+                (authorization_id,),
+            ).fetchone()
+            if subject_row is None:
+                raise RepositoryInvariantError(
+                    "promotion authorization does not exist"
+                )
+            self.lock_cpi_domain_shared(connection)
+            self.lock_cpi_release_subject(connection, subject_row[0])
             row = connection.execute(
                 """
                 SELECT apply_promotion_release_control(
@@ -612,6 +626,28 @@ class CpiW1Repository:
         return result
 
     @staticmethod
+    def lock_cpi_domain_shared(connection: Any) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock_shared(hashtextextended(%s, 0))",
+            ("CPI_DOMAIN",),
+        )
+
+    @staticmethod
+    def lock_cpi_release_subject(
+        connection: Any,
+        release_subject_digest: str,
+    ) -> None:
+        if (
+            not isinstance(release_subject_digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", release_subject_digest) is None
+        ):
+            raise ValueError("release_subject_digest must be lowercase SHA-256")
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"CPI_RELEASE_SUBJECT:{release_subject_digest}",),
+        )
+
+    @staticmethod
     def lock_cpi_event(connection: Any, event_occurrence_id: UUID) -> None:
         connection.execute(
             "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
@@ -895,6 +931,65 @@ class CpiW1Repository:
                 "attempt authorization or executor provenance changed unexpectedly"
             )
         return run_id, input_artifact_id
+
+    def assert_current_promotion_authorization(
+        self,
+        connection: Any,
+        claim: Claim,
+    ) -> None:
+        if claim.execution_scope != "ECONOMIC_PROMOTE":
+            raise RepositoryInvariantError(
+                "final promotion authorization requires ECONOMIC_PROMOTE"
+            )
+        if (
+            claim.release_authorization_id is None
+            or claim.release_subject_digest is None
+            or claim.promotion_capability_id is None
+            or claim.extractor_contract_version is None
+        ):
+            raise RepositoryInvariantError(
+                "promotion claim is missing exact authorization identity"
+            )
+        row = connection.execute(
+            """
+            SELECT a.release_subject_digest,
+                   m.executor_source_revision,
+                   m.executor_workload_artifact_digest,
+                   m.executor_job_contract_version,
+                   c.control_decision_id,
+                   c.state
+              FROM promotion_release_authorizations a
+              JOIN promotion_release_authorization_materials m
+                ON m.authorization_material_id=a.authorization_material_id
+              JOIN LATERAL (
+                    SELECT control_decision_id, state
+                      FROM promotion_release_control_decisions
+                     WHERE authorization_id=a.authorization_id
+                     ORDER BY control_version DESC
+                     LIMIT 1
+              ) c ON TRUE
+             WHERE a.authorization_id=%s
+            """,
+            (claim.release_authorization_id,),
+        ).fetchone()
+        expected = (
+            claim.release_subject_digest,
+            claim.executor_source_revision,
+            claim.executor_workload_artifact_digest,
+            claim.executor_job_contract_version,
+        )
+        if row is None or tuple(row[:4]) != expected:
+            raise RepositoryInvariantError(
+                "final promotion authorization identity does not match claim"
+            )
+        if row[5] != "APPROVED":
+            raise RepositoryInvariantError(
+                "promotion authorization is not currently approved"
+            )
+        if row[4] != claim.release_control_decision_id:
+            raise RepositoryInvariantError(
+                "promotion authorization control changed after claim"
+            )
 
     def renew_claim(
         self,

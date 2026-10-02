@@ -91,6 +91,34 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("resolve_promotion_release_authorization", renew_body)
         self.assertIn("RELEASE_AUTHORIZATION_REVOKED", renew_body)
 
+    def test_final_commit_exposes_global_fences_and_exact_authorization_check(self) -> None:
+        self.assertIn("def lock_cpi_domain_shared", SOURCE)
+        self.assertIn("def lock_cpi_release_subject", SOURCE)
+        self.assertIn("def assert_current_promotion_authorization", SOURCE)
+        self.assertIn("pg_advisory_xact_lock_shared", SOURCE)
+        authorization_pos = SOURCE.index("def assert_current_promotion_authorization")
+        authorization_body = SOURCE[
+            authorization_pos:SOURCE.index("def renew_claim", authorization_pos)
+        ]
+        self.assertIn("promotion_release_control_decisions", authorization_body)
+        self.assertIn('row[5] != "APPROVED"', authorization_body)
+        self.assertIn("promotion_release_authorization_materials", authorization_body)
+        control_pos = SOURCE.index("def apply_promotion_release_control")
+        control_body = SOURCE[
+            control_pos:SOURCE.index(
+                "def resolve_promotion_release_authorization",
+                control_pos,
+            )
+        ]
+        self.assertLess(
+            control_body.index("lock_cpi_domain_shared"),
+            control_body.index("lock_cpi_release_subject"),
+        )
+        self.assertLess(
+            control_body.index("lock_cpi_release_subject"),
+            control_body.index("SELECT apply_promotion_release_control"),
+        )
+
     def test_pause_resume_uses_guarded_database_boundary(self) -> None:
         self.assertIn("SELECT pause_pending_cpi_ingestion_work", SOURCE)
         self.assertIn("SELECT pause_cpi_ingestion_work", SOURCE)

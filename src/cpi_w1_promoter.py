@@ -109,13 +109,9 @@ class CpiW1Promoter:
         artifact_content_sha256: str,
         extractor_contract_version: str,
     ) -> tuple[str, str]:
-        _run_id, input_artifact_id = self.repository.assert_current_claim(
-            connection,
-            claim,
-        )
         if claim.execution_scope != "ECONOMIC_PROMOTE":
             raise PromotionInvariantError("canonical promotion requires ECONOMIC_PROMOTE")
-        if input_artifact_id != artifact_id or claim.input_artifact_id != artifact_id:
+        if claim.input_artifact_id != artifact_id:
             raise PromotionInvariantError("promotion claim input artifact mismatch")
 
         row = connection.execute(
@@ -186,7 +182,20 @@ class CpiW1Promoter:
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not schedule-assertion promotion work")
 
+        event_id = _stable_uuid(
+            "event",
+            "CPI",
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             artifact_kind, _source_contract_version = self._verify_input_artifact(
                 connection,
                 claim,
@@ -216,11 +225,6 @@ class CpiW1Promoter:
                     "revised-release-dates artifact may only promote explicit cancellation"
                 )
 
-            event_id = _stable_uuid(
-                "event",
-                "CPI",
-                candidate.reference_month.isoformat(),
-            )
             connection.execute(
                 """
                 INSERT INTO core_event_occurrences (
@@ -241,8 +245,10 @@ class CpiW1Promoter:
             ).fetchone()
             if event_row is None:
                 raise PromotionInvariantError("CPI occurrence was not established")
-            event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, event_id)
+            if event_row[0] != event_id:
+                raise PromotionDeterminismError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             existing = connection.execute(
                 """
@@ -394,7 +400,20 @@ class CpiW1Promoter:
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not release-envelope promotion work")
 
+        event_id = _stable_uuid(
+            "event",
+            candidate.event_type,
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             self._verify_input_artifact(
                 connection,
                 claim,
@@ -404,11 +423,6 @@ class CpiW1Promoter:
                 extractor_contract_version=candidate.extractor_contract_version,
             )
 
-            event_id = _stable_uuid(
-                "event",
-                candidate.event_type,
-                candidate.reference_month.isoformat(),
-            )
             connection.execute(
                 """
                 INSERT INTO core_event_occurrences (
@@ -429,8 +443,10 @@ class CpiW1Promoter:
             ).fetchone()
             if event_row is None:
                 raise PromotionInvariantError("CPI event occurrence was not established")
-            event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, event_id)
+            if event_row[0] != event_id:
+                raise PromotionDeterminismError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             disclosure_key = canonical_release_disclosure_key(candidate.reference_month)
             disclosure_id = _stable_uuid("disclosure", disclosure_key)
@@ -689,7 +705,20 @@ class CpiW1Promoter:
                 "claim is not corroborating-representation promotion work"
             )
 
+        expected_event_id = _stable_uuid(
+            "event",
+            candidate.event_type,
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, expected_event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             self._verify_input_artifact(
                 connection,
                 claim,
@@ -711,8 +740,10 @@ class CpiW1Promoter:
                 raise PromotionInvariantError(
                     "corroborating representation requires existing CPI occurrence"
                 )
-            expected_event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, expected_event_id)
+            if event_row[0] != expected_event_id:
+                raise PromotionInvariantError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             rows = connection.execute(
                 """
@@ -835,7 +866,20 @@ class CpiW1Promoter:
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not correction-notice promotion work")
 
+        expected_event_id = _stable_uuid(
+            "event",
+            candidate.event_type,
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, expected_event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             self._verify_input_artifact(
                 connection,
                 claim,
@@ -856,8 +900,10 @@ class CpiW1Promoter:
                 raise PromotionInvariantError(
                     "correction notice requires existing CPI occurrence"
                 )
-            expected_event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, expected_event_id)
+            if event_row[0] != expected_event_id:
+                raise PromotionInvariantError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             rows = connection.execute(
                 """
@@ -1214,7 +1260,20 @@ class CpiW1Promoter:
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not observation-bundle promotion work")
 
+        expected_event_id = _stable_uuid(
+            "event",
+            "CPI",
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, expected_event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             self._verify_input_artifact(
                 connection,
                 claim,
@@ -1235,8 +1294,10 @@ class CpiW1Promoter:
                 raise PromotionInvariantError(
                     "observation promotion requires existing CPI occurrence"
                 )
-            expected_event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, expected_event_id)
+            if event_row[0] != expected_event_id:
+                raise PromotionInvariantError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             event_id, disclosure_id, disclosure_link_id, artifact_link_id = (
                 self._current_valid_observation_topology(
@@ -1305,7 +1366,20 @@ class CpiW1Promoter:
                 "claim is not correction-observation promotion work"
             )
 
+        expected_event_id = _stable_uuid(
+            "event",
+            "CPI",
+            candidate.reference_month.isoformat(),
+        )
         with connection.transaction():
+            self.repository.lock_cpi_domain_shared(connection)
+            self.repository.lock_cpi_release_subject(
+                connection,
+                claim.release_subject_digest,
+            )
+            self.repository.assert_current_claim(connection, claim)
+            self.repository.lock_cpi_event(connection, expected_event_id)
+            self.repository.assert_current_promotion_authorization(connection, claim)
             self._verify_input_artifact(
                 connection,
                 claim,
@@ -1326,8 +1400,10 @@ class CpiW1Promoter:
                 raise PromotionInvariantError(
                     "correction observation requires existing CPI occurrence"
                 )
-            expected_event_id = event_row[0]
-            self.repository.lock_cpi_event(connection, expected_event_id)
+            if event_row[0] != expected_event_id:
+                raise PromotionInvariantError(
+                    "stored CPI occurrence identity is not deterministic"
+                )
 
             event_id, disclosure_id, disclosure_link_id, artifact_link_id = (
                 self._current_valid_correction_topology(

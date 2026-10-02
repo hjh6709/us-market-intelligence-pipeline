@@ -107,6 +107,36 @@ class CpiW1PromoterTest(unittest.TestCase):
     def test_canonical_promotion_takes_event_fence(self) -> None:
         self.assertGreaterEqual(SOURCE.count("lock_cpi_event(connection,"), 3)
 
+    def test_all_promotions_use_global_final_commit_lock_order(self) -> None:
+        for name in (
+            "promote_schedule_assertion",
+            "promote_release_envelope",
+            "promote_corroborating_representation",
+            "promote_correction_notice",
+            "promote_observation_bundle",
+            "promote_correction_observations",
+        ):
+            with self.subTest(name=name):
+                body = method_source(name)
+                domain = body.index("lock_cpi_domain_shared")
+                release = body.index("lock_cpi_release_subject")
+                work = body.index("assert_current_claim")
+                event = body.index("lock_cpi_event")
+                authorization = body.index("assert_current_promotion_authorization")
+                self.assertLess(domain, release)
+                self.assertLess(release, work)
+                self.assertLess(work, event)
+                self.assertLess(event, authorization)
+
+    def test_schedule_event_fence_precedes_first_event_mutation(self) -> None:
+        for name in ("promote_schedule_assertion", "promote_release_envelope"):
+            with self.subTest(name=name):
+                body = method_source(name)
+                self.assertLess(
+                    body.index("lock_cpi_event"),
+                    body.index("INSERT INTO core_event_occurrences"),
+                )
+
     def test_correction_promotions_are_split_and_subset_scoped(self) -> None:
         self.assertIn("def promote_correction_notice", SOURCE)
         self.assertIn("def promote_correction_observations", SOURCE)
