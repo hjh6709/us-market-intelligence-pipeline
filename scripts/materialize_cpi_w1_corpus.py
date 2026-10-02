@@ -26,6 +26,17 @@ class CorpusMaterializationError(RuntimeError):
     pass
 
 
+def entry_requires_replay(entry: dict[str, Any]) -> bool:
+    expectations = entry.get("capability_expectations")
+    if not isinstance(expectations, list) or not expectations:
+        raise CorpusMaterializationError("capability_expectations required")
+    return any(
+        expectation.get("replay_required") is True
+        for expectation in expectations
+        if isinstance(expectation, dict)
+    )
+
+
 def _max_bytes_for_kind(
     contract: BlsCpiSourceContract,
     artifact_contract_kind: str,
@@ -173,7 +184,7 @@ def main() -> int:
     entries = load_entries(args.manifest)
     selected_ids = set(args.corpus_id)
     selected = (
-        [entry for entry in entries if entry.get("replay_required")]
+        [entry for entry in entries if entry_requires_replay(entry)]
         if args.all
         else [entry for entry in entries if entry.get("corpus_id") in selected_ids]
     )

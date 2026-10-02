@@ -26,10 +26,19 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
                     "expected_sha256": None,
                     "local_path": None,
                     "materialization_status": "REMOTE_ONLY",
-                    "replay_required": True,
-                    "expected_semantics": {"kind": "UNVERIFIED_INVENTORY"},
                     "exceptional_tags": [],
-                    "extractor_contract_version": "bls-cpi-release-html-v1",
+                    "capability_expectations": [
+                        {
+                            "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+                            "replay_required": True,
+                            "expected_semantics": {"kind": "UNVERIFIED_INVENTORY"},
+                        },
+                        {
+                            "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+                            "replay_required": True,
+                            "expected_semantics": {"kind": "UNVERIFIED_INVENTORY"},
+                        },
+                    ],
                 }
             ]
         }
@@ -81,8 +90,8 @@ class CpiW1CorpusReviewTest(unittest.TestCase):
             self.assertEqual(candidate["materialization_status"], "MATERIALIZED")
             self.assertEqual(candidate["expected_sha256"], sha)
             self.assertEqual(
-                candidate["expected_semantics"],
-                {"kind": "UNVERIFIED_INVENTORY"},
+                candidate["capability_expectations"],
+                self.manifest()["entries"][0]["capability_expectations"],
             )
             self.assertEqual(result["status"], "REVIEWED_BYTES_ONLY")
 

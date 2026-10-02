@@ -6,6 +6,7 @@ from pathlib import Path
 
 from scripts.materialize_cpi_w1_corpus import (
     CorpusMaterializationError,
+    entry_requires_replay,
     locator_for_entry,
     materialize_entry,
 )
@@ -42,8 +43,26 @@ class CpiW1CorpusMaterializationTest(unittest.TestCase):
                 "https://www.bls.gov/news.release/archives/cpi_09112026.htm"
             ),
             "materialization_status": "REMOTE_ONLY",
-            "replay_required": True,
+            "capability_expectations": [
+                {
+                    "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+                    "replay_required": True,
+                    "expected_semantics": {"kind": "UNVERIFIED_INVENTORY"},
+                },
+                {
+                    "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+                    "replay_required": True,
+                    "expected_semantics": {"kind": "UNVERIFIED_INVENTORY"},
+                },
+            ],
         }
+
+    def test_materialization_selection_is_capability_aware(self) -> None:
+        entry = self.entry()
+        self.assertTrue(entry_requires_replay(entry))
+        entry["capability_expectations"][0]["replay_required"] = False
+        entry["capability_expectations"][1]["replay_required"] = False
+        self.assertFalse(entry_requires_replay(entry))
 
     def response(self):
         return CapturedResponse(

@@ -1,5 +1,5 @@
 {
-  "schema_version": "cpi-w1-corpus-v1",
+  "schema_version": "cpi-w1-corpus-v2",
   "baseline": {
     "start_reference_month": "2022-01",
     "end_reference_month": "2026-08"
@@ -20,12 +20,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-02:release-html",
@@ -36,12 +47,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-03:release-html",
@@ -52,12 +74,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-04:release-html",
@@ -68,12 +101,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-05:release-html",
@@ -84,12 +128,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-06:release-html",
@@ -100,12 +155,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-07:release-html",
@@ -116,12 +182,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-08:release-html",
@@ -132,12 +209,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-09:release-html",
@@ -148,12 +236,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-10:release-html",
@@ -164,12 +263,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-11:release-html",
@@ -180,12 +290,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2022-12:release-html",
@@ -196,12 +317,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-01:release-html",
@@ -212,12 +344,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-02:release-html",
@@ -228,12 +371,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-03:release-html",
@@ -244,12 +398,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-04:release-html",
@@ -260,12 +425,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-05:release-html",
@@ -276,12 +452,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-06:release-html",
@@ -292,12 +479,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-07:release-html",
@@ -308,12 +506,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-08:release-html",
@@ -324,12 +533,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-09:release-html",
@@ -340,12 +560,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-10:release-html",
@@ -356,14 +587,25 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [
         "ZERO_HEADLINE_MOM"
       ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-11:release-html",
@@ -374,12 +616,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2023-12:release-html",
@@ -390,12 +643,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-01:release-html",
@@ -406,12 +670,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-02:release-html",
@@ -422,12 +697,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-03:release-html",
@@ -438,12 +724,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-04:release-html",
@@ -454,12 +751,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-05:release-html",
@@ -470,12 +778,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-06:release-html",
@@ -486,14 +805,25 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [
         "NEGATIVE_HEADLINE_MOM"
       ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-07:release-html",
@@ -504,12 +834,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-08:release-html",
@@ -520,12 +861,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-09:release-html",
@@ -536,12 +888,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-10:release-html",
@@ -552,12 +915,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-11:release-html",
@@ -568,12 +942,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2024-12:release-html",
@@ -584,12 +969,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-01:release-html",
@@ -600,14 +996,25 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [
         "JANUARY_SEASONAL_REVISION"
       ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-02:release-html",
@@ -618,12 +1025,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-03:release-html",
@@ -634,12 +1052,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-04:release-html",
@@ -650,12 +1079,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-05:release-html",
@@ -666,12 +1106,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-06:release-html",
@@ -682,12 +1133,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-07:release-html",
@@ -698,12 +1160,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-08:release-html",
@@ -714,12 +1187,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-09:release-html",
@@ -730,12 +1214,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-10:explicit-cancellation",
@@ -746,17 +1241,21 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "CANCELLATION",
-        "schedule_status": "CANCELED",
-        "release_projection": "NO_RELEASE_EXPECTED"
-      },
       "exceptional_tags": [
         "EXPLICIT_CANCELLATION",
         "2025_LAPSE_IN_APPROPRIATIONS"
       ],
-      "extractor_contract_version": "bls-cpi-revised-release-dates-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_REVISED_RELEASE_DATES",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "CANCELLATION",
+            "schedule_status": "CANCELED",
+            "release_projection": "NO_RELEASE_EXPECTED"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-11:release-html",
@@ -767,15 +1266,26 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [
         "EXPLICIT_UNAVAILABLE",
         "POST_SHUTDOWN_RECOVERY"
       ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2025-12:release-html",
@@ -786,12 +1296,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-01:release-html",
@@ -802,12 +1323,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-02:release-html",
@@ -818,12 +1350,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-03:release-html",
@@ -834,12 +1377,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-04:release-html",
@@ -850,12 +1404,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-05:release-html",
@@ -866,12 +1431,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-06:release-html",
@@ -882,12 +1458,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-07:release-html",
@@ -898,12 +1485,23 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     },
     {
       "corpus_id": "cpi:2026-08:release-html",
@@ -914,14 +1512,25 @@
       "expected_sha256": null,
       "local_path": null,
       "materialization_status": "REMOTE_ONLY",
-      "replay_required": true,
-      "expected_semantics": {
-        "kind": "UNVERIFIED_INVENTORY"
-      },
       "exceptional_tags": [
         "CURRENT_BASELINE_RELEASE"
       ],
-      "extractor_contract_version": "bls-cpi-release-html-v1"
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "UNVERIFIED_INVENTORY"
+          }
+        }
+      ]
     }
   ],
   "conformance_fixtures": [
@@ -930,21 +1539,38 @@
       "fixture_kind": "SYNTHETIC_CONFORMANCE",
       "reference_month": "2025-11",
       "artifact_contract_kind": "CPI_RELEASE_HTML",
-      "extractor_contract_version": "bls-cpi-release-html-v1",
       "local_path": "tests/fixtures/cpi_w1/html/nov_2025_explicit_unavailable.html",
       "expected_sha256": "8eda25611611096b7a90e95a05ff941d7e5040ca6166a2c7465a6783a5cafcad",
-      "expected_semantics": {
-        "kind": "CORE4",
-        "values": {
-          "CPI_HEADLINE_MOM": "EXPLICIT_UNAVAILABLE",
-          "CPI_HEADLINE_YOY": "2.7",
-          "CPI_CORE_MOM": "EXPLICIT_UNAVAILABLE",
-          "CPI_CORE_YOY": "2.6"
-        }
-      },
       "exceptional_tags": [
         "EXPLICIT_UNAVAILABLE",
         "POST_SHUTDOWN_RECOVERY"
+      ],
+      "source_contract_version": "bls-cpi-source-v1",
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "RELEASE_ENVELOPE",
+            "values": {
+              "event_type": "CPI",
+              "reference_month": "2025-11"
+            }
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "CORE4",
+            "values": {
+              "CPI_HEADLINE_MOM": "EXPLICIT_UNAVAILABLE",
+              "CPI_HEADLINE_YOY": "2.7",
+              "CPI_CORE_MOM": "EXPLICIT_UNAVAILABLE",
+              "CPI_CORE_YOY": "2.6"
+            }
+          }
+        }
       ]
     },
     {
@@ -952,20 +1578,37 @@
       "fixture_kind": "SYNTHETIC_CONFORMANCE",
       "reference_month": "2026-08",
       "artifact_contract_kind": "CPI_RELEASE_HTML",
-      "extractor_contract_version": "bls-cpi-release-html-v1",
       "local_path": "tests/fixtures/cpi_w1/html/normal_aug_2026.html",
       "expected_sha256": "a896049ee97b85827c09afcf77aba9f9cd7d68bd3f7e06bb7b157660317a8fab",
-      "expected_semantics": {
-        "kind": "CORE4",
-        "values": {
-          "CPI_HEADLINE_MOM": "0.4",
-          "CPI_HEADLINE_YOY": "3.4",
-          "CPI_CORE_MOM": "0.3",
-          "CPI_CORE_YOY": "2.4"
-        }
-      },
       "exceptional_tags": [
         "CURRENT_BASELINE_SHAPE"
+      ],
+      "source_contract_version": "bls-cpi-source-v1",
+      "capability_expectations": [
+        {
+          "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "RELEASE_ENVELOPE",
+            "values": {
+              "event_type": "CPI",
+              "reference_month": "2026-08"
+            }
+          }
+        },
+        {
+          "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+          "replay_required": true,
+          "expected_semantics": {
+            "kind": "CORE4",
+            "values": {
+              "CPI_HEADLINE_MOM": "0.4",
+              "CPI_HEADLINE_YOY": "3.4",
+              "CPI_CORE_MOM": "0.3",
+              "CPI_CORE_YOY": "2.4"
+            }
+          }
+        }
       ]
     }
   ]

@@ -11,16 +11,25 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from src.cpi_w1_release import extract_core4_from_release_html
+from src.cpi_w1_promotion_capabilities import (
+    PromotionCapability,
+    PromotionCapabilityRegistry,
+)
+from src.cpi_w1_release import (
+    extract_core4_from_release_html,
+    extract_release_envelope,
+)
 from src.cpi_w1_schedule import parse_bls_revised_release_dates_html
 
 
-_SCHEMA_VERSION = "cpi-w1-corpus-v1"
-_RELEASE_EXTRACTOR = "bls-cpi-release-html-v1"
-_CANCELLATION_EXTRACTOR = "bls-cpi-revised-release-dates-v1"
+_SCHEMA_VERSION = "cpi-w1-corpus-v2"
 _ALLOWED_MATERIALIZATION = {"MATERIALIZED", "REMOTE_ONLY"}
 _PASS_SEMANTIC = {"SEMANTIC_UNCHANGED", "EXPECTED_CHANGED"}
-_EXPECTED_DIFF_SCHEMA = "cpi-w1-expected-diffs-v1"
+_EXPECTED_DIFF_SCHEMA = "cpi-w1-expected-diffs-v2"
+_REGISTRY_PATH = Path("config/cpi_w1_promotion_capabilities.json")
+_EXPECTATION_KEYS = frozenset(
+    {"promotion_capability_id", "replay_required", "expected_semantics"}
+)
 
 
 class CorpusValidationError(ValueError):
@@ -30,6 +39,9 @@ class CorpusValidationError(ValueError):
 @dataclass(frozen=True)
 class ReplayEntryResult:
     corpus_id: str
+    promotion_capability_id: str
+    release_subject_digest: str
+    extractor_contract_version: str
     inventory_status: str
     semantic_status: str
     detail: str | None = None
@@ -37,6 +49,9 @@ class ReplayEntryResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "corpus_id": self.corpus_id,
+            "promotion_capability_id": self.promotion_capability_id,
+            "release_subject_digest": self.release_subject_digest,
+            "extractor_contract_version": self.extractor_contract_version,
             "inventory_status": self.inventory_status,
             "semantic_status": self.semantic_status,
             "detail": self.detail,
@@ -83,13 +98,22 @@ def _approved_semantic_change(
     *,
     approvals: list[dict[str, Any]],
     entry: dict[str, Any],
+    corpus_id: str | None = None,
+    promotion_capability_id: str,
+    release_subject_digest: str,
+    extractor_contract_version: str,
     expected: Any,
     actual: Any,
 ) -> bool:
+    corpus_id = corpus_id or entry.get("corpus_id") or entry.get("fixture_id")
+    if not isinstance(corpus_id, str) or not corpus_id:
+        raise CorpusValidationError("expected-diff subject id is missing")
     required = {
-        "corpus_id": entry["corpus_id"],
+        "corpus_id": corpus_id,
         "artifact_sha256": entry.get("expected_sha256"),
-        "extractor_contract_version": entry.get("extractor_contract_version"),
+        "promotion_capability_id": promotion_capability_id,
+        "release_subject_digest": release_subject_digest,
+        "extractor_contract_version": extractor_contract_version,
         "expected_semantics_sha256": _semantic_digest(expected),
         "actual_semantics_sha256": _semantic_digest(actual),
     }
@@ -109,7 +133,7 @@ def _approved_semantic_change(
                 matches.append(approval)
     if len(matches) > 1:
         raise CorpusValidationError(
-            f"duplicate expected-diff approvals for {entry['corpus_id']}"
+            f"duplicate expected-diff approvals for {corpus_id}"
         )
     return len(matches) == 1
 
@@ -121,7 +145,60 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _registry(repo_root: Path) -> PromotionCapabilityRegistry:
+    return PromotionCapabilityRegistry.from_json(repo_root / _REGISTRY_PATH)
+
+
+def _capability_expectations(
+    item: dict[str, Any],
+    registry: PromotionCapabilityRegistry,
+    *,
+    item_id: str,
+) -> tuple[tuple[PromotionCapability, dict[str, Any]], ...]:
+    expectations = item.get("capability_expectations")
+    if not isinstance(expectations, list) or not expectations:
+        raise CorpusValidationError(f"{item_id}: capability_expectations required")
+    resolved: list[tuple[PromotionCapability, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for expectation in expectations:
+        if not isinstance(expectation, dict):
+            raise CorpusValidationError(f"{item_id}: capability expectation must be an object")
+        if frozenset(expectation) != _EXPECTATION_KEYS:
+            raise CorpusValidationError(
+                f"{item_id}: capability expectation keys must be exact"
+            )
+        capability_id = expectation["promotion_capability_id"]
+        if not isinstance(capability_id, str) or capability_id in seen:
+            raise CorpusValidationError(
+                f"{item_id}: capability ids must be canonical and unique"
+            )
+        try:
+            capability = registry.require(capability_id)
+        except KeyError as exc:
+            raise CorpusValidationError(
+                f"{item_id}: unknown promotion capability {capability_id}"
+            ) from exc
+        if capability.lifecycle != "ACTIVE":
+            raise CorpusValidationError(f"{item_id}: retired capability is not replayable")
+        if capability.artifact_contract_kind != item.get("artifact_contract_kind"):
+            raise CorpusValidationError(
+                f"{item_id}: capability artifact contract mismatch"
+            )
+        if capability.source_contract_version != item.get("source_contract_version"):
+            raise CorpusValidationError(
+                f"{item_id}: capability source contract mismatch"
+            )
+        if not isinstance(expectation["replay_required"], bool):
+            raise CorpusValidationError(f"{item_id}: replay_required must be boolean")
+        if not isinstance(expectation["expected_semantics"], dict):
+            raise CorpusValidationError(f"{item_id}: expected_semantics must be an object")
+        seen.add(capability_id)
+        resolved.append((capability, expectation))
+    return tuple(resolved)
+
+
 def validate_manifest(manifest: dict[str, Any], repo_root: Path) -> None:
+    registry = _registry(repo_root)
     baseline = manifest.get("baseline") or {}
     start = baseline.get("start_reference_month")
     end = baseline.get("end_reference_month")
@@ -154,6 +231,16 @@ def validate_manifest(manifest: dict[str, Any], repo_root: Path) -> None:
             raise CorpusValidationError(f"{corpus_id}: official BLS HTTPS locator required")
         if entry.get("source_contract_version") != "bls-cpi-source-v1":
             raise CorpusValidationError(f"{corpus_id}: unexpected source contract")
+        for legacy_field in (
+            "extractor_contract_version",
+            "replay_required",
+            "expected_semantics",
+        ):
+            if legacy_field in entry:
+                raise CorpusValidationError(
+                    f"{corpus_id}: legacy artifact-wide {legacy_field} is forbidden"
+                )
+        _capability_expectations(entry, registry, item_id=corpus_id)
 
         status = entry.get("materialization_status")
         if status not in _ALLOWED_MATERIALIZATION:
@@ -213,6 +300,7 @@ def validate_conformance_fixtures(
     manifest: dict[str, Any],
     repo_root: Path,
 ) -> None:
+    registry = _registry(repo_root)
     fixtures = manifest.get("conformance_fixtures", [])
     if not isinstance(fixtures, list):
         raise CorpusValidationError("conformance_fixtures must be a list")
@@ -229,6 +317,12 @@ def validate_conformance_fixtures(
             raise CorpusValidationError(
                 f"{fixture_id}: fixture_kind must be SYNTHETIC_CONFORMANCE"
             )
+        for legacy_field in ("extractor_contract_version", "expected_semantics"):
+            if legacy_field in fixture:
+                raise CorpusValidationError(
+                    f"{fixture_id}: legacy artifact-wide {legacy_field} is forbidden"
+                )
+        _capability_expectations(fixture, registry, item_id=fixture_id)
         local_path = fixture.get("local_path")
         expected_sha256 = fixture.get("expected_sha256")
         if not isinstance(local_path, str) or not local_path:
@@ -253,43 +347,17 @@ def validate_conformance_fixtures(
 def replay_conformance_fixture(
     fixture: dict[str, Any],
     repo_root: Path,
+    capability: PromotionCapability,
+    expectation: dict[str, Any],
 ) -> ReplayEntryResult:
-    extractor = fixture.get("extractor_contract_version")
-    if extractor != _RELEASE_EXTRACTOR:
-        return ReplayEntryResult(
-            fixture["fixture_id"],
-            "SYNTHETIC_CONFORMANCE",
-            "NOT_RUN",
-            f"extractor not implemented by replay tool: {extractor}",
-        )
-    expected = fixture.get("expected_semantics") or {}
-    try:
-        actual = _actual_core4(
-            repo_root / fixture["local_path"],
-            fixture["reference_month"],
-        )
-    except Exception as exc:
-        return ReplayEntryResult(
-            fixture["fixture_id"],
-            "SYNTHETIC_CONFORMANCE",
-            "NEWLY_FAILED",
-            f"{type(exc).__name__}: {exc}",
-        )
-    if expected.get("kind") == "CORE4" and actual == expected.get("values"):
-        return ReplayEntryResult(
-            fixture["fixture_id"],
-            "SYNTHETIC_CONFORMANCE",
-            "SEMANTIC_UNCHANGED",
-        )
-    return ReplayEntryResult(
-        fixture["fixture_id"],
-        "SYNTHETIC_CONFORMANCE",
-        "UNEXPECTED_CHANGED",
-        json.dumps(
-            {"expected": expected.get("values"), "actual": actual},
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
+    return _replay_capability(
+        fixture,
+        item_id=fixture["fixture_id"],
+        inventory="SYNTHETIC_CONFORMANCE",
+        repo_root=repo_root,
+        capability=capability,
+        expectation=expectation,
+        expected_diff_approvals=[],
     )
 
 
@@ -319,104 +387,146 @@ def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
     return actual
 
 
-def replay_entry(
-    entry: dict[str, Any],
-    repo_root: Path,
-    *,
-    expected_diff_approvals: list[dict[str, Any]] | None = None,
+def _actual_release_envelope(path: Path, reference_month: str) -> dict[str, str]:
+    year, month = map(int, reference_month.split("-"))
+    candidate = extract_release_envelope(
+        path.read_bytes(),
+        expected_reference_month=date(year, month, 1),
+    )
+    return {
+        "event_type": candidate.event_type,
+        "reference_month": candidate.reference_month.strftime("%Y-%m"),
+    }
+
+
+def _result(
+    item_id: str,
+    capability: PromotionCapability,
+    inventory: str,
+    semantic_status: str,
+    detail: str | None = None,
 ) -> ReplayEntryResult:
-    status = inventory_status(entry)
-    approvals = expected_diff_approvals or []
-    if status != "MATERIALIZED_PINNED":
-        return ReplayEntryResult(entry["corpus_id"], status, "NOT_RUN")
+    return ReplayEntryResult(
+        corpus_id=item_id,
+        promotion_capability_id=capability.promotion_capability_id,
+        release_subject_digest=capability.release_subject.release_subject_digest,
+        extractor_contract_version=capability.extractor_contract_version,
+        inventory_status=inventory,
+        semantic_status=semantic_status,
+        detail=detail,
+    )
 
-    extractor = entry["extractor_contract_version"]
-    expected = entry.get("expected_semantics") or {}
-    if extractor == _CANCELLATION_EXTRACTOR:
-        year, month = map(int, entry["reference_month"].split("-"))
-        try:
-            candidate = parse_bls_revised_release_dates_html(
-                (repo_root / entry["local_path"]).read_bytes(),
-                expected_reference_month=date(year, month, 1),
-                extractor_contract_version=extractor,
-            )
-        except Exception as exc:
-            return ReplayEntryResult(
-                entry["corpus_id"],
-                status,
-                "NEWLY_FAILED",
-                f"{type(exc).__name__}: {exc}",
-            )
-        if (
-            expected.get("kind") == "CANCELLATION"
-            and candidate.schedule_status.value == expected.get("schedule_status")
-        ):
-            return ReplayEntryResult(
-                entry["corpus_id"],
-                status,
-                "SEMANTIC_UNCHANGED",
-            )
-        return ReplayEntryResult(
-            entry["corpus_id"],
-            status,
-            "UNEXPECTED_CHANGED",
-            "cancellation semantics differ from pinned expectation",
-        )
 
-    if extractor != _RELEASE_EXTRACTOR:
-        return ReplayEntryResult(
-            entry["corpus_id"],
-            "BLOCKED_NO_EXTRACTOR",
-            "NOT_RUN",
-            f"extractor not implemented by replay tool: {extractor}",
-        )
-    if expected.get("kind") != "CORE4":
-        return ReplayEntryResult(
-            entry["corpus_id"],
-            status,
+def _replay_capability(
+    item: dict[str, Any],
+    *,
+    item_id: str,
+    inventory: str,
+    repo_root: Path,
+    capability: PromotionCapability,
+    expectation: dict[str, Any],
+    expected_diff_approvals: list[dict[str, Any]],
+) -> ReplayEntryResult:
+    if inventory not in {"MATERIALIZED_PINNED", "SYNTHETIC_CONFORMANCE"}:
+        return _result(item_id, capability, inventory, "NOT_RUN")
+
+    expected = expectation["expected_semantics"]
+    if expected.get("kind") == "UNVERIFIED_INVENTORY":
+        return _result(
+            item_id,
+            capability,
+            inventory,
             "NEWLY_ACCEPTED",
-            "materialized release has no pinned CORE4 expectation",
+            "materialized artifact has no pinned capability expectation",
         )
-
     try:
-        actual = _actual_core4(
-            repo_root / entry["local_path"],
-            entry["reference_month"],
-        )
+        if capability.promotion_capability_id == "BLS_CPI_CORE4_HTML":
+            actual = _actual_core4(
+                repo_root / item["local_path"],
+                item["reference_month"],
+            )
+            expected_value = expected.get("values")
+            supported_kind = "CORE4"
+        elif capability.promotion_capability_id == "BLS_CPI_RELEASE_ENVELOPE_HTML":
+            actual = _actual_release_envelope(
+                repo_root / item["local_path"],
+                item["reference_month"],
+            )
+            expected_value = expected.get("values")
+            supported_kind = "RELEASE_ENVELOPE"
+        elif capability.promotion_capability_id == "BLS_CPI_REVISED_RELEASE_DATES":
+            year, month = map(int, item["reference_month"].split("-"))
+            candidate = parse_bls_revised_release_dates_html(
+                (repo_root / item["local_path"]).read_bytes(),
+                expected_reference_month=date(year, month, 1),
+                extractor_contract_version=capability.extractor_contract_version,
+            )
+            actual = {"schedule_status": candidate.schedule_status.value}
+            expected_value = {"schedule_status": expected.get("schedule_status")}
+            supported_kind = "CANCELLATION"
+        else:
+            return _result(
+                item_id,
+                capability,
+                "BLOCKED_NO_EXTRACTOR",
+                "NOT_RUN",
+                f"capability not implemented by replay tool: {capability.promotion_capability_id}",
+            )
     except Exception as exc:
-        return ReplayEntryResult(
-            entry["corpus_id"],
-            status,
+        return _result(
+            item_id,
+            capability,
+            inventory,
             "NEWLY_FAILED",
             f"{type(exc).__name__}: {exc}",
         )
 
-    expected_values = expected.get("values")
-    if actual == expected_values:
-        return ReplayEntryResult(
-            entry["corpus_id"],
-            status,
-            "SEMANTIC_UNCHANGED",
-        )
+    if expected.get("kind") == supported_kind and actual == expected_value:
+        return _result(item_id, capability, inventory, "SEMANTIC_UNCHANGED")
     changed_status = (
         "EXPECTED_CHANGED"
         if _approved_semantic_change(
-            approvals=approvals,
-            entry=entry,
-            expected=expected_values,
+            approvals=expected_diff_approvals,
+            entry=item,
+            corpus_id=item_id,
+            promotion_capability_id=capability.promotion_capability_id,
+            release_subject_digest=capability.release_subject.release_subject_digest,
+            extractor_contract_version=capability.extractor_contract_version,
+            expected=expected_value,
             actual=actual,
         )
         else "UNEXPECTED_CHANGED"
     )
-    return ReplayEntryResult(
-        entry["corpus_id"],
-        status,
+    return _result(
+        item_id,
+        capability,
+        inventory,
         changed_status,
         json.dumps(
-            {"expected": expected_values, "actual": actual},
+            {"expected": expected_value, "actual": actual},
             sort_keys=True,
             separators=(",", ":"),
         ),
+    )
+
+
+def replay_entry(
+    entry: dict[str, Any],
+    repo_root: Path,
+    capability: PromotionCapability,
+    expectation: dict[str, Any],
+    *,
+    expected_diff_approvals: list[dict[str, Any]] | None = None,
+) -> ReplayEntryResult:
+    status = inventory_status(entry)
+    return _replay_capability(
+        entry,
+        item_id=entry["corpus_id"],
+        inventory=status,
+        repo_root=repo_root,
+        capability=capability,
+        expectation=expectation,
+        expected_diff_approvals=expected_diff_approvals or [],
     )
 
 
@@ -428,25 +538,54 @@ def build_report(
 ) -> dict[str, Any]:
     validate_manifest(manifest, repo_root)
     validate_conformance_fixtures(manifest, repo_root)
+    registry = _registry(repo_root)
+    entry_expectations = [
+        (
+            entry,
+            capability,
+            expectation,
+        )
+        for entry in manifest["entries"]
+        for capability, expectation in _capability_expectations(
+            entry,
+            registry,
+            item_id=entry["corpus_id"],
+        )
+    ]
     results = [
         replay_entry(
             entry,
             repo_root,
+            capability,
+            expectation,
             expected_diff_approvals=expected_diff_approvals,
         )
-        for entry in manifest["entries"]
+        for entry, capability, expectation in entry_expectations
+    ]
+    conformance_expectations = [
+        (fixture, capability, expectation)
+        for fixture in manifest.get("conformance_fixtures", [])
+        for capability, expectation in _capability_expectations(
+            fixture,
+            registry,
+            item_id=fixture["fixture_id"],
+        )
     ]
     conformance_results = [
-        replay_conformance_fixture(fixture, repo_root)
-        for fixture in manifest.get("conformance_fixtures", [])
+        replay_conformance_fixture(fixture, repo_root, capability, expectation)
+        for fixture, capability, expectation in conformance_expectations
     ]
     official_corpus_ready = all(
-        (not entry.get("replay_required", False))
+        (not expectation["replay_required"])
         or (
             result.inventory_status == "MATERIALIZED_PINNED"
             and result.semantic_status in _PASS_SEMANTIC
         )
-        for entry, result in zip(manifest["entries"], results, strict=True)
+        for (_entry, _capability, expectation), result in zip(
+            entry_expectations,
+            results,
+            strict=True,
+        )
     )
     conformance_ready = all(
         result.semantic_status in _PASS_SEMANTIC
@@ -460,14 +599,15 @@ def build_report(
         "conformance_ready": conformance_ready,
         "release_gate_ready": release_gate_ready,
         "counts": {
-            "entries": len(results),
+            "entries": len(manifest["entries"]),
+            "capability_results": len(results),
             "materialized_pinned": sum(
-                result.inventory_status == "MATERIALIZED_PINNED"
-                for result in results
+                entry["materialization_status"] == "MATERIALIZED"
+                for entry in manifest["entries"]
             ),
             "remote_only": sum(
-                result.inventory_status == "REMOTE_ONLY"
-                for result in results
+                entry["materialization_status"] == "REMOTE_ONLY"
+                for entry in manifest["entries"]
             ),
             "blocked_no_extractor": sum(
                 result.inventory_status == "BLOCKED_NO_EXTRACTOR"

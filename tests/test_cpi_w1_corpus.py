@@ -33,6 +33,28 @@ class CpiW1CorpusTest(unittest.TestCase):
             },
         )
 
+    def test_release_html_inventory_has_independent_capability_expectations(self) -> None:
+        release_entries = [
+            entry
+            for entry in self.manifest["entries"]
+            if entry["artifact_contract_kind"] == "CPI_RELEASE_HTML"
+        ]
+        self.assertTrue(release_entries)
+        for entry in release_entries:
+            self.assertEqual(
+                {
+                    expectation["promotion_capability_id"]
+                    for expectation in entry["capability_expectations"]
+                },
+                {
+                    "BLS_CPI_RELEASE_ENVELOPE_HTML",
+                    "BLS_CPI_CORE4_HTML",
+                },
+            )
+            self.assertNotIn("extractor_contract_version", entry)
+            self.assertNotIn("expected_semantics", entry)
+            self.assertNotIn("replay_required", entry)
+
     def test_official_inventory_does_not_claim_synthetic_bytes(self) -> None:
         self.assertTrue(
             all(
@@ -108,19 +130,55 @@ class CpiW1CorpusTest(unittest.TestCase):
             "https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm",
         )
         self.assertEqual(
-            entry["expected_semantics"]["schedule_status"],
+            entry["capability_expectations"][0]["expected_semantics"][
+                "schedule_status"
+            ],
             "CANCELED",
         )
         self.assertEqual(entry["materialization_status"], "REMOTE_ONLY")
 
     def test_synthetic_release_html_replays_without_counting_as_official_corpus(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
-        self.assertEqual(len(report["conformance_results"]), 2)
+        self.assertEqual(len(report["conformance_results"]), 4)
         self.assertEqual(
             {item["semantic_status"] for item in report["conformance_results"]},
             {"SEMANTIC_UNCHANGED"},
         )
+        self.assertEqual(
+            {
+                item["promotion_capability_id"]
+                for item in report["conformance_results"]
+            },
+            {
+                "BLS_CPI_RELEASE_ENVELOPE_HTML",
+                "BLS_CPI_CORE4_HTML",
+            },
+        )
         self.assertEqual(report["counts"]["materialized_pinned"], 0)
+
+    def test_one_artifact_records_independent_capability_outcomes(self) -> None:
+        manifest = json.loads(json.dumps(self.manifest))
+        fixture = manifest["conformance_fixtures"][1]
+        core4 = next(
+            item
+            for item in fixture["capability_expectations"]
+            if item["promotion_capability_id"] == "BLS_CPI_CORE4_HTML"
+        )
+        core4["expected_semantics"]["values"]["CPI_HEADLINE_MOM"] = "9.9"
+
+        report = build_report(manifest, repo_root=ROOT)
+        outcomes = {
+            item["promotion_capability_id"]: item["semantic_status"]
+            for item in report["conformance_results"]
+            if item["corpus_id"] == fixture["fixture_id"]
+        }
+        self.assertEqual(
+            outcomes,
+            {
+                "BLS_CPI_RELEASE_ENVELOPE_HTML": "SEMANTIC_UNCHANGED",
+                "BLS_CPI_CORE4_HTML": "UNEXPECTED_CHANGED",
+            },
+        )
 
     def test_release_gate_fails_closed_until_full_baseline_is_materialized(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
@@ -128,7 +186,7 @@ class CpiW1CorpusTest(unittest.TestCase):
         self.assertEqual(report["counts"]["entries"], 56)
         self.assertEqual(report["counts"]["materialized_pinned"], 0)
         self.assertEqual(report["counts"]["remote_only"], 56)
-        self.assertEqual(report["counts"]["synthetic_conformance"], 2)
+        self.assertEqual(report["counts"]["synthetic_conformance"], 4)
 
     def test_release_gate_requires_conformance_as_well_as_official_corpus(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
@@ -140,13 +198,15 @@ class CpiW1CorpusTest(unittest.TestCase):
         entry = {
             "corpus_id": "cpi:test",
             "expected_sha256": "a" * 64,
-            "extractor_contract_version": "extractor-v2",
         }
+        release_subject_digest = "c" * 64
         expected = {"CPI_HEADLINE_MOM": "0.3"}
         actual = {"CPI_HEADLINE_MOM": "0.4"}
         approval = {
             "corpus_id": "cpi:test",
             "artifact_sha256": "a" * 64,
+            "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+            "release_subject_digest": release_subject_digest,
             "extractor_contract_version": "extractor-v2",
             "expected_semantics_sha256": _semantic_digest(expected),
             "actual_semantics_sha256": _semantic_digest(actual),
@@ -157,6 +217,9 @@ class CpiW1CorpusTest(unittest.TestCase):
             _approved_semantic_change(
                 approvals=[approval],
                 entry=entry,
+                promotion_capability_id="BLS_CPI_CORE4_HTML",
+                release_subject_digest=release_subject_digest,
+                extractor_contract_version="extractor-v2",
                 expected=expected,
                 actual=actual,
             )
@@ -167,6 +230,9 @@ class CpiW1CorpusTest(unittest.TestCase):
             _approved_semantic_change(
                 approvals=[approval],
                 entry=changed_artifact,
+                promotion_capability_id="BLS_CPI_CORE4_HTML",
+                release_subject_digest=release_subject_digest,
+                extractor_contract_version="extractor-v2",
                 expected=expected,
                 actual=actual,
             )
@@ -175,8 +241,22 @@ class CpiW1CorpusTest(unittest.TestCase):
             _approved_semantic_change(
                 approvals=[approval],
                 entry=entry,
+                promotion_capability_id="BLS_CPI_CORE4_HTML",
+                release_subject_digest=release_subject_digest,
+                extractor_contract_version="extractor-v2",
                 expected=expected,
                 actual={"CPI_HEADLINE_MOM": "0.5"},
+            )
+        )
+        self.assertFalse(
+            _approved_semantic_change(
+                approvals=[approval],
+                entry=entry,
+                promotion_capability_id="BLS_CPI_RELEASE_ENVELOPE_HTML",
+                release_subject_digest="d" * 64,
+                extractor_contract_version="extractor-v2",
+                expected=expected,
+                actual=actual,
             )
         )
 
