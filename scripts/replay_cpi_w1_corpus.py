@@ -42,6 +42,9 @@ class ReplayEntryResult:
     promotion_capability_id: str
     release_subject_digest: str
     extractor_contract_version: str
+    artifact_sha256: str | None
+    expected_semantics_digest: str
+    actual_semantics_digest: str | None
     inventory_status: str
     semantic_status: str
     detail: str | None = None
@@ -52,6 +55,9 @@ class ReplayEntryResult:
             "promotion_capability_id": self.promotion_capability_id,
             "release_subject_digest": self.release_subject_digest,
             "extractor_contract_version": self.extractor_contract_version,
+            "artifact_sha256": self.artifact_sha256,
+            "expected_semantics_digest": self.expected_semantics_digest,
+            "actual_semantics_digest": self.actual_semantics_digest,
             "inventory_status": self.inventory_status,
             "semantic_status": self.semantic_status,
             "detail": self.detail,
@@ -80,6 +86,26 @@ def _semantic_digest(value: Any) -> str:
         ensure_ascii=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _canonical_set_digest(values: list[dict[str, Any]]) -> str:
+    canonical_items = sorted(
+        (
+            json.dumps(
+                item,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            for item in values
+        )
+    )
+    return _semantic_digest(canonical_items)
+
+
+def expected_diff_approvals_digest(approvals: list[dict[str, Any]]) -> str:
+    return _canonical_set_digest(approvals)
 
 
 def load_expected_diffs(path: Path) -> list[dict[str, Any]]:
@@ -195,6 +221,63 @@ def _capability_expectations(
         seen.add(capability_id)
         resolved.append((capability, expectation))
     return tuple(resolved)
+
+
+def corpus_snapshot_digest(
+    manifest: dict[str, Any],
+    *,
+    repo_root: Path,
+) -> str:
+    registry = _registry(repo_root)
+    vector: list[dict[str, Any]] = []
+    for entry in manifest.get("entries", []):
+        for capability, expectation in _capability_expectations(
+            entry,
+            registry,
+            item_id=entry.get("corpus_id", "<missing>"),
+        ):
+            vector.append(
+                {
+                    "corpus_id": entry.get("corpus_id"),
+                    "reference_month": entry.get("reference_month"),
+                    "artifact_contract_kind": entry.get("artifact_contract_kind"),
+                    "source_contract_version": entry.get("source_contract_version"),
+                    "official_locator": entry.get("official_locator"),
+                    "artifact_sha256": entry.get("expected_sha256"),
+                    "materialization_status": entry.get("materialization_status"),
+                    "exceptional_tags": sorted(entry.get("exceptional_tags", [])),
+                    "promotion_capability_id": capability.promotion_capability_id,
+                    "release_subject_digest": (
+                        capability.release_subject.release_subject_digest
+                    ),
+                    "extractor_contract_version": (
+                        capability.extractor_contract_version
+                    ),
+                    "promotion_family": capability.promotion_family,
+                    "replay_required": expectation["replay_required"],
+                    "expected_semantics_digest": _semantic_digest(
+                        expectation["expected_semantics"]
+                    ),
+                }
+            )
+    return _canonical_set_digest(vector)
+
+
+def replay_result_digest(results: list[dict[str, Any]]) -> str:
+    fields = (
+        "corpus_id",
+        "promotion_capability_id",
+        "release_subject_digest",
+        "extractor_contract_version",
+        "artifact_sha256",
+        "inventory_status",
+        "semantic_status",
+        "expected_semantics_digest",
+        "actual_semantics_digest",
+    )
+    return _canonical_set_digest(
+        [{field: result.get(field) for field in fields} for result in results]
+    )
 
 
 def validate_manifest(manifest: dict[str, Any], repo_root: Path) -> None:
@@ -400,10 +483,13 @@ def _actual_release_envelope(path: Path, reference_month: str) -> dict[str, str]
 
 
 def _result(
+    item: dict[str, Any],
     item_id: str,
     capability: PromotionCapability,
     inventory: str,
     semantic_status: str,
+    expected: Any,
+    actual: Any = None,
     detail: str | None = None,
 ) -> ReplayEntryResult:
     return ReplayEntryResult(
@@ -411,6 +497,11 @@ def _result(
         promotion_capability_id=capability.promotion_capability_id,
         release_subject_digest=capability.release_subject.release_subject_digest,
         extractor_contract_version=capability.extractor_contract_version,
+        artifact_sha256=item.get("expected_sha256"),
+        expected_semantics_digest=_semantic_digest(expected),
+        actual_semantics_digest=(
+            _semantic_digest(actual) if actual is not None else None
+        ),
         inventory_status=inventory,
         semantic_status=semantic_status,
         detail=detail,
@@ -427,17 +518,19 @@ def _replay_capability(
     expectation: dict[str, Any],
     expected_diff_approvals: list[dict[str, Any]],
 ) -> ReplayEntryResult:
-    if inventory not in {"MATERIALIZED_PINNED", "SYNTHETIC_CONFORMANCE"}:
-        return _result(item_id, capability, inventory, "NOT_RUN")
-
     expected = expectation["expected_semantics"]
+    if inventory not in {"MATERIALIZED_PINNED", "SYNTHETIC_CONFORMANCE"}:
+        return _result(item, item_id, capability, inventory, "NOT_RUN", expected)
+
     if expected.get("kind") == "UNVERIFIED_INVENTORY":
         return _result(
+            item,
             item_id,
             capability,
             inventory,
             "NEWLY_ACCEPTED",
-            "materialized artifact has no pinned capability expectation",
+            expected,
+            detail="materialized artifact has no pinned capability expectation",
         )
     try:
         if capability.promotion_capability_id == "BLS_CPI_CORE4_HTML":
@@ -466,23 +559,35 @@ def _replay_capability(
             supported_kind = "CANCELLATION"
         else:
             return _result(
+                item,
                 item_id,
                 capability,
                 "BLOCKED_NO_EXTRACTOR",
                 "NOT_RUN",
-                f"capability not implemented by replay tool: {capability.promotion_capability_id}",
+                expected,
+                detail=f"capability not implemented by replay tool: {capability.promotion_capability_id}",
             )
     except Exception as exc:
         return _result(
+            item,
             item_id,
             capability,
             inventory,
             "NEWLY_FAILED",
-            f"{type(exc).__name__}: {exc}",
+            expected,
+            detail=f"{type(exc).__name__}: {exc}",
         )
 
     if expected.get("kind") == supported_kind and actual == expected_value:
-        return _result(item_id, capability, inventory, "SEMANTIC_UNCHANGED")
+        return _result(
+            item,
+            item_id,
+            capability,
+            inventory,
+            "SEMANTIC_UNCHANGED",
+            expected_value,
+            actual,
+        )
     changed_status = (
         "EXPECTED_CHANGED"
         if _approved_semantic_change(
@@ -498,11 +603,14 @@ def _replay_capability(
         else "UNEXPECTED_CHANGED"
     )
     return _result(
+        item,
         item_id,
         capability,
         inventory,
         changed_status,
-        json.dumps(
+        expected_value,
+        actual,
+        detail=json.dumps(
             {"expected": expected_value, "actual": actual},
             sort_keys=True,
             separators=(",", ":"),
@@ -591,13 +699,13 @@ def build_report(
         result.semantic_status in _PASS_SEMANTIC
         for result in conformance_results
     )
-    release_gate_ready = official_corpus_ready and conformance_ready
+    evidence_requirements_satisfied = official_corpus_ready and conformance_ready
     return {
         "schema_version": _SCHEMA_VERSION,
         "baseline": manifest["baseline"],
         "official_corpus_ready": official_corpus_ready,
         "conformance_ready": conformance_ready,
-        "release_gate_ready": release_gate_ready,
+        "evidence_requirements_satisfied": evidence_requirements_satisfied,
         "counts": {
             "entries": len(manifest["entries"]),
             "capability_results": len(results),
@@ -656,7 +764,7 @@ def main() -> int:
     )
     if args.inventory_only:
         return 0
-    return 0 if report["release_gate_ready"] else 2
+    return 0 if report["evidence_requirements_satisfied"] else 2
 
 
 if __name__ == "__main__":

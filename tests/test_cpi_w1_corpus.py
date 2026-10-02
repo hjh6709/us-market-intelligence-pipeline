@@ -7,8 +7,11 @@ from scripts.replay_cpi_w1_corpus import (
     _approved_semantic_change,
     _semantic_digest,
     build_report,
+    corpus_snapshot_digest,
+    expected_diff_approvals_digest,
     load_expected_diffs,
     load_manifest,
+    replay_result_digest,
     validate_conformance_fixtures,
     validate_manifest,
 )
@@ -180,19 +183,55 @@ class CpiW1CorpusTest(unittest.TestCase):
             },
         )
 
-    def test_release_gate_fails_closed_until_full_baseline_is_materialized(self) -> None:
+    def test_evidence_digests_are_semantic_and_order_independent(self) -> None:
+        manifest = json.loads(json.dumps(self.manifest))
+        original = corpus_snapshot_digest(manifest, repo_root=ROOT)
+        manifest["entries"].reverse()
+        for entry in manifest["entries"]:
+            entry["capability_expectations"].reverse()
+            entry["local_path"] = None
+        self.assertEqual(original, corpus_snapshot_digest(manifest, repo_root=ROOT))
+
+        approvals = [
+            {
+                "corpus_id": "cpi:test",
+                "artifact_sha256": "1" * 64,
+                "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+                "release_subject_digest": "2" * 64,
+                "extractor_contract_version": "bls-cpi-core4-html-v1",
+                "expected_semantics_sha256": "3" * 64,
+                "actual_semantics_sha256": "4" * 64,
+                "reason_code": "EXPECTED_CHANGE",
+                "review_ref": "REVIEW-1",
+            }
+        ]
+        self.assertEqual(
+            expected_diff_approvals_digest(approvals),
+            expected_diff_approvals_digest(list(reversed(approvals))),
+        )
+
         report = build_report(self.manifest, repo_root=ROOT)
-        self.assertFalse(report["release_gate_ready"])
+        self.assertEqual(
+            replay_result_digest(report["results"]),
+            replay_result_digest(list(reversed(report["results"]))),
+        )
+        for result in report["conformance_results"]:
+            self.assertIn("expected_semantics_digest", result)
+            self.assertIn("actual_semantics_digest", result)
+
+    def test_evidence_requirements_fail_until_full_baseline_is_materialized(self) -> None:
+        report = build_report(self.manifest, repo_root=ROOT)
+        self.assertFalse(report["evidence_requirements_satisfied"])
         self.assertEqual(report["counts"]["entries"], 56)
         self.assertEqual(report["counts"]["materialized_pinned"], 0)
         self.assertEqual(report["counts"]["remote_only"], 56)
         self.assertEqual(report["counts"]["synthetic_conformance"], 4)
 
-    def test_release_gate_requires_conformance_as_well_as_official_corpus(self) -> None:
+    def test_evidence_requirements_include_conformance_and_official_corpus(self) -> None:
         report = build_report(self.manifest, repo_root=ROOT)
         self.assertTrue(report["conformance_ready"])
         self.assertFalse(report["official_corpus_ready"])
-        self.assertFalse(report["release_gate_ready"])
+        self.assertFalse(report["evidence_requirements_satisfied"])
 
     def test_expected_change_approval_is_bound_to_exact_artifact_extractor_and_semantics(self) -> None:
         entry = {

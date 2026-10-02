@@ -1,6 +1,23 @@
 import unittest
+from pathlib import Path
 
-from src.cpi_w1_evidence_snapshot import PromotionEvidenceSnapshotV1
+from scripts.replay_cpi_w1_corpus import (
+    build_report,
+    corpus_snapshot_digest,
+    expected_diff_approvals_digest,
+    load_expected_diffs,
+    load_manifest,
+    replay_result_digest,
+)
+from src.cpi_w1_evidence_snapshot import (
+    PromotionEvidenceSnapshotRegistry,
+    PromotionEvidenceSnapshotV1,
+    tested_source_revision_digest,
+)
+from src.cpi_w1_promotion_capabilities import PromotionCapabilityRegistry
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 VALID = {
@@ -49,6 +66,56 @@ class PromotionEvidenceSnapshotV1Test(unittest.TestCase):
         with self.assertRaises(ValueError):
             PromotionEvidenceSnapshotV1(
                 **dict(VALID, tested_workload_artifact_digest="not-a-digest")
+            )
+
+    def test_checked_in_snapshots_reproduce_exact_capability_evidence(self) -> None:
+        manifest = load_manifest(ROOT / "tests/fixtures/cpi_w1/corpus.json")
+        approvals = load_expected_diffs(
+            ROOT / "tests/fixtures/cpi_w1/expected-diffs.json"
+        )
+        report = build_report(
+            manifest,
+            repo_root=ROOT,
+            expected_diff_approvals=approvals,
+        )
+        capabilities = PromotionCapabilityRegistry.from_json(
+            ROOT / "config/cpi_w1_promotion_capabilities.json"
+        )
+        snapshots = PromotionEvidenceSnapshotRegistry.from_json(
+            ROOT / "config/cpi_w1_evidence_snapshots.json"
+        )
+
+        self.assertEqual(
+            set(snapshots.by_capability),
+            {item.promotion_capability_id for item in capabilities.active()},
+        )
+        for capability in capabilities.active():
+            snapshot = snapshots.require(capability.promotion_capability_id)
+            result_vector = [
+                item
+                for item in report["results"] + report["conformance_results"]
+                if item["promotion_capability_id"]
+                == capability.promotion_capability_id
+            ]
+            self.assertEqual(
+                snapshot.release_subject_digest,
+                capability.release_subject.release_subject_digest,
+            )
+            self.assertEqual(
+                snapshot.corpus_snapshot_digest,
+                corpus_snapshot_digest(manifest, repo_root=ROOT),
+            )
+            self.assertEqual(
+                snapshot.expected_diff_approvals_digest,
+                expected_diff_approvals_digest(approvals),
+            )
+            self.assertEqual(
+                snapshot.replay_result_digest,
+                replay_result_digest(result_vector),
+            )
+            self.assertEqual(
+                snapshot.tested_source_revision,
+                tested_source_revision_digest(ROOT),
             )
 
 

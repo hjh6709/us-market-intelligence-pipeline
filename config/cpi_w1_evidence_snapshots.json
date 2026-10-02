@@ -1,0 +1,113 @@
+{
+  "schema_version": "cpi-w1-evidence-snapshot-registry-v1",
+  "snapshots": [
+    {
+      "promotion_capability_id": "BLS_CPI_SCHEDULE_HTML",
+      "release_subject_digest": "ef694a2f208bdf98db0f656a81cef83dfdd394c51184d58cda81abd1f05c879c",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "8a1a6407db794dd52f53d2830901e4495db13d2aeb3f07dcda4a5dc1075a2424"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_GLOBAL_ICS_SCHEDULE",
+      "release_subject_digest": "a178dde883fc07ada6682bd99e2e0dd7428e1de1308af4e2872e408761537abc",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "0dc00644dce339af2b0bb3cb3fcfaff2d7f3523d261c7960929e872237f899d9"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_REVISED_RELEASE_DATES",
+      "release_subject_digest": "0d49979142dc9ae5f4e35f2446ebf00d9c4e0e775b037ab7a37e1dd77872e432",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "3f96d7f771bb448e0c713f6b8a9ae292759114dfa5939bd61520ac4b9d71f576",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "fcf9934d76bed7ea08dc097ba619739c3dd0ae6e1e6e340bde814449327cb488"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+      "release_subject_digest": "3fe048ad6168e1a5bf2b3211bb6b0d045df3b35ff7fd5c280af6733d60504b9f",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "9f8745dac0a7018047fc785fa3ac4f37f2940686858c8d4a8598d7481234e2e0",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "c429f1b7e7d5b76d93c5f972fbbdad77f47113ef156ebaff04e0302c7fd55900"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+      "release_subject_digest": "9be6522e1b2db41e0745c687799f44446b7f375a578b057b94a09c218a28dfe7",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "7c5e5592a5cb6b5136a7208ec9c9a330070c7c31752cfff4ff7e7abe8b849844",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "d207e319c8c106a929eed34f18610be9805c615b925ba1105a74e9a0a265836f"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_TABLE1_REPRESENTATION_XLSX",
+      "release_subject_digest": "967e574d1a6eb27b16e46e24e14024f42d53155ecce50cedb0de63757ef15c77",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "4802a708e8874b6d6dbcb7f83d2ab4fe1d06217611bd85cd28041c9dbe77520b"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_XLSX",
+      "release_subject_digest": "031457a8de495edbf10a01485479ead089d2196e58a336cbad4ecbac49b90263",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "286021acc4cc4ae1cb6564bccddf46560543ceb8d1e7ee09e1699c3f3b3f065d"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTION_NOTICE_HTML",
+      "release_subject_digest": "2c4fc07a54389e83caffe9660698d0c11848c93a0def0085dc535979628b9804",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "8165f14ebed69d27c0a4ae2b4ba684010ef735c0239cddb4f288aa6b09f70fbf"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTED_OBSERVATIONS_HTML",
+      "release_subject_digest": "f39cae4fea4654a53a6b571d787636ada26f990dfebc27bfea5959ed3939458d",
+      "corpus_snapshot_digest": "87c2944ce33166b503d4beb0548958c4d683f8699c85c991770555d7a1308383",
+      "expected_diff_approvals_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "replay_result_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "tested_job_contract_version": "cpi-w1-promoter-v1",
+      "tested_source_revision": "92cbbf06358e3949b1259ded850e898950e8acc13b28a1c8b715d4ac53be815b",
+      "tested_workload_artifact_digest": null,
+      "evidence_policy_version": "cpi-w1-evidence-v1",
+      "evidence_snapshot_digest": "1b31397398603836fa3d5260fa348fdbeee50e65ac9f47e56dce48a8993719d2"
+    }
+  ]
+}
