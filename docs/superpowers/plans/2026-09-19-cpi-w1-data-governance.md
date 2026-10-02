@@ -1606,3 +1606,107 @@ git status --short
 
 Expected: empty output.
 
+---
+
+## Accepted post-PR red-team delta execution plan
+
+The preceding task checklist records the implementation path that produced PR #39's
+current foundation. Its checkbox state is historical progress, not proof that the
+accepted amendment in design section 39 is complete. The phases below are the only
+remaining execution order. Each behavioral phase uses RED -> minimum implementation
+-> GREEN -> focused regression -> diff self-review -> commit. No Product API, UI,
+billing, production cloud IAM, notification, or unrelated platform work belongs here.
+
+### Accepted Delta Phase 1: Migration verification harness
+
+Freeze SHA-256 hashes for migrations 001-009 and add a repeatable PostgreSQL harness
+that compares fresh application with a preserved-001-009 upgrade path. Compare W1
+objects, constraints, functions, reference rows, and representative behavior while
+excluding intentionally generated timestamps and sequence values.
+
+### Accepted Delta Phase 2: ReleaseSubjectV1
+
+Add the exact six-field subject value object, strict validation, canonical JSON, and
+lowercase SHA-256 vectors. Prove that excluded event/evidence/runtime fields cannot
+enter the identity and that no normalization changes input material.
+
+### Accepted Delta Phase 3: Capability registry
+
+Add migration-owned capability rows and compatibility constraints separating
+capability, extractor contract, artifact/source contract, and promotion family.
+Retain current family behavior while removing inferred identity coupling.
+
+### Accepted Delta Phase 4: Structured work identity
+
+Replace semantic dependence on an opaque `work_key` with structured release-subject
+and input-artifact references. Preserve idempotent legacy reconciliation without
+creating duplicate automatic-promotion business identities.
+
+### Accepted Delta Phase 5: Capability-aware corpus and replay
+
+Allow one immutable artifact to have independent conformance outcomes for multiple
+capabilities. Update corpus materialization, review, expected-diff, and replay
+fixtures without treating an extractor as the gate subject.
+
+### Accepted Delta Phase 6: Immutable evidence snapshot
+
+Persist the exact reviewed corpus/evaluation inputs and their semantic digest.
+Authorization must bind this snapshot rather than mutable current corpus state.
+
+### Accepted Delta Phase 7: Capability gate
+
+Replace extractor-wide readiness with capability-and-subject decisions. Preserve
+fail-closed scheduling and durable deferral evidence for every expected promotion
+family.
+
+### Accepted Delta Phase 8: Authorization and runtime control
+
+Create immutable approved authorization identities and append-only per-authorization
+runtime-control decisions. Support multiple simultaneously approved authorizations;
+never reactivate a revoked identity.
+
+### Accepted Delta Phase 9: Attempt authorization and executor provenance
+
+Bind each attempt to exactly one authorization and retain executor, claim generation,
+and control-decision provenance. Reject unbound and mismatched attempts.
+
+### Accepted Delta Phase 10: PAUSED correction
+
+Implement and test both `PENDING -> PAUSED` with zero attempts and
+`CLAIMED -> PAUSED` with owned-attempt terminalization. Require an explicit audited
+resume; approval must not auto-resume.
+
+### Accepted Delta Phase 11: Authorization-aware claim and reclaim
+
+Recheck authorization and effective runtime control during claim, reclaim, and
+heartbeat. A stale/revoked authorization cannot acquire or retain executable work.
+
+### Accepted Delta Phase 12: Final commit fencing and global lock order
+
+Enforce `DOMAIN -> RELEASE_SUBJECT -> WORK -> EVENT`, acquire the event fence before
+the first event mutation, and recheck lease, generation, authorization, control,
+subject compatibility, and artifact identity in the canonical-write transaction.
+
+### Accepted Delta Phase 13: Capability-aware orchestration
+
+Schedule all eligible promotion capabilities for an artifact independently, converge
+duplicate collector delivery, retain per-capability deferral, and prevent backfill or
+replay from creating live customer side effects.
+
+### Accepted Delta Phase 14: Domain recovery
+
+Add the domain recovery mutation journal and immutable recovery snapshot required by
+re-enable. Prove that containment changes serving/runtime policy without rewriting
+evidence validity.
+
+### Accepted Delta Phase 15: Full verification
+
+Run Python unit/regression, Node UI regression, PostgreSQL constraint/integration,
+fresh-versus-upgrade migration, corpus replay, duplicate-delivery, stale-worker,
+authorization-revocation, lock-order, and legacy FastAPI compatibility verification.
+
+### Accepted Delta Phase 16: Final evidence package
+
+Produce the Final evidence package with exact HEAD, commands, outputs, migration
+hashes, capability/authorization vectors, known limitations, scope review, and a
+direct YES/NO semantic completion assessment. Do not claim launch readiness.

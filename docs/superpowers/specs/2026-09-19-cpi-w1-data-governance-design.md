@@ -1679,3 +1679,119 @@ Point-in-time reconstruction is based on what the system had accepted and consid
 The public product consumes governed projections; it does not redefine financial truth.
 
 Complexity is introduced only where an observed W1 failure mode requires it. Generic event-sourcing frameworks, global workflow buses, LLM-based extraction, automatic latest-wins correction, and microservice decomposition are explicitly avoided.
+
+## 39. Accepted post-PR red-team amendment
+
+This section is the accepted semantic amendment for the final CPI W1 foundation
+pass. Where an earlier section describes an extractor-wide release gate, embeds
+business identity in `work_key`, permits only one PAUSED transition, or relies on a
+text-only domain re-enable reference, this section supersedes that narrower
+description. It does not expand the product scope.
+
+The governing distinction is:
+
+> Capability != extractor != promotion family.
+
+A capability is the review and authorization boundary. An extractor is versioned
+code that may implement one or more capabilities. A promotion family is the
+transactional canonical-write behavior. None of these identifiers may be inferred
+from another merely because the current implementation maps them one-to-one.
+
+### 39.1 ReleaseSubjectV1
+
+`ReleaseSubjectV1` is the stable authorization and release-gate subject. Its schema
+marker is `cpi-w1-release-subject-v1`, and its complete semantic tuple is exactly:
+
+1. `source_code`
+2. `artifact_contract_kind`
+3. `source_contract_version`
+4. `promotion_capability_id`
+5. `extractor_contract_version`
+6. `promotion_family`
+
+No field may be missing, extra, null, whitespace-normalized, or case-normalized.
+Serialization is sorted-key compact JSON encoded as UTF-8 with `ensure_ascii=false`
+and no NaN values. The subject digest is lowercase SHA-256 of those exact bytes.
+
+The reference month is excluded from this identity; artifact IDs, artifact hashes,
+locators, URLs, actors, timestamps, review evidence, gate state, runtime-control
+state, and work lifecycle state are also excluded. Those values belong to evidence,
+authorization, execution, or lifecycle records rather than to the release subject.
+
+### 39.2 Capability registry and evidence snapshot
+
+Every `promotion_capability_id` is a migration-owned registry value with an explicit
+artifact/source/extractor/promotion-family compatibility contract. Corpus review is
+capability-aware: one artifact may be evaluated by several capabilities without
+collapsing their outcomes into one extractor-wide decision.
+
+A release decision binds an immutable semantic evidence snapshot and digest. The
+snapshot identifies the reviewed corpus entries, their immutable artifact hashes,
+the candidate extractor contract, capability, expected semantic digests, actual
+semantic digests, and scoped expected-diff approvals. Recomputing mutable corpus
+state at claim or commit time is not a substitute for this snapshot.
+
+### 39.3 Authorization and runtime control
+
+An approved release decision creates an immutable authorization identity for one
+`ReleaseSubjectV1` and one accepted evidence snapshot. There may be multiple simultaneously APPROVED
+authorizations for a subject. Each execution attempt binds
+exactly one authorization; it never binds an ambiguous set or a mutable "current"
+approval.
+
+Runtime control is an append-only decision stream scoped to an authorization.
+Revocation is not erased and a revoked authorization identity is never reactivated.
+A later approval creates a new authorization identity. Approval alone does not
+resume PAUSED work.
+
+Claim, reclaim, heartbeat, and final canonical commit all verify the attempt's bound
+authorization and its effective runtime control. A stale, revoked, mismatched, or
+unbound worker cannot write canonical evidence even if its lease has not yet expired.
+Each attempt preserves the authorization ID, executor identity, claim generation,
+and relevant runtime-control decision as immutable provenance.
+
+### 39.4 PAUSED state paths
+
+PAUSED is an operational containment state, not a knowledge result. Both paths are
+required:
+
+- `PENDING -> PAUSED`: no execution attempt is created or terminalized;
+- `CLAIMED -> PAUSED`: the owned attempt is terminalized and its authorization,
+  executor, and reason provenance are retained.
+
+Resume is a separate append-only operator action. Neither capability approval nor a
+runtime-control change silently resumes work.
+
+### 39.5 Fencing and global lock order
+
+Transactions that span these scopes acquire locks in the single global order:
+
+`DOMAIN -> RELEASE_SUBJECT -> WORK -> EVENT`
+
+The event fence must be acquired before the first event-scoped mutation, including
+event creation, disclosure topology, marker insertion, observation insertion, or
+governance-controlled serving mutation. Final commit rechecks lease ownership,
+claim generation, authorization, runtime control, release-subject compatibility,
+and input-artifact identity under the same transaction.
+
+### 39.6 Domain containment and recovery evidence
+
+Domain re-enable is not justified by an opaque text reference alone. Containment
+creates an append-only domain recovery mutation journal. Re-enable binds an immutable domain recovery snapshot
+that proves the reviewed affected subjects, work items,
+attempts, artifacts, canonical mutations, and required reconciliation outcomes.
+Emergency WITHHELD still changes serving policy only; it does not rewrite evidence
+validity or interpretation history.
+
+### 39.7 Compatibility and completion boundary
+
+New structured subject and authorization columns are additive. Legacy `pipeline_*`
+semantics remain separate from new `ingestion_*` semantics, and legacy FastAPI
+serving must continue to operate. Transitional compatibility code may read an old
+automatic-promotion identity only long enough to migrate or reconcile it; it must
+not create a second canonical business identity.
+
+Completion requires both migration paths: a fresh database applying all migrations
+and an upgrade database preserving the exact 001-009 migration hashes before
+applying later migrations. CI green, a checked box, or an architecture diagram alone
+does not establish foundation completion.

@@ -1,7 +1,7 @@
 # Current implementation versus historical target
 
-Status: `STATUS_LEDGER` only. This page records progress and gaps at baseline
-`63633a50c85c88e507be458067ecf6706220f813`; it is not semantic authority and
+Status: `STATUS_LEDGER` only. This page records progress and gaps at inspected PR #39
+baseline `b24eb6436494d0081a35b4098d222f0c20fd7ed3`; it is not semantic authority and
 cannot override current executable behavior or the CPI W1 canonical target. See
 [the authority index](../architecture/AUTHORITY.md).
 
@@ -102,3 +102,47 @@ evidence.
 A green CI run proves only the tested repository contract at that commit. It does not
 by itself prove deployment, source availability, legal approval, operational
 readiness, or customer-facing launch readiness.
+
+## Accepted CPI W1 foundation delta status
+
+Overall status at the inspected baseline: `ACCEPTANCE_INCOMPLETE`.
+
+The PR contains a substantial working CPI W1 foundation, but the accepted post-PR
+red-team amendment is not yet implemented. The following inventory separates code
+that should remain from behavior that must change and foundation evidence that must
+be added. It is a planning/status statement only; the canonical semantics live in
+the CPI W1 design specification.
+
+### KEEP
+
+- immutable source artifacts, assertion history, and forensic provenance;
+- reference-month CPI event identity and explicit disclosure topology;
+- Decimal/NUMERIC canonical observations and deterministic material identity;
+- current-source and SYSTEM_KNOWN_PIT reconstruction separation;
+- append-only interpretation governance and serving-control overlay;
+- lease/claim-generation fencing and legacy serving coexistence;
+- the additive 010-013 foundation as historical migration evidence.
+
+### AMEND
+
+- replace extractor-wide release gating with capability-scoped release subjects;
+- replace opaque `work_key` semantic identity with structured columns;
+- make corpus review/replay support several capabilities for one artifact;
+- implement both zero-attempt and claimed-attempt PAUSED paths;
+- bind claim/reclaim/final commit to immutable authorization and runtime control;
+- acquire the event fence before every first event-scoped mutation;
+- replace text-only domain re-enable evidence with structured recovery evidence.
+
+### ADD
+
+- strict `ReleaseSubjectV1` and migration-owned capability registry;
+- immutable semantic evidence snapshots and authorization identities;
+- append-only per-authorization runtime control and attempt executor provenance;
+- one global lock order: `DOMAIN -> RELEASE_SUBJECT -> WORK -> EVENT`;
+- domain recovery mutation journal and immutable recovery snapshot;
+- 001-009 migration hash manifest plus fresh-versus-upgrade equivalence harness;
+- final verification and evidence package tied to the exact tested HEAD.
+
+Until every accepted delta phase is implemented and verified, PR #39 must not be
+described as `FOUNDATION_VERIFIED` for the accepted CPI W1 delta, merge-ready, production
+ready, or customer-launch ready.
