@@ -74,6 +74,14 @@ jobs:
           .venv/bin/python -m unittest
           tests.integration.test_research_identity tests.integration.test_pipeline_detail -v
 
+      - name: Verify immutable migrations and isolated fresh-upgrade equivalence
+        env:
+          DATABASE_URL: postgresql://market:market@localhost:55432/market
+          RUN_POSTGRES_INTEGRATION: "1"
+        run: >-
+          .venv/bin/python -m unittest
+          tests.test_cpi_w1_migration_verification -v
+
       - name: Run PostgreSQL integration tests
         env:
           DATABASE_URL: postgresql://market:market@localhost:55432/market
