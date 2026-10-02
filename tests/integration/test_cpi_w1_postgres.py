@@ -9,6 +9,10 @@ from uuid import uuid4
 
 import psycopg
 
+from src.cpi_w1_authorization import (
+    ExecutorProvenanceV1,
+    PromotionAuthorizationMaterialV1,
+)
 from src.cpi_w1_contracts import (
     KnowledgeMode,
     ObservationMaterial,
@@ -38,6 +42,7 @@ from src.cpi_w1_release import (
 )
 from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
 from src.cpi_w1_release_subject import ReleaseSubjectV1
+from src.cpi_w1_release_gate import CapabilityGateDecision
 from src.cpi_w1_schedule import (
     parse_bls_revised_release_dates_html,
     parse_cpi_schedule_html,
@@ -92,7 +97,8 @@ class CpiW1PostgresTest(unittest.TestCase):
         with self.connection() as connection:
             connection.execute(
                 """
-                TRUNCATE interpretation_subjects, source_artifacts,
+                TRUNCATE promotion_release_evidence_snapshots,
+                         interpretation_subjects, source_artifacts,
                          ingestion_attempts, ingestion_work_items, ingestion_runs
                 CASCADE
                 """
@@ -4840,6 +4846,158 @@ class CpiW1PostgresTest(unittest.TestCase):
                     (uuid4(), work_id),
                 )
 
+    def test_release_authorization_control_is_exact_append_only_and_revocable(self) -> None:
+        snapshot = PromotionEvidenceSnapshotV1(
+            release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
+            corpus_snapshot_digest=digest("auth-corpus"),
+            expected_diff_approvals_digest=digest("auth-diffs"),
+            replay_result_digest=digest("auth-replay"),
+            tested_job_contract_version="cpi-w1-promoter-v1",
+            tested_source_revision=digest("auth-tested-source"),
+            tested_workload_artifact_digest=None,
+            evidence_policy_version="cpi-w1-evidence-v1",
+        )
+        gate = CapabilityGateDecision(
+            promotion_capability_id="BLS_CPI_CORE4_HTML",
+            release_subject_digest=snapshot.release_subject_digest,
+            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
+            gate_policy_version="cpi-w1-gate-v2",
+            decision="ELIGIBLE",
+            reason_code="REVIEWED_ELIGIBLE",
+            review_ref="GATE-REVIEW-1",
+            review_digest=digest("gate-review"),
+            gate_decision_digest=digest("gate-decision"),
+        )
+        executor = ExecutorProvenanceV1(
+            source_revision=digest("executor-source"),
+            workload_artifact_digest=digest("executor-workload"),
+            job_contract_version="cpi-w1-promoter-v1",
+        )
+        material = PromotionAuthorizationMaterialV1.from_review(
+            evidence=snapshot,
+            gate_decision=gate,
+            executor=executor,
+            review_ref="AUTH-REVIEW-1",
+            review_digest=digest("auth-review"),
+        )
+
+        with self.connection() as connection:
+            repository = CpiW1Repository()
+            snapshot_id = repository.create_promotion_evidence_snapshot(
+                connection,
+                snapshot=snapshot,
+                created_by_subject="worker:evidence-reviewer",
+            )
+            material_id = repository.create_promotion_authorization_material(
+                connection,
+                evidence_snapshot_id=snapshot_id,
+                material=material,
+                created_by_subject="worker:authorization-reviewer",
+            )
+            authorization_id = repository.create_promotion_authorization(
+                connection,
+                authorization_material_id=material_id,
+                release_subject_digest=material.release_subject_digest,
+                grant_reason_code="REVIEW_APPROVED",
+                created_by_subject="worker:grant-operator",
+            )
+            resolve_sql = (
+                "SELECT resolve_promotion_release_authorization(%s, %s, %s, %s)"
+            )
+            resolve_args = (
+                material.release_subject_digest,
+                executor.source_revision,
+                executor.workload_artifact_digest,
+                executor.job_contract_version,
+            )
+            self.assertIsNone(
+                repository.resolve_promotion_release_authorization(
+                    connection,
+                    release_subject_digest=material.release_subject_digest,
+                    executor=executor,
+                )
+            )
+            repository.apply_promotion_release_control(
+                connection,
+                authorization_id=authorization_id,
+                expected_control_version=0,
+                state="APPROVED",
+                reason_code="INITIAL_APPROVAL",
+                actor_subject="worker:grant-operator",
+                review_ref="CONTROL-REVIEW-1",
+                review_digest=digest("control-review-1"),
+            )
+            self.assertEqual(
+                connection.execute(resolve_sql, resolve_args).fetchone()[0],
+                authorization_id,
+            )
+            connection.execute(
+                "SELECT apply_promotion_release_control(%s, 1, 'REVOKED', %s, %s, %s, %s)",
+                (
+                    authorization_id,
+                    "OPERATIONAL_REVOKE",
+                    "worker:grant-operator",
+                    "CONTROL-REVIEW-2",
+                    digest("control-review-2"),
+                ),
+            )
+            self.assertIsNone(
+                connection.execute(resolve_sql, resolve_args).fetchone()[0]
+            )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "SELECT apply_promotion_release_control(%s, 2, 'APPROVED', %s, %s, %s, %s)",
+                    (
+                        authorization_id,
+                        "REAPPROVE",
+                        "worker:grant-operator",
+                        "CONTROL-REVIEW-3",
+                        digest("control-review-3"),
+                    ),
+                )
+            with self.assertRaises(psycopg.errors.ObjectNotInPrerequisiteState):
+                connection.execute(
+                    "UPDATE promotion_release_authorization_materials SET review_ref='CHANGED' WHERE authorization_material_id=%s",
+                    (material_id,),
+                )
+
+            replacement_ids = []
+            for index in range(2):
+                replacement_id = uuid4()
+                replacement_ids.append(replacement_id)
+                connection.execute(
+                    """
+                    INSERT INTO promotion_release_authorizations (
+                        authorization_id, authorization_material_id,
+                        release_subject_digest, grant_reason_code,
+                        created_by_subject
+                    ) VALUES (%s, %s, %s, 'REVIEW_APPROVED', %s)
+                    """,
+                    (
+                        replacement_id,
+                        material_id,
+                        material.release_subject_digest,
+                        f"worker:replacement-{index}",
+                    ),
+                )
+                connection.execute(
+                    "SELECT apply_promotion_release_control(%s, 0, 'APPROVED', %s, %s, %s, %s)",
+                    (
+                        replacement_id,
+                        "INITIAL_APPROVAL",
+                        f"worker:replacement-{index}",
+                        f"CONTROL-REVIEW-{index + 4}",
+                        digest(f"control-review-{index + 4}"),
+                    ),
+                )
+                if index == 0:
+                    self.assertEqual(
+                        connection.execute(resolve_sql, resolve_args).fetchone()[0],
+                        replacement_id,
+                    )
+
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(resolve_sql, resolve_args)
 
 if __name__ == "__main__":
     unittest.main()

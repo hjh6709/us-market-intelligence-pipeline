@@ -8,6 +8,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from src.cpi_w1_authorization import (
+    ExecutorProvenanceV1,
+    PromotionAuthorizationMaterialV1,
+)
 from src.cpi_w1_evidence_snapshot import PromotionEvidenceSnapshotV1
 from src.cpi_w1_release_subject import ReleaseSubjectV1
 
@@ -186,6 +190,165 @@ class CpiW1Repository:
                     "same evidence snapshot digest changed immutable material"
                 )
             return row[0]
+
+    def create_promotion_authorization_material(
+        self,
+        connection: Any,
+        *,
+        evidence_snapshot_id: UUID,
+        material: PromotionAuthorizationMaterialV1,
+        created_by_subject: str,
+    ) -> UUID:
+        if not created_by_subject or created_by_subject != created_by_subject.strip():
+            raise ValueError("created_by_subject must be canonical and non-empty")
+        candidate_id = uuid4()
+        expected = (
+            material.release_subject_digest,
+            evidence_snapshot_id,
+            material.evidence_snapshot_digest,
+            material.gate_decision_digest,
+            material.gate_policy_version,
+            material.authorization_policy_version,
+            material.executor_source_revision,
+            material.executor_workload_artifact_digest,
+            material.executor_job_contract_version,
+            material.review_ref,
+            material.review_digest,
+        )
+        with connection.transaction():
+            connection.execute(
+                """
+                INSERT INTO promotion_release_authorization_materials (
+                    authorization_material_id, release_subject_digest,
+                    evidence_snapshot_id, evidence_snapshot_digest,
+                    gate_decision_digest, gate_policy_version,
+                    authorization_policy_version, executor_source_revision,
+                    executor_workload_artifact_digest,
+                    executor_job_contract_version, review_ref, review_digest,
+                    authorization_material_digest, created_by_subject
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON CONFLICT (authorization_material_digest) DO NOTHING
+                """,
+                (
+                    candidate_id,
+                    *expected,
+                    material.authorization_material_digest,
+                    created_by_subject,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT authorization_material_id, release_subject_digest,
+                       evidence_snapshot_id, evidence_snapshot_digest,
+                       gate_decision_digest, gate_policy_version,
+                       authorization_policy_version, executor_source_revision,
+                       executor_workload_artifact_digest,
+                       executor_job_contract_version, review_ref, review_digest
+                  FROM promotion_release_authorization_materials
+                 WHERE authorization_material_digest=%s
+                """,
+                (material.authorization_material_digest,),
+            ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError(
+                    "authorization material did not converge"
+                )
+            if tuple(row[1:]) != expected:
+                raise RepositoryInvariantError(
+                    "same authorization material digest changed immutable material"
+                )
+            return row[0]
+
+    def create_promotion_authorization(
+        self,
+        connection: Any,
+        *,
+        authorization_material_id: UUID,
+        release_subject_digest: str,
+        grant_reason_code: str,
+        created_by_subject: str,
+    ) -> UUID:
+        if re.fullmatch(r"[0-9a-f]{64}", release_subject_digest) is None:
+            raise ValueError("release_subject_digest must be lowercase SHA-256")
+        if _REASON_RE.fullmatch(grant_reason_code) is None:
+            raise ValueError("grant_reason_code must be canonical uppercase token")
+        if not created_by_subject or created_by_subject != created_by_subject.strip():
+            raise ValueError("created_by_subject must be canonical and non-empty")
+        authorization_id = uuid4()
+        with connection.transaction():
+            connection.execute(
+                """
+                INSERT INTO promotion_release_authorizations (
+                    authorization_id, authorization_material_id,
+                    release_subject_digest, grant_reason_code, created_by_subject
+                ) VALUES (%s, %s, %s, %s, %s)
+                """,
+                (
+                    authorization_id,
+                    authorization_material_id,
+                    release_subject_digest,
+                    grant_reason_code,
+                    created_by_subject,
+                ),
+            )
+        return authorization_id
+
+    def apply_promotion_release_control(
+        self,
+        connection: Any,
+        *,
+        authorization_id: UUID,
+        expected_control_version: int,
+        state: str,
+        reason_code: str,
+        actor_subject: str,
+        review_ref: str,
+        review_digest: str,
+    ) -> UUID:
+        with connection.transaction():
+            row = connection.execute(
+                """
+                SELECT apply_promotion_release_control(
+                    %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    authorization_id,
+                    expected_control_version,
+                    state,
+                    reason_code,
+                    actor_subject,
+                    review_ref,
+                    review_digest,
+                ),
+            ).fetchone()
+            if row is None:
+                raise RepositoryInvariantError("release control returned no identity")
+            return row[0]
+
+    def resolve_promotion_release_authorization(
+        self,
+        connection: Any,
+        *,
+        release_subject_digest: str,
+        executor: ExecutorProvenanceV1,
+    ) -> UUID | None:
+        row = connection.execute(
+            """
+            SELECT resolve_promotion_release_authorization(%s, %s, %s, %s)
+            """,
+            (
+                release_subject_digest,
+                executor.source_revision,
+                executor.workload_artifact_digest,
+                executor.job_contract_version,
+            ),
+        ).fetchone()
+        if row is None:
+            raise RepositoryInvariantError("authorization resolver returned no row")
+        return row[0]
 
     def create_run(
         self,

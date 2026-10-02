@@ -39,8 +39,252 @@ CREATE TABLE IF NOT EXISTS promotion_release_evidence_snapshots (
         BTRIM(created_by_subject) <> ''
         AND created_by_subject = BTRIM(created_by_subject)
     ),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT promotion_release_evidence_snapshot_exact_reference
+        UNIQUE (
+            evidence_snapshot_id, release_subject_digest,
+            evidence_snapshot_digest
+        )
 );
+
+DO $promotion_release_evidence_exact_reference$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM pg_constraint
+         WHERE conrelid = 'promotion_release_evidence_snapshots'::regclass
+           AND conname = 'promotion_release_evidence_snapshot_exact_reference'
+    ) THEN
+        ALTER TABLE promotion_release_evidence_snapshots
+            ADD CONSTRAINT promotion_release_evidence_snapshot_exact_reference
+            UNIQUE (
+                evidence_snapshot_id, release_subject_digest,
+                evidence_snapshot_digest
+            );
+    END IF;
+END;
+$promotion_release_evidence_exact_reference$;
+
+CREATE TABLE IF NOT EXISTS promotion_release_authorization_materials (
+    authorization_material_id UUID PRIMARY KEY,
+    release_subject_digest TEXT NOT NULL CHECK (
+        release_subject_digest ~ '^[0-9a-f]{64}$'
+    ),
+    evidence_snapshot_id UUID NOT NULL,
+    evidence_snapshot_digest TEXT NOT NULL CHECK (
+        evidence_snapshot_digest ~ '^[0-9a-f]{64}$'
+    ),
+    gate_decision_digest TEXT NOT NULL CHECK (
+        gate_decision_digest ~ '^[0-9a-f]{64}$'
+    ),
+    gate_policy_version TEXT NOT NULL CHECK (
+        gate_policy_version = 'cpi-w1-gate-v2'
+    ),
+    authorization_policy_version TEXT NOT NULL CHECK (
+        authorization_policy_version = 'cpi-w1-authorization-v1'
+    ),
+    executor_source_revision TEXT NOT NULL CHECK (
+        BTRIM(executor_source_revision) <> ''
+        AND executor_source_revision = BTRIM(executor_source_revision)
+    ),
+    executor_workload_artifact_digest TEXT NOT NULL CHECK (
+        executor_workload_artifact_digest ~ '^[0-9a-f]{64}$'
+    ),
+    executor_job_contract_version TEXT NOT NULL CHECK (
+        executor_job_contract_version ~ '^[a-z][a-z0-9-]*-v[1-9][0-9]*$'
+    ),
+    review_ref TEXT NOT NULL CHECK (
+        BTRIM(review_ref) <> '' AND review_ref = BTRIM(review_ref)
+    ),
+    review_digest TEXT NOT NULL CHECK (review_digest ~ '^[0-9a-f]{64}$'),
+    authorization_material_digest TEXT NOT NULL UNIQUE CHECK (
+        authorization_material_digest ~ '^[0-9a-f]{64}$'
+    ),
+    created_by_subject TEXT NOT NULL CHECK (
+        BTRIM(created_by_subject) <> ''
+        AND created_by_subject = BTRIM(created_by_subject)
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT promotion_release_authorization_exact_evidence_fk
+        FOREIGN KEY (evidence_snapshot_id, release_subject_digest, evidence_snapshot_digest)
+        REFERENCES promotion_release_evidence_snapshots (
+            evidence_snapshot_id, release_subject_digest,
+            evidence_snapshot_digest
+        ),
+    CONSTRAINT promotion_release_authorization_material_subject_reference
+        UNIQUE (authorization_material_id, release_subject_digest)
+);
+
+CREATE TABLE IF NOT EXISTS promotion_release_authorizations (
+    authorization_id UUID PRIMARY KEY,
+    authorization_material_id UUID NOT NULL,
+    release_subject_digest TEXT NOT NULL CHECK (
+        release_subject_digest ~ '^[0-9a-f]{64}$'
+    ),
+    grant_reason_code TEXT NOT NULL CHECK (
+        grant_reason_code ~ '^[A-Z][A-Z0-9_]*$'
+    ),
+    created_by_subject TEXT NOT NULL CHECK (
+        BTRIM(created_by_subject) <> ''
+        AND created_by_subject = BTRIM(created_by_subject)
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT promotion_release_authorization_material_fk
+        FOREIGN KEY (authorization_material_id, release_subject_digest)
+        REFERENCES promotion_release_authorization_materials (
+            authorization_material_id, release_subject_digest
+        )
+);
+
+CREATE TABLE IF NOT EXISTS promotion_release_control_decisions (
+    control_decision_id UUID PRIMARY KEY,
+    authorization_id UUID NOT NULL
+        REFERENCES promotion_release_authorizations(authorization_id),
+    expected_control_version INTEGER NOT NULL CHECK (
+        expected_control_version >= 0
+    ),
+    control_version INTEGER NOT NULL CHECK (control_version >= 1),
+    state TEXT NOT NULL CHECK (state IN ('APPROVED', 'REVOKED')),
+    reason_code TEXT NOT NULL CHECK (reason_code ~ '^[A-Z][A-Z0-9_]*$'),
+    actor_subject TEXT NOT NULL CHECK (
+        BTRIM(actor_subject) <> '' AND actor_subject = BTRIM(actor_subject)
+    ),
+    review_ref TEXT NOT NULL CHECK (
+        BTRIM(review_ref) <> '' AND review_ref = BTRIM(review_ref)
+    ),
+    review_digest TEXT NOT NULL CHECK (review_digest ~ '^[0-9a-f]{64}$'),
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT promotion_release_control_version_increment CHECK (
+        control_version = expected_control_version + 1
+    ),
+    CONSTRAINT promotion_release_control_version_identity
+        UNIQUE (authorization_id, control_version)
+);
+
+CREATE OR REPLACE FUNCTION enforce_promotion_release_control_transition()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $promotion_release_control_transition$
+DECLARE
+    current_version INTEGER := 0;
+    current_state TEXT;
+BEGIN
+    PERFORM 1
+      FROM promotion_release_authorizations
+     WHERE authorization_id = NEW.authorization_id
+     FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'promotion authorization does not exist'
+            USING ERRCODE = '23503';
+    END IF;
+
+    SELECT control_version, state
+      INTO current_version, current_state
+      FROM promotion_release_control_decisions
+     WHERE authorization_id = NEW.authorization_id
+     ORDER BY control_version DESC
+     LIMIT 1;
+    IF NOT FOUND THEN
+        current_version := 0;
+        current_state := NULL;
+    END IF;
+
+    IF NEW.expected_control_version <> current_version
+       OR NEW.control_version <> current_version + 1 THEN
+        RAISE EXCEPTION 'promotion release control expected version mismatch'
+            USING ERRCODE = '40001';
+    END IF;
+    IF current_state IS NULL AND NEW.state <> 'APPROVED' THEN
+        RAISE EXCEPTION 'initial promotion authorization control must be APPROVED'
+            USING ERRCODE = '23514';
+    END IF;
+    IF current_state = 'APPROVED' AND NEW.state <> 'REVOKED' THEN
+        RAISE EXCEPTION 'approved promotion authorization only permits revocation'
+            USING ERRCODE = '23514';
+    END IF;
+    IF current_state = 'REVOKED' THEN
+        RAISE EXCEPTION 'revoked promotion authorization cannot be reactivated'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$promotion_release_control_transition$;
+
+DROP TRIGGER IF EXISTS promotion_release_control_transition_guard
+    ON promotion_release_control_decisions;
+CREATE TRIGGER promotion_release_control_transition_guard
+    BEFORE INSERT ON promotion_release_control_decisions
+    FOR EACH ROW EXECUTE FUNCTION enforce_promotion_release_control_transition();
+
+CREATE OR REPLACE FUNCTION apply_promotion_release_control(
+    p_authorization_id UUID,
+    p_expected_control_version INTEGER,
+    p_state TEXT,
+    p_reason_code TEXT,
+    p_actor_subject TEXT,
+    p_review_ref TEXT,
+    p_review_digest TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+AS $apply_promotion_release_control$
+DECLARE
+    decision_id UUID := gen_random_uuid();
+BEGIN
+    INSERT INTO promotion_release_control_decisions (
+        control_decision_id, authorization_id, expected_control_version,
+        control_version, state, reason_code, actor_subject, review_ref,
+        review_digest
+    ) VALUES (
+        decision_id, p_authorization_id, p_expected_control_version,
+        p_expected_control_version + 1, p_state, p_reason_code,
+        p_actor_subject, p_review_ref, p_review_digest
+    );
+    RETURN decision_id;
+END;
+$apply_promotion_release_control$;
+
+CREATE OR REPLACE FUNCTION resolve_promotion_release_authorization(
+    p_release_subject_digest TEXT,
+    p_executor_source_revision TEXT,
+    p_executor_workload_artifact_digest TEXT,
+    p_executor_job_contract_version TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+STABLE
+AS $resolve_promotion_release_authorization$
+DECLARE
+    matches UUID[];
+BEGIN
+    SELECT ARRAY_AGG(a.authorization_id ORDER BY a.authorization_id)
+      INTO matches
+      FROM promotion_release_authorizations a
+      JOIN promotion_release_authorization_materials m
+        ON m.authorization_material_id = a.authorization_material_id
+      JOIN LATERAL (
+            SELECT state
+              FROM promotion_release_control_decisions c
+             WHERE c.authorization_id = a.authorization_id
+             ORDER BY c.control_version DESC
+             LIMIT 1
+      ) effective ON effective.state = 'APPROVED'
+     WHERE a.release_subject_digest = p_release_subject_digest
+       AND m.executor_source_revision = p_executor_source_revision
+       AND m.executor_workload_artifact_digest = p_executor_workload_artifact_digest
+       AND m.executor_job_contract_version = p_executor_job_contract_version;
+
+    IF COALESCE(CARDINALITY(matches), 0) = 0 THEN
+        RETURN NULL;
+    END IF;
+    IF CARDINALITY(matches) > 1 THEN
+        RAISE EXCEPTION 'ambiguous active promotion authorization'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN matches[1];
+END;
+$resolve_promotion_release_authorization$;
 
 CREATE TABLE IF NOT EXISTS interpretation_requests (
     request_id UUID PRIMARY KEY,
@@ -760,6 +1004,24 @@ DROP TRIGGER IF EXISTS promotion_release_evidence_snapshots_immutable
     ON promotion_release_evidence_snapshots;
 CREATE TRIGGER promotion_release_evidence_snapshots_immutable
     BEFORE UPDATE OR DELETE ON promotion_release_evidence_snapshots
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS promotion_release_authorization_materials_immutable
+    ON promotion_release_authorization_materials;
+CREATE TRIGGER promotion_release_authorization_materials_immutable
+    BEFORE UPDATE OR DELETE ON promotion_release_authorization_materials
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS promotion_release_authorizations_immutable
+    ON promotion_release_authorizations;
+CREATE TRIGGER promotion_release_authorizations_immutable
+    BEFORE UPDATE OR DELETE ON promotion_release_authorizations
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS promotion_release_control_decisions_immutable
+    ON promotion_release_control_decisions;
+CREATE TRIGGER promotion_release_control_decisions_immutable
+    BEFORE UPDATE OR DELETE ON promotion_release_control_decisions
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
 
 DROP TRIGGER IF EXISTS interpretation_approvals_immutable ON interpretation_approvals;

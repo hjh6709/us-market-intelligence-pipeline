@@ -44,6 +44,46 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertNotIn("gate_decision", table)
         self.assertIn("promotion_release_evidence_snapshots_immutable", self.sql)
 
+    def test_release_authorization_material_grant_and_control_are_separate(self) -> None:
+        for table in (
+            "promotion_release_authorization_materials",
+            "promotion_release_authorizations",
+            "promotion_release_control_decisions",
+        ):
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", self.sql)
+        self.assertIn("authorization_material_digest", self.sql)
+        self.assertIn("authorization_id UUID PRIMARY KEY", self.sql)
+        self.assertIn("state IN ('APPROVED', 'REVOKED')", self.sql)
+        self.assertIn("FUNCTION apply_promotion_release_control", self.sql)
+        self.assertIn("FUNCTION resolve_promotion_release_authorization", self.sql)
+
+    def test_release_authorization_binds_exact_subject_evidence_gate_and_executor(self) -> None:
+        for field in (
+            "release_subject_digest",
+            "evidence_snapshot_id",
+            "evidence_snapshot_digest",
+            "gate_decision_digest",
+            "authorization_policy_version",
+            "executor_source_revision",
+            "executor_workload_artifact_digest",
+            "executor_job_contract_version",
+            "review_ref",
+            "review_digest",
+        ):
+            self.assertIn(field, self.sql)
+        self.assertIn(
+            "FOREIGN KEY (evidence_snapshot_id, release_subject_digest, evidence_snapshot_digest)",
+            self.sql,
+        )
+        self.assertIn("ambiguous active promotion authorization", self.sql)
+
+    def test_revoked_release_authorization_cannot_be_reactivated(self) -> None:
+        self.assertIn("revoked promotion authorization cannot be reactivated", self.sql)
+        self.assertIn("promotion release control expected version mismatch", self.sql)
+        self.assertIn("promotion_release_authorization_materials_immutable", self.sql)
+        self.assertIn("promotion_release_authorizations_immutable", self.sql)
+        self.assertIn("promotion_release_control_decisions_immutable", self.sql)
+
     def test_two_person_and_one_vote_constraints_are_structural(self) -> None:
         self.assertIn("CHECK (approver_subject <> proposer_subject)", self.sql)
         self.assertIn("UNIQUE (request_id, approver_subject)", self.sql)

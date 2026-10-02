@@ -48,6 +48,18 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("evidence_snapshot_digest", SOURCE)
         self.assertIn("same evidence snapshot digest changed immutable material", SOURCE)
 
+    def test_repository_owns_release_authorization_boundaries(self) -> None:
+        for method in (
+            "def create_promotion_authorization_material(",
+            "def create_promotion_authorization(",
+            "def apply_promotion_release_control(",
+            "def resolve_promotion_release_authorization(",
+        ):
+            self.assertIn(method, SOURCE)
+        self.assertIn("same authorization material digest changed immutable material", SOURCE)
+        self.assertIn("SELECT apply_promotion_release_control", SOURCE)
+        self.assertIn("SELECT resolve_promotion_release_authorization", SOURCE)
+
     def test_claim_sql_uses_skip_locked_and_due_or_expired_work(self) -> None:
         self.assertIn("FOR UPDATE OF w SKIP LOCKED", SOURCE)
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)
