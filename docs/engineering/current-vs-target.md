@@ -149,11 +149,12 @@ ready, or customer-launch ready.
 
 ## 2026-10-06 bounded corrective verification
 
-Implementation revision `4d62b426f63c7d94f224ec69e366ccbdfa220a13` corrects the three
+Implementation revision `15eee8b53d45b82d0b222b2e788f3a57223ecce2` corrects the three
 independent-audit blockers: structured target month in durable promotion work identity,
 post-lock wall-clock lease validation, and exact attempt-bound heartbeat authorization.
 Existing scheduling also rejects contradictory work-key metadata and unreviewed
-targetless draft rows. These are foundation corrections, not product/runtime additions.
+targetless draft rows. Retry/pause also reject lease expiry after attempt-row waits.
+These are foundation corrections, not product/runtime additions.
 See [new corrective evidence](../evidence/cpi-w1-corrective-2026-10-06.md) for RED/GREEN,
 migration/legacy checks, independent review and the exact-head remote CI acceptance gate.
 The previous dated evidence is historical, not a substitute for this verification.
