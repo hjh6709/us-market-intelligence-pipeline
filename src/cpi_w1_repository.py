@@ -633,6 +633,13 @@ class CpiW1Repository:
         )
 
     @staticmethod
+    def lock_cpi_domain_exclusive(connection: Any) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            ("CPI_DOMAIN",),
+        )
+
+    @staticmethod
     def lock_cpi_release_subject(
         connection: Any,
         release_subject_digest: str,

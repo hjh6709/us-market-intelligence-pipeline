@@ -139,7 +139,9 @@ class CpiW1PostgresTest(unittest.TestCase):
         with self.connection() as connection:
             connection.execute(
                 """
-                TRUNCATE promotion_release_evidence_snapshots,
+                TRUNCATE cpi_domain_recovery_changes,
+                         cpi_domain_recovery_snapshots,
+                         promotion_release_evidence_snapshots,
                          interpretation_subjects, source_artifacts,
                          ingestion_attempts, ingestion_work_items, ingestion_runs
                 CASCADE
@@ -2020,6 +2022,270 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(
                 state[3],
                 knowledge.knowledge_fingerprint,
+            )
+
+    def test_recovery_journal_tracks_relevant_commits_not_queue_bookkeeping(self) -> None:
+        with self.connection() as connection:
+            event_id, attempt_id = self.make_event(connection, "2026-05-01")
+            before = connection.execute(
+                "SELECT current_recovery_watermark()"
+            ).fetchone()[0]
+
+            disclosure_id = self.make_disclosure(connection, attempt_id)
+            after_disclosure = connection.execute(
+                "SELECT current_recovery_watermark()"
+            ).fetchone()[0]
+            self.assertGreater(after_disclosure, before)
+            journal = connection.execute(
+                """
+                SELECT entity_kind, entity_id
+                  FROM cpi_domain_recovery_changes
+                 WHERE change_sequence=%s
+                """,
+                (after_disclosure,),
+            ).fetchone()
+            self.assertEqual(journal, ("EVENT_DISCLOSURES", disclosure_id))
+
+            run_id = self.insert_run(connection)
+            work_item_id = self.insert_work(
+                connection,
+                run_id,
+                work_key=f"collect:queue-only:{event_id}",
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_work_items
+                   SET updated_at = updated_at + INTERVAL '1 second'
+                 WHERE work_item_id=%s
+                """,
+                (work_item_id,),
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT current_recovery_watermark()"
+                ).fetchone()[0],
+                after_disclosure,
+            )
+
+            rolled_back_disclosure_id = uuid4()
+            transactional = psycopg.connect(DATABASE_URL)
+            try:
+                transactional.execute(
+                    """
+                    INSERT INTO event_disclosures (
+                        disclosure_id, source_code, canonical_disclosure_key,
+                        disclosure_kind, established_by_attempt_id
+                    ) VALUES (%s, 'BLS', %s, 'DATA_RELEASE', %s)
+                    """,
+                    (
+                        rolled_back_disclosure_id,
+                        f"bls-cpi:rollback:{uuid4()}",
+                        attempt_id,
+                    ),
+                )
+                self.assertGreater(
+                    transactional.execute(
+                        "SELECT current_recovery_watermark()"
+                    ).fetchone()[0],
+                    after_disclosure,
+                )
+                transactional.rollback()
+            finally:
+                transactional.close()
+            self.assertEqual(
+                connection.execute(
+                    "SELECT current_recovery_watermark()"
+                ).fetchone()[0],
+                after_disclosure,
+            )
+
+    def test_domain_reenable_binds_exact_current_safe_snapshot(self) -> None:
+        governance = CpiW1Governance()
+        operator = WorkforcePrincipal("corp", "domain-recovery-operator")
+        with self.connection() as connection:
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="CPI_DOMAIN",
+                state=ServingControlState.WITHHELD,
+                reason_code="DOMAIN_REVIEW",
+                case_ref="CASE-RECOVERY-1",
+            )
+            snapshot_id = governance.create_domain_recovery_snapshot(
+                connection,
+                principal=operator,
+                case_ref="CASE-RECOVERY-1",
+                verification_ref="VERIFY-RECOVERY-1",
+            )
+            decision_id = governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="CPI_DOMAIN",
+                state=ServingControlState.ENABLED,
+                reason_code="DOMAIN_REVIEW_COMPLETE",
+                case_ref="CASE-RECOVERY-1",
+                verification_ref="VERIFY-RECOVERY-1",
+                recovery_snapshot_id=snapshot_id,
+            )
+            decision = connection.execute(
+                """
+                SELECT state, recovery_snapshot_id
+                  FROM economic_serving_control_decisions
+                 WHERE control_decision_id=%s
+                """,
+                (decision_id,),
+            ).fetchone()
+            self.assertEqual(decision, ("ENABLED", snapshot_id))
+            with self.assertRaises(psycopg.Error):
+                connection.execute(
+                    """
+                    UPDATE cpi_domain_recovery_snapshots
+                       SET verification_ref='MUTATED'
+                     WHERE recovery_snapshot_id=%s
+                    """,
+                    (snapshot_id,),
+                )
+            with self.assertRaises(psycopg.Error):
+                connection.execute(
+                    """
+                    DELETE FROM cpi_domain_recovery_snapshots
+                     WHERE recovery_snapshot_id=%s
+                    """,
+                    (snapshot_id,),
+                )
+
+    def test_domain_exclusive_fence_excludes_shared_recovery_mutation_fence(self) -> None:
+        exclusive = self.connection()
+        shared = self.connection()
+        try:
+            exclusive.execute("BEGIN")
+            exclusive.execute("SELECT lock_cpi_domain_exclusive()")
+            acquired = shared.execute(
+                """
+                SELECT pg_try_advisory_xact_lock_shared(
+                    hashtextextended('CPI_DOMAIN', 0)
+                )
+                """
+            ).fetchone()[0]
+            self.assertFalse(acquired)
+        finally:
+            exclusive.execute("ROLLBACK")
+            exclusive.close()
+            shared.close()
+
+    def test_domain_reenable_rejects_stale_recovery_snapshot(self) -> None:
+        governance = CpiW1Governance()
+        operator = WorkforcePrincipal("corp", "stale-snapshot-operator")
+        with self.connection() as connection:
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="CPI_DOMAIN",
+                state=ServingControlState.WITHHELD,
+                reason_code="DOMAIN_REVIEW",
+                case_ref="CASE-RECOVERY-2",
+            )
+            snapshot_id = governance.create_domain_recovery_snapshot(
+                connection,
+                principal=operator,
+                case_ref="CASE-RECOVERY-2",
+                verification_ref="VERIFY-RECOVERY-2",
+            )
+            event_id, _ = self.make_event(connection, "2026-06-01")
+            with self.assertRaises(psycopg.errors.SerializationFailure):
+                governance.apply_serving_control(
+                    connection,
+                    principal=operator,
+                    scope_kind="CPI_DOMAIN",
+                    state=ServingControlState.ENABLED,
+                    reason_code="DOMAIN_REVIEW_COMPLETE",
+                    case_ref="CASE-RECOVERY-2",
+                    verification_ref="VERIFY-RECOVERY-2",
+                    recovery_snapshot_id=snapshot_id,
+                )
+
+    def test_domain_recovery_allows_individually_withheld_unresolved_event(self) -> None:
+        governance = CpiW1Governance()
+        operator = WorkforcePrincipal("corp", "contained-recovery-operator")
+        with self.connection() as connection:
+            event_id, _ = self.make_event(connection, "2026-07-01")
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="CPI_DOMAIN",
+                state=ServingControlState.WITHHELD,
+                reason_code="DOMAIN_REVIEW",
+                case_ref="CASE-RECOVERY-3",
+            )
+            unsafe_snapshot_id = governance.create_domain_recovery_snapshot(
+                connection,
+                principal=operator,
+                case_ref="CASE-RECOVERY-3",
+                verification_ref="VERIFY-RECOVERY-3A",
+            )
+            unsafe = connection.execute(
+                """
+                SELECT unresolved_event_count, unsafe_uncontained_event_count
+                  FROM cpi_domain_recovery_snapshots
+                 WHERE recovery_snapshot_id=%s
+                """,
+                (unsafe_snapshot_id,),
+            ).fetchone()
+            self.assertEqual(unsafe, (1, 1))
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                governance.apply_serving_control(
+                    connection,
+                    principal=operator,
+                    scope_kind="CPI_DOMAIN",
+                    state=ServingControlState.ENABLED,
+                    reason_code="DOMAIN_REVIEW_COMPLETE",
+                    case_ref="CASE-RECOVERY-3",
+                    verification_ref="VERIFY-RECOVERY-3A",
+                    recovery_snapshot_id=unsafe_snapshot_id,
+                )
+
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="EVENT_OCCURRENCE",
+                event_occurrence_id=event_id,
+                state=ServingControlState.WITHHELD,
+                reason_code="EVENT_CONTAINMENT",
+                case_ref="CASE-RECOVERY-3",
+            )
+            safe_snapshot_id = governance.create_domain_recovery_snapshot(
+                connection,
+                principal=operator,
+                case_ref="CASE-RECOVERY-3",
+                verification_ref="VERIFY-RECOVERY-3B",
+            )
+            safe = connection.execute(
+                """
+                SELECT unresolved_event_count, withheld_event_count,
+                       unsafe_uncontained_event_count
+                  FROM cpi_domain_recovery_snapshots
+                 WHERE recovery_snapshot_id=%s
+                """,
+                (safe_snapshot_id,),
+            ).fetchone()
+            self.assertEqual(safe, (1, 1, 0))
+            governance.apply_serving_control(
+                connection,
+                principal=operator,
+                scope_kind="CPI_DOMAIN",
+                state=ServingControlState.ENABLED,
+                reason_code="DOMAIN_REVIEW_COMPLETE",
+                case_ref="CASE-RECOVERY-3",
+                verification_ref="VERIFY-RECOVERY-3B",
+                recovery_snapshot_id=safe_snapshot_id,
+            )
+            governed = governance.selector.select_governed_event(
+                connection,
+                event_id,
+            )
+            self.assertEqual(
+                governed.effective_control_state,
+                ServingControlState.WITHHELD,
             )
 
     def test_governance_application_end_to_end_correction_lifecycle(self) -> None:

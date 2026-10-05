@@ -572,6 +572,170 @@ CREATE UNIQUE INDEX IF NOT EXISTS economic_serving_control_event_version
     ON economic_serving_control_decisions (event_occurrence_id, control_version)
     WHERE scope_kind = 'EVENT_OCCURRENCE';
 
+CREATE TABLE IF NOT EXISTS cpi_domain_recovery_changes (
+    change_sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    change_kind TEXT NOT NULL CHECK (change_kind ~ '^[A-Z][A-Z0-9_]*$'),
+    entity_kind TEXT NOT NULL CHECK (entity_kind ~ '^[A-Z][A-Z0-9_]*$'),
+    entity_id UUID NOT NULL,
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cpi_domain_recovery_snapshots (
+    recovery_snapshot_id UUID PRIMARY KEY,
+    recovery_policy_version TEXT NOT NULL CHECK (
+        recovery_policy_version = 'cpi-domain-recovery-v1'
+    ),
+    committed_change_watermark BIGINT NOT NULL CHECK (
+        committed_change_watermark >= 0
+    ),
+    canonical_knowledge_digest TEXT NOT NULL CHECK (
+        canonical_knowledge_digest ~ '^[0-9a-f]{64}$'
+    ),
+    interpretation_state_digest TEXT NOT NULL CHECK (
+        interpretation_state_digest ~ '^[0-9a-f]{64}$'
+    ),
+    serving_control_digest TEXT NOT NULL CHECK (
+        serving_control_digest ~ '^[0-9a-f]{64}$'
+    ),
+    event_count INTEGER NOT NULL CHECK (event_count >= 0),
+    withheld_event_count INTEGER NOT NULL CHECK (withheld_event_count >= 0),
+    conflicting_event_count INTEGER NOT NULL CHECK (conflicting_event_count >= 0),
+    unresolved_event_count INTEGER NOT NULL CHECK (unresolved_event_count >= 0),
+    unsafe_uncontained_event_count INTEGER NOT NULL CHECK (
+        unsafe_uncontained_event_count >= 0
+    ),
+    generated_by_subject TEXT NOT NULL CHECK (
+        BTRIM(generated_by_subject) <> ''
+        AND generated_by_subject = BTRIM(generated_by_subject)
+    ),
+    case_ref TEXT NOT NULL CHECK (
+        BTRIM(case_ref) <> '' AND case_ref = BTRIM(case_ref)
+    ),
+    verification_ref TEXT NOT NULL CHECK (
+        BTRIM(verification_ref) <> '' AND verification_ref = BTRIM(verification_ref)
+    ),
+    recovery_snapshot_digest TEXT NOT NULL UNIQUE CHECK (
+        recovery_snapshot_digest ~ '^[0-9a-f]{64}$'
+    ),
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE economic_serving_control_decisions
+    ADD COLUMN IF NOT EXISTS recovery_snapshot_id UUID;
+
+DO $domain_recovery_constraints$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'economic_serving_control_decisions'::regclass
+           AND conname = 'economic_serving_control_recovery_snapshot_fk'
+    ) THEN
+        ALTER TABLE economic_serving_control_decisions
+            ADD CONSTRAINT economic_serving_control_recovery_snapshot_fk
+            FOREIGN KEY (recovery_snapshot_id)
+            REFERENCES cpi_domain_recovery_snapshots(recovery_snapshot_id);
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'economic_serving_control_decisions'::regclass
+           AND conname = 'economic_serving_control_recovery_binding_valid'
+    ) THEN
+        ALTER TABLE economic_serving_control_decisions
+            ADD CONSTRAINT economic_serving_control_recovery_binding_valid CHECK (
+                (
+                    scope_kind = 'CPI_DOMAIN' AND state = 'ENABLED'
+                    AND recovery_snapshot_id IS NOT NULL
+                ) OR (
+                    NOT (scope_kind = 'CPI_DOMAIN' AND state = 'ENABLED')
+                    AND recovery_snapshot_id IS NULL
+                )
+            ) NOT VALID;
+    END IF;
+END;
+$domain_recovery_constraints$;
+
+CREATE OR REPLACE FUNCTION lock_cpi_domain_shared()
+RETURNS VOID
+LANGUAGE SQL
+AS $$
+    SELECT pg_advisory_xact_lock_shared(hashtextextended('CPI_DOMAIN', 0));
+$$;
+
+CREATE OR REPLACE FUNCTION lock_cpi_domain_exclusive()
+RETURNS VOID
+LANGUAGE SQL
+AS $$
+    SELECT pg_advisory_xact_lock(hashtextextended('CPI_DOMAIN', 0));
+$$;
+
+CREATE OR REPLACE FUNCTION current_recovery_watermark()
+RETURNS BIGINT
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT COALESCE(MAX(change_sequence), 0)
+      FROM cpi_domain_recovery_changes;
+$$;
+
+CREATE OR REPLACE FUNCTION append_cpi_domain_recovery_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $domain_recovery_change$
+DECLARE
+    material JSONB := to_jsonb(NEW);
+    entity_id UUID;
+BEGIN
+    PERFORM lock_cpi_domain_shared();
+    entity_id := (material ->> CASE TG_TABLE_NAME
+        WHEN 'core_event_occurrences' THEN 'event_occurrence_id'
+        WHEN 'event_schedule_assertions' THEN 'schedule_assertion_id'
+        WHEN 'event_disclosures' THEN 'disclosure_id'
+        WHEN 'event_disclosure_links' THEN 'disclosure_link_id'
+        WHEN 'event_disclosure_artifacts' THEN 'disclosure_artifact_link_id'
+        WHEN 'disclosure_marker_assertions' THEN 'marker_assertion_id'
+        WHEN 'official_observation_assertions' THEN 'assertion_id'
+        WHEN 'interpretation_decisions' THEN 'interpretation_decision_id'
+        WHEN 'economic_serving_control_decisions' THEN 'control_decision_id'
+    END)::UUID;
+    INSERT INTO cpi_domain_recovery_changes (
+        change_kind, entity_kind, entity_id
+    ) VALUES (
+        UPPER(TG_TABLE_NAME) || '_INSERT',
+        UPPER(TG_TABLE_NAME),
+        entity_id
+    );
+    RETURN NEW;
+END;
+$domain_recovery_change$;
+
+DO $domain_recovery_triggers$
+DECLARE
+    table_name TEXT;
+    trigger_name TEXT;
+BEGIN
+    FOREACH table_name IN ARRAY ARRAY[
+        'core_event_occurrences',
+        'event_schedule_assertions',
+        'event_disclosures',
+        'event_disclosure_links',
+        'event_disclosure_artifacts',
+        'disclosure_marker_assertions',
+        'official_observation_assertions',
+        'interpretation_decisions',
+        'economic_serving_control_decisions'
+    ] LOOP
+        trigger_name := table_name || '_recovery_journal';
+        EXECUTE FORMAT('DROP TRIGGER IF EXISTS %I ON %I', trigger_name, table_name);
+        EXECUTE FORMAT(
+            'CREATE TRIGGER %I AFTER INSERT ON %I '
+            'FOR EACH ROW EXECUTE FUNCTION append_cpi_domain_recovery_change()',
+            trigger_name,
+            table_name
+        );
+    END LOOP;
+END;
+$domain_recovery_triggers$;
+
 CREATE TABLE IF NOT EXISTS business_audit_events (
     audit_event_id UUID PRIMARY KEY,
     action_kind TEXT NOT NULL CHECK (
@@ -1087,6 +1251,7 @@ BEGIN
       FROM interpretation_requests
      WHERE request_id = p_request_id;
 
+    PERFORM lock_cpi_domain_shared();
     PERFORM lock_cpi_governance_subject_events(req.subject_id);
 
     PERFORM 1
@@ -1206,6 +1371,10 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS apply_economic_serving_control(
+    TEXT, UUID, INTEGER, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT
+);
+
 CREATE OR REPLACE FUNCTION apply_economic_serving_control(
     p_scope_kind TEXT,
     p_event_occurrence_id UUID,
@@ -1215,7 +1384,8 @@ CREATE OR REPLACE FUNCTION apply_economic_serving_control(
     p_actor_subject TEXT,
     p_case_ref TEXT DEFAULT NULL,
     p_verified_knowledge_fingerprint TEXT DEFAULT NULL,
-    p_verification_ref TEXT DEFAULT NULL
+    p_verification_ref TEXT DEFAULT NULL,
+    p_recovery_snapshot_id UUID DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
@@ -1225,7 +1395,8 @@ DECLARE
     current_state TEXT := 'ENABLED';
     decision_id UUID := gen_random_uuid();
     applied_time TIMESTAMPTZ := CURRENT_TIMESTAMP;
-    scope_key TEXT;
+    recovery_snapshot cpi_domain_recovery_snapshots%ROWTYPE;
+    current_watermark BIGINT;
 BEGIN
     IF p_scope_kind NOT IN ('CPI_DOMAIN', 'EVENT_OCCURRENCE') THEN
         RAISE EXCEPTION 'invalid serving-control scope'
@@ -1249,7 +1420,10 @@ BEGIN
             USING ERRCODE = '23514';
     END IF;
 
-    IF p_scope_kind = 'EVENT_OCCURRENCE' THEN
+    IF p_scope_kind = 'CPI_DOMAIN' THEN
+        PERFORM lock_cpi_domain_exclusive();
+    ELSE
+        PERFORM lock_cpi_domain_shared();
         PERFORM 1
           FROM core_event_occurrences
          WHERE event_occurrence_id = p_event_occurrence_id;
@@ -1261,9 +1435,6 @@ BEGIN
             hashtextextended('CPI_EVENT:' || p_event_occurrence_id::TEXT, 0)
         );
     END IF;
-
-    scope_key := p_scope_kind || ':' || COALESCE(p_event_occurrence_id::TEXT, 'DOMAIN');
-    PERFORM pg_advisory_xact_lock(hashtextextended(scope_key, 0));
 
     IF p_scope_kind = 'CPI_DOMAIN' THEN
         SELECT control_version, state
@@ -1310,21 +1481,52 @@ BEGIN
             RAISE EXCEPTION 'event re-enable requires lowercase SHA-256 knowledge fingerprint'
                 USING ERRCODE = '23514';
         END IF;
-        IF p_scope_kind = 'CPI_DOMAIN'
-           AND (p_verification_ref IS NULL OR BTRIM(p_verification_ref) = '') THEN
-            RAISE EXCEPTION 'domain re-enable requires verification reference'
-                USING ERRCODE = '23514';
+        IF p_scope_kind = 'CPI_DOMAIN' THEN
+            IF p_verification_ref IS NULL OR BTRIM(p_verification_ref) = '' THEN
+                RAISE EXCEPTION 'domain re-enable requires verification reference'
+                    USING ERRCODE = '23514';
+            END IF;
+            IF p_recovery_snapshot_id IS NULL THEN
+                RAISE EXCEPTION 'domain re-enable requires recovery snapshot'
+                    USING ERRCODE = '23514';
+            END IF;
+            SELECT * INTO STRICT recovery_snapshot
+              FROM cpi_domain_recovery_snapshots
+             WHERE recovery_snapshot_id = p_recovery_snapshot_id;
+            IF recovery_snapshot.recovery_policy_version
+               <> 'cpi-domain-recovery-v1' THEN
+                RAISE EXCEPTION 'unsupported domain recovery policy'
+                    USING ERRCODE = '23514';
+            END IF;
+            current_watermark := current_recovery_watermark();
+            IF recovery_snapshot.committed_change_watermark
+               <> current_watermark THEN
+                RAISE EXCEPTION 'snapshot recovery watermark is stale'
+                    USING ERRCODE = '40001';
+            END IF;
+            IF recovery_snapshot.unsafe_uncontained_event_count <> 0 THEN
+                RAISE EXCEPTION 'domain recovery snapshot has unsafe uncontained state'
+                    USING ERRCODE = '23514';
+            END IF;
         END IF;
+    END IF;
+
+    IF NOT (p_scope_kind = 'CPI_DOMAIN' AND p_state = 'ENABLED')
+       AND p_recovery_snapshot_id IS NOT NULL THEN
+        RAISE EXCEPTION 'recovery snapshot is only valid for domain re-enable'
+            USING ERRCODE = '23514';
     END IF;
 
     INSERT INTO economic_serving_control_decisions (
         control_decision_id, scope_kind, event_occurrence_id,
         expected_control_version, control_version, state, reason_code,
-        applied_at, actor_subject, case_ref, verified_knowledge_fingerprint
+        applied_at, actor_subject, case_ref, verified_knowledge_fingerprint,
+        recovery_snapshot_id
     ) VALUES (
         decision_id, p_scope_kind, p_event_occurrence_id,
         current_version, current_version + 1, p_state, p_reason_code,
-        applied_time, p_actor_subject, p_case_ref, p_verified_knowledge_fingerprint
+        applied_time, p_actor_subject, p_case_ref, p_verified_knowledge_fingerprint,
+        p_recovery_snapshot_id
     );
 
     INSERT INTO business_audit_events (
@@ -1339,7 +1541,8 @@ BEGIN
             'control_version', current_version + 1,
             'state', p_state,
             'reason_code', p_reason_code,
-            'verified_knowledge_fingerprint', p_verified_knowledge_fingerprint
+            'verified_knowledge_fingerprint', p_verified_knowledge_fingerprint,
+            'recovery_snapshot_id', p_recovery_snapshot_id
         ),
         applied_time
     );
@@ -1396,4 +1599,16 @@ DROP TRIGGER IF EXISTS economic_serving_control_decisions_immutable
     ON economic_serving_control_decisions;
 CREATE TRIGGER economic_serving_control_decisions_immutable
     BEFORE UPDATE OR DELETE ON economic_serving_control_decisions
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS cpi_domain_recovery_changes_immutable
+    ON cpi_domain_recovery_changes;
+CREATE TRIGGER cpi_domain_recovery_changes_immutable
+    BEFORE UPDATE OR DELETE ON cpi_domain_recovery_changes
+    FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+
+DROP TRIGGER IF EXISTS cpi_domain_recovery_snapshots_immutable
+    ON cpi_domain_recovery_snapshots;
+CREATE TRIGGER cpi_domain_recovery_snapshots_immutable
+    BEFORE UPDATE OR DELETE ON cpi_domain_recovery_snapshots
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();

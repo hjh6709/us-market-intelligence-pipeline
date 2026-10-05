@@ -1069,7 +1069,7 @@ Emergency containment may be faster than truth correction.
 
 Truth correction remains the governed interpretation workflow.
 
-For W1 Internal Alpha, an authorized operator may apply WITHHELD immediately. Re-enabling an EVENT_OCCURRENCE after a prior WITHHELD requires a non-empty case_ref and the current selector knowledge fingerprint recorded as verified_knowledge_fingerprint; the application boundary must refuse re-enable while the event remains CONFLICT or UNRESOLVED. Re-enabling CPI_DOMAIN requires a non-empty case_ref plus a verification_ref recorded in the business audit because one event fingerprint cannot prove domain-wide recovery.
+For W1 Internal Alpha, an authorized operator may apply WITHHELD immediately. Re-enabling an EVENT_OCCURRENCE after a prior WITHHELD requires a non-empty case_ref and the current selector knowledge fingerprint recorded as verified_knowledge_fingerprint; the application boundary must refuse re-enable while the event remains CONFLICT or UNRESOLVED. Re-enabling CPI_DOMAIN requires a non-empty case_ref, a verification_ref recorded in the business audit, and an exact current immutable recovery snapshot as defined in section 39.6.
 
 The event-level selector knowledge fingerprint is a lowercase SHA-256 digest of canonical
 JSON owned by the selector contract. It represents the governed knowledge state before
@@ -1793,10 +1793,29 @@ and input-artifact identity under the same transaction.
 
 ### 39.6 Domain containment and recovery evidence
 
-Domain re-enable is not justified by an opaque text reference alone. Containment
-creates an append-only domain recovery mutation journal. Re-enable binds an immutable domain recovery snapshot
-that proves the reviewed affected subjects, work items,
-attempts, artifacts, canonical mutations, and required reconciliation outcomes.
+`cpi_domain_recovery_changes` is an append-only mutation journal with a monotonic
+sequence. Event creation, canonical schedule evidence, disclosure/link/artifact
+evidence, marker and observation assertions, applied interpretation decisions, and
+event/domain serving decisions append to it in the same transaction. Rolled-back
+changes do not advance the committed watermark; sequence gaps are allowed.
+Queue-only claim, heartbeat, retry, PAUSED/PENDING and run metadata do not advance
+this truth watermark. Runtime authorization changes control future execution and
+remain outside this journal.
+
+Snapshot generation takes `DOMAIN exclusive` and persists immutable
+`cpi_domain_recovery_snapshots` under policy `cpi-domain-recovery-v1`. The digest
+binds the current committed watermark, deterministic canonical, interpretation and
+serving digests, event/withheld/conflicting/unresolved/unsafe-uncontained counts,
+operator identity, case and verification references. Normal mutations acquire
+`DOMAIN shared` before lower correctness locks.
+
+Domain WITHHELD -> ENABLED takes `DOMAIN exclusive`, requires an exact snapshot FK,
+checks the supported policy and current watermark, and requires
+`unsafe_uncontained_event_count == 0`. A conflict or unresolved event may remain
+individually WITHHELD while domain containment is removed:
+`DOMAIN_ENABLED != ALL_EVENTS_ENABLED`. Event knowledge fingerprints continue to
+serve event-level stale detection and re-enable verification; they do not prove
+domain-wide absence of intervening mutations.
 Emergency WITHHELD still changes serving policy only; it does not rewrite evidence
 validity or interpretation history.
 

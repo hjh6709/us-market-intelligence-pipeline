@@ -129,14 +129,15 @@ the CPI W1 design specification.
 
 ### AMEND
 
-- Phases 1-13 implement the accepted subject, capability, authorization, PAUSED,
-  fencing, and capability-aware orchestration corrections on this working branch.
-- Phase 14 domain recovery and re-enable evidence remains to be implemented and
-  verified before the accepted delta can be called complete.
+- Phases 1-14 implement the accepted subject, capability, authorization, PAUSED,
+  fencing, orchestration, and domain recovery corrections on this working branch.
+- Domain recovery uses an immutable snapshot FK, a committed mutation watermark,
+  and zero unsafe-uncontained events; individually WITHHELD events may remain.
+- Phase 15 full verification and Phase 16 final evidence remain completion gates.
 
 ### ADD
 
-- domain recovery mutation journal and immutable recovery snapshot;
+- implemented domain recovery mutation journal and immutable recovery snapshot;
 - 001-009 migration hash manifest plus fresh-versus-upgrade equivalence harness;
 - final verification and evidence package tied to the exact tested HEAD.
 

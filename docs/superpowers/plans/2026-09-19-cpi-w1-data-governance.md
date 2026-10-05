@@ -1713,6 +1713,13 @@ Add the domain recovery mutation journal and immutable recovery snapshot require
 re-enable. Prove that containment changes serving/runtime policy without rewriting
 evidence validity.
 
+Implemented: same-transaction append-only journal, immutable digest-bound snapshots,
+exact snapshot FK and watermark validation, and shared/exclusive domain fences.
+PostgreSQL tests cover rollback, queue-only exclusion, snapshot immutability, stale
+snapshot rejection on event creation, unsafe-uncontained rejection, and recovery
+with an individually WITHHELD unresolved event. Full verification and final evidence
+remain the separate Phase 15/16 acceptance gates.
+
 ### Accepted Delta Phase 15: Full verification
 
 Run Python unit/regression, Node UI regression, PostgreSQL constraint/integration,

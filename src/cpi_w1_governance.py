@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import base64
 from contextlib import contextmanager
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -20,6 +22,7 @@ from src.cpi_w1_selector import (
 
 
 _POLICY_VERSION = "cpi-governance-v1"
+_RECOVERY_POLICY_VERSION = "cpi-domain-recovery-v1"
 _REASON_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -132,6 +135,17 @@ def _current_control_version(
     return int(row[0]) if row is not None else 0
 
 
+def _semantic_digest(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 class CpiW1Governance:
     def __init__(
         self,
@@ -240,6 +254,188 @@ class CpiW1Governance:
                 raise GovernanceSafetyError("interpretation activation returned no decision")
             return row[0]
 
+    def create_domain_recovery_snapshot(
+        self,
+        connection: Any,
+        *,
+        principal: WorkforcePrincipal,
+        case_ref: str,
+        verification_ref: str,
+    ) -> UUID:
+        case_ref = _case_ref(case_ref, required=True)
+        if not verification_ref or verification_ref != verification_ref.strip():
+            raise ValueError("verification_ref must be canonical and non-empty")
+
+        with _owned_governance_transaction(connection):
+            self.repository.lock_cpi_domain_exclusive(connection)
+            event_ids = tuple(
+                row[0]
+                for row in connection.execute(
+                    """
+                    SELECT event_occurrence_id
+                      FROM core_event_occurrences
+                     WHERE event_type='CPI'
+                     ORDER BY reference_month, event_occurrence_id
+                    """
+                ).fetchall()
+            )
+            event_controls = {
+                row[0]: row[1]
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT ON (event_occurrence_id)
+                           event_occurrence_id, state
+                      FROM economic_serving_control_decisions
+                     WHERE scope_kind='EVENT_OCCURRENCE'
+                     ORDER BY event_occurrence_id, control_version DESC
+                    """
+                ).fetchall()
+            }
+
+            canonical_state = []
+            withheld_event_count = 0
+            conflicting_event_count = 0
+            unresolved_event_count = 0
+            unsafe_uncontained_event_count = 0
+            unresolved_states = {
+                ObservationResolutionState.UNRESOLVED,
+                ObservationResolutionState.CONFLICT,
+            }
+            for event_id in event_ids:
+                knowledge = self.selector._select_current_event_in_caller_transaction(
+                    connection,
+                    event_id,
+                )
+                is_conflicting = (
+                    knowledge.release_state is ReleaseProjectionState.CONFLICT
+                    or any(
+                        item.state is ObservationResolutionState.CONFLICT
+                        for item in knowledge.observations
+                    )
+                )
+                is_unresolved = (
+                    knowledge.release_state is ReleaseProjectionState.UNRESOLVED
+                    or any(
+                        item.state is ObservationResolutionState.UNRESOLVED
+                        for item in knowledge.observations
+                    )
+                )
+                is_withheld = event_controls.get(event_id) == "WITHHELD"
+                withheld_event_count += int(is_withheld)
+                conflicting_event_count += int(is_conflicting)
+                unresolved_event_count += int(is_unresolved)
+                unsafe_uncontained_event_count += int(
+                    (is_conflicting or is_unresolved) and not is_withheld
+                )
+                canonical_state.append(
+                    {
+                        "event_occurrence_id": str(event_id),
+                        "knowledge_fingerprint": knowledge.knowledge_fingerprint,
+                        "release_state": knowledge.release_state.value,
+                        "observation_states": [
+                            {
+                                "observation_code": item.observation_code,
+                                "state": item.state.value,
+                            }
+                            for item in knowledge.observations
+                            if item.state in unresolved_states
+                        ],
+                    }
+                )
+
+            interpretation_state = [
+                {
+                    "subject_id": str(row[0]),
+                    "decision_version": int(row[1]),
+                    "decision_state": row[2],
+                }
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT ON (subject_id)
+                           subject_id, decision_version, decision_state
+                      FROM interpretation_decisions
+                     ORDER BY subject_id, decision_version DESC
+                    """
+                ).fetchall()
+            ]
+            serving_state = [
+                {
+                    "scope_kind": row[0],
+                    "event_occurrence_id": str(row[1]) if row[1] else None,
+                    "control_version": int(row[2]),
+                    "state": row[3],
+                }
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT ON (scope_kind, event_occurrence_id)
+                           scope_kind, event_occurrence_id,
+                           control_version, state
+                      FROM economic_serving_control_decisions
+                     ORDER BY scope_kind, event_occurrence_id,
+                              control_version DESC
+                    """
+                ).fetchall()
+            ]
+            committed_change_watermark = int(
+                connection.execute(
+                    "SELECT current_recovery_watermark()"
+                ).fetchone()[0]
+            )
+            canonical_knowledge_digest = _semantic_digest(canonical_state)
+            interpretation_state_digest = _semantic_digest(interpretation_state)
+            serving_control_digest = _semantic_digest(serving_state)
+            snapshot_material = {
+                "recovery_policy_version": _RECOVERY_POLICY_VERSION,
+                "committed_change_watermark": committed_change_watermark,
+                "canonical_knowledge_digest": canonical_knowledge_digest,
+                "interpretation_state_digest": interpretation_state_digest,
+                "serving_control_digest": serving_control_digest,
+                "event_count": len(event_ids),
+                "withheld_event_count": withheld_event_count,
+                "conflicting_event_count": conflicting_event_count,
+                "unresolved_event_count": unresolved_event_count,
+                "unsafe_uncontained_event_count": unsafe_uncontained_event_count,
+                "generated_by_subject": principal.database_subject,
+                "case_ref": case_ref,
+                "verification_ref": verification_ref,
+            }
+            recovery_snapshot_digest = _semantic_digest(snapshot_material)
+            recovery_snapshot_id = uuid4()
+            connection.execute(
+                """
+                INSERT INTO cpi_domain_recovery_snapshots (
+                    recovery_snapshot_id, recovery_policy_version,
+                    committed_change_watermark, canonical_knowledge_digest,
+                    interpretation_state_digest, serving_control_digest,
+                    event_count, withheld_event_count,
+                    conflicting_event_count, unresolved_event_count,
+                    unsafe_uncontained_event_count, generated_by_subject,
+                    case_ref, verification_ref, recovery_snapshot_digest
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    recovery_snapshot_id,
+                    _RECOVERY_POLICY_VERSION,
+                    committed_change_watermark,
+                    canonical_knowledge_digest,
+                    interpretation_state_digest,
+                    serving_control_digest,
+                    len(event_ids),
+                    withheld_event_count,
+                    conflicting_event_count,
+                    unresolved_event_count,
+                    unsafe_uncontained_event_count,
+                    principal.database_subject,
+                    case_ref,
+                    verification_ref,
+                    recovery_snapshot_digest,
+                ),
+            )
+            return recovery_snapshot_id
+
     def apply_serving_control(
         self,
         connection: Any,
@@ -252,6 +448,7 @@ class CpiW1Governance:
         case_ref: str | None = None,
         operator_verified_knowledge_fingerprint: str | None = None,
         verification_ref: str | None = None,
+        recovery_snapshot_id: UUID | None = None,
     ) -> UUID:
         if not isinstance(state, ServingControlState):
             state = ServingControlState(state)
@@ -272,14 +469,18 @@ class CpiW1Governance:
                     raise ValueError(
                         "event re-enable requires operator-verified lowercase SHA-256"
                     )
-            elif verification_ref is None or not verification_ref.strip():
-                raise ValueError("domain re-enable requires verification_ref")
+            else:
+                if verification_ref is None or not verification_ref.strip():
+                    raise ValueError("domain re-enable requires verification_ref")
+                if recovery_snapshot_id is None:
+                    raise ValueError("domain re-enable requires recovery_snapshot_id")
 
         with _owned_governance_transaction(connection):
             if (
                 state is ServingControlState.ENABLED
                 and scope_kind == "EVENT_OCCURRENCE"
             ):
+                self.repository.lock_cpi_domain_shared(connection)
                 self.repository.lock_cpi_event(connection, event_occurrence_id)
                 knowledge = self.selector._select_current_event_in_caller_transaction(
                     connection,
@@ -313,7 +514,7 @@ class CpiW1Governance:
             row = connection.execute(
                 """
                 SELECT apply_economic_serving_control(
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -326,6 +527,7 @@ class CpiW1Governance:
                     case_ref,
                     verified_fingerprint,
                     verification_ref,
+                    recovery_snapshot_id,
                 ),
             ).fetchone()
             if row is None:

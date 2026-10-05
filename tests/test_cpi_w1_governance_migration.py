@@ -227,7 +227,56 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
             "event re-enable requires lowercase SHA-256 knowledge fingerprint",
             self.sql,
         )
-        self.assertIn("domain re-enable requires verification reference", self.sql)
+        self.assertIn("domain re-enable requires recovery snapshot", self.sql)
+
+    def test_domain_recovery_journal_and_snapshot_are_structural(self) -> None:
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS cpi_domain_recovery_changes",
+            self.sql,
+        )
+        self.assertIn(
+            "change_sequence BIGINT GENERATED ALWAYS AS IDENTITY",
+            self.sql,
+        )
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS cpi_domain_recovery_snapshots",
+            self.sql,
+        )
+        for field in (
+            "committed_change_watermark",
+            "canonical_knowledge_digest",
+            "interpretation_state_digest",
+            "serving_control_digest",
+            "unsafe_uncontained_event_count",
+            "recovery_snapshot_digest",
+        ):
+            self.assertIn(field, self.sql)
+        self.assertIn("recovery_snapshot_id UUID", self.sql)
+        self.assertIn("cpi_domain_recovery_changes_immutable", self.sql)
+        self.assertIn("cpi_domain_recovery_snapshots_immutable", self.sql)
+
+    def test_recovery_relevant_tables_append_same_transaction_journal(self) -> None:
+        self.assertIn("FUNCTION append_cpi_domain_recovery_change", self.sql)
+        for table in (
+            "core_event_occurrences",
+            "event_schedule_assertions",
+            "event_disclosures",
+            "event_disclosure_links",
+            "event_disclosure_artifacts",
+            "disclosure_marker_assertions",
+            "official_observation_assertions",
+            "interpretation_decisions",
+            "economic_serving_control_decisions",
+        ):
+            self.assertIn(f"'{table}'", self.sql)
+        self.assertNotIn("ON ingestion_work_items\n    FOR EACH ROW EXECUTE FUNCTION append_cpi_domain_recovery_change", self.sql)
+
+    def test_domain_recovery_uses_one_exclusive_fence_and_exact_watermark(self) -> None:
+        self.assertIn("FUNCTION lock_cpi_domain_exclusive", self.sql)
+        self.assertIn("FUNCTION lock_cpi_domain_shared", self.sql)
+        self.assertIn("current_recovery_watermark", self.sql)
+        self.assertIn("snapshot recovery watermark is stale", self.sql)
+        self.assertIn("unsafe_uncontained_event_count <> 0", self.sql)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ class CpiW1GovernanceTest(unittest.TestCase):
             "create_interpretation_request",
             "record_interpretation_approval",
             "activate_interpretation_request",
+            "create_domain_recovery_snapshot",
             "apply_serving_control",
         ):
             parameters = inspect.signature(
@@ -88,11 +89,12 @@ class CpiW1GovernanceTest(unittest.TestCase):
         self.assertIn('_POLICY_VERSION = "cpi-governance-v1"', SOURCE)
 
     def test_event_reenable_uses_same_event_fence_as_promoter(self) -> None:
-        self.assertIn("self.repository.lock_cpi_event", SOURCE)
-        self.assertIn("_select_current_event_in_caller_transaction", SOURCE)
+        method = SOURCE[SOURCE.index("    def apply_serving_control") :]
+        self.assertIn("self.repository.lock_cpi_event", method)
+        self.assertIn("_select_current_event_in_caller_transaction", method)
         self.assertLess(
-            SOURCE.index("self.repository.lock_cpi_event"),
-            SOURCE.index("_select_current_event_in_caller_transaction"),
+            method.index("self.repository.lock_cpi_event"),
+            method.index("_select_current_event_in_caller_transaction"),
         )
 
     def test_event_reenable_recomputes_and_compares_knowledge_fingerprint(self) -> None:
@@ -106,6 +108,14 @@ class CpiW1GovernanceTest(unittest.TestCase):
     def test_domain_reenable_requires_verification_reference(self) -> None:
         source = inspect.signature(CpiW1Governance.apply_serving_control).parameters
         self.assertIn("verification_ref", source)
+        self.assertIn("recovery_snapshot_id", source)
+
+    def test_domain_recovery_snapshot_is_exclusive_and_digest_bound(self) -> None:
+        self.assertIn("def create_domain_recovery_snapshot", SOURCE)
+        self.assertIn("self.repository.lock_cpi_domain_exclusive", SOURCE)
+        self.assertIn("committed_change_watermark", SOURCE)
+        self.assertIn("unsafe_uncontained_event_count", SOURCE)
+        self.assertIn("recovery_snapshot_digest", SOURCE)
 
     def test_serving_state_is_typed(self) -> None:
         self.assertEqual(ServingControlState.WITHHELD.value, "WITHHELD")
