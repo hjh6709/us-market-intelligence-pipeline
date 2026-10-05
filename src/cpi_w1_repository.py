@@ -1333,6 +1333,11 @@ class CpiW1Repository:
             )
         with connection.transaction():
             self.assert_current_claim(connection, claim)
+            connection.execute(
+                "SELECT attempt_id FROM ingestion_attempts WHERE attempt_id=%s FOR UPDATE",
+                (claim.attempt_id,),
+            )
+            self.assert_current_claim(connection, claim)
             attempt = connection.execute(
                 """
                 UPDATE ingestion_attempts a

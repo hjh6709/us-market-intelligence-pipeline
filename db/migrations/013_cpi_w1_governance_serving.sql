@@ -1083,6 +1083,13 @@ BEGIN
         RAISE EXCEPTION 'pause actor must be canonical' USING ERRCODE = '23514';
     END IF;
 
+    -- Acquire local rows in WORK -> ATTEMPT order before evaluating the deadline.
+    -- An UPDATE qualifier evaluated before a lock wait cannot fence expiry.
+    PERFORM 1 FROM ingestion_work_items
+     WHERE work_item_id=p_work_item_id FOR UPDATE;
+    PERFORM 1 FROM ingestion_attempts
+     WHERE attempt_id=p_attempt_id FOR UPDATE;
+
     UPDATE ingestion_attempts a
        SET state='TERMINAL', outcome='FAILED', reason_code=p_attempt_reason_code,
            finished_at=applied_time

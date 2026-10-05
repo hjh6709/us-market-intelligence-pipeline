@@ -4103,6 +4103,73 @@ class CpiW1PostgresTest(unittest.TestCase):
                 (claim.attempt_id,),
             ).fetchone(), ("RUNNING", None))
 
+    def test_retry_cannot_terminalize_after_attempt_lock_expiry(self) -> None:
+        self.assert_lifecycle_attempt_wait_rejected("RETRY")
+
+    def test_pause_cannot_terminalize_after_attempt_lock_expiry(self) -> None:
+        self.assert_lifecycle_attempt_wait_rejected("PAUSE")
+
+    def assert_lifecycle_attempt_wait_rejected(self, operation) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            self.insert_work(connection, run_id)
+            claim = self.claim_work_item(
+                repository, connection, execution_scope="ECONOMIC_COLLECT", lease_seconds=2,
+            )
+            deadline = connection.execute(
+                "SELECT lease_until FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone()[0]
+        pids = Queue()
+
+        def transition():
+            with self.connection() as connection:
+                pids.put(connection.execute("SELECT pg_backend_pid()").fetchone()[0])
+                if operation == "RETRY":
+                    return repository.retry_claim(
+                        connection, claim, reason_code="RETRY_TEST", retry_after_seconds=1,
+                    )
+                return repository.pause_claim(
+                    connection, claim, attempt_reason_code="PAUSE_TEST",
+                    work_reason_code="PAUSE_TEST", actor_subject="test:reviewer",
+                )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with self.connection() as blocker:
+                with blocker.transaction():
+                    blocker.execute(
+                        "SELECT attempt_id FROM ingestion_attempts WHERE attempt_id=%s FOR NO KEY UPDATE",
+                        (claim.attempt_id,),
+                    )
+                    future = executor.submit(transition)
+                    pid = pids.get(timeout=5)
+                    timeout = time.monotonic() + 5
+                    while True:
+                        row = blocker.execute(
+                            "SELECT wait_event, xact_start FROM pg_stat_activity WHERE pid=%s", (pid,),
+                        ).fetchone()
+                        if row and row[0] == "transactionid":
+                            self.assertLess(row[1], deadline)
+                            break
+                        if time.monotonic() >= timeout:
+                            self.fail(f"{operation} did not wait on attempt row")
+                        blocker.execute("SELECT pg_stat_clear_snapshot()")
+                        time.sleep(0.01)
+                    blocker.execute(
+                        "SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (%s::timestamptz - clock_timestamp()))) + 0.05)",
+                        (deadline,),
+                    )
+            with self.assertRaises((StaleClaimError, psycopg.errors.SerializationFailure)):
+                future.result(timeout=5)
+        with self.connection() as connection:
+            self.assertEqual(connection.execute(
+                "SELECT lease_until, state FROM ingestion_work_items WHERE work_item_id=%s", (claim.work_item_id,),
+            ).fetchone(), (deadline, "CLAIMED"))
+            self.assertEqual(connection.execute(
+                "SELECT state, outcome FROM ingestion_attempts WHERE attempt_id=%s", (claim.attempt_id,),
+            ).fetchone(), ("RUNNING", None))
+
     def test_collect_heartbeat_cannot_renew_after_work_row_lock_expiry(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:
