@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -654,30 +654,57 @@ class CpiW1Repository:
             (f"CPI_EVENT:{event_occurrence_id}",),
         )
 
+    @staticmethod
+    def lock_promotion_scheduling(connection: Any, artifact_id: UUID) -> None:
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"CPI_PROMOTION_SCHEDULE:{artifact_id}",),
+        )
+
     def record_promotion_deferred(
         self,
         connection: Any,
         *,
         artifact_id: UUID,
+        promotion_capability_id: str,
+        release_subject_digest: str,
         extractor_contract_version: str,
+        evidence_snapshot_digest: str,
+        gate_decision_digest: str,
         reason_code: str,
         review_ref: str,
         gate_fingerprint: str,
     ) -> UUID:
+        if _REASON_RE.fullmatch(promotion_capability_id) is None:
+            raise ValueError("promotion_capability_id must be canonical")
+        if re.fullmatch(r"[0-9a-f]{64}", release_subject_digest) is None:
+            raise ValueError("release_subject_digest must be lowercase SHA-256")
         if _REASON_RE.fullmatch(reason_code) is None:
             raise ValueError("promotion deferred reason must be canonical")
         if not extractor_contract_version or extractor_contract_version != extractor_contract_version.strip():
             raise ValueError("extractor_contract_version must be canonical")
         if not review_ref or review_ref != review_ref.strip():
             raise ValueError("review_ref must be canonical")
+        if re.fullmatch(r"[0-9a-f]{64}", evidence_snapshot_digest) is None:
+            raise ValueError("evidence_snapshot_digest must be lowercase SHA-256")
+        if re.fullmatch(r"[0-9a-f]{64}", gate_decision_digest) is None:
+            raise ValueError("gate_decision_digest must be lowercase SHA-256")
         if re.fullmatch(r"[0-9a-f]{64}", gate_fingerprint) is None:
             raise ValueError("gate_fingerprint must be lowercase SHA-256")
         with connection.transaction():
             row = connection.execute(
-                "SELECT record_cpi_promotion_deferred(%s, %s, %s, %s, %s)",
+                """
+                SELECT record_cpi_promotion_deferred(
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
                 (
                     artifact_id,
+                    promotion_capability_id,
+                    release_subject_digest,
                     extractor_contract_version,
+                    evidence_snapshot_digest,
+                    gate_decision_digest,
                     reason_code,
                     review_ref,
                     gate_fingerprint,
@@ -1471,3 +1498,82 @@ class CpiW1Repository:
                 ),
             )
             return artifact_id
+
+    def record_artifact_promotion_targets(
+        self,
+        connection: Any,
+        claim: Claim,
+        *,
+        artifact_id: UUID,
+        reference_months: tuple[date, ...],
+    ) -> tuple[date, ...]:
+        if claim.execution_scope != "ECONOMIC_COLLECT":
+            raise ValueError("artifact targets require ECONOMIC_COLLECT ownership")
+        if not reference_months:
+            raise ValueError("artifact promotion targets must not be empty")
+        if any(
+            not isinstance(month, date)
+            or isinstance(month, datetime)
+            or month.day != 1
+            for month in reference_months
+        ):
+            raise ValueError("reference months must be month-start dates")
+        canonical = tuple(sorted(set(reference_months)))
+        if len(canonical) != len(reference_months):
+            raise ValueError("artifact promotion targets must be unique")
+
+        with connection.transaction():
+            self.assert_current_claim(connection, claim)
+            artifact = connection.execute(
+                """
+                SELECT created_by_attempt_id
+                  FROM source_artifacts
+                 WHERE artifact_id=%s
+                   AND data_domain='ECONOMIC'
+                 FOR SHARE
+                """,
+                (artifact_id,),
+            ).fetchone()
+            if artifact is None:
+                raise KeyError(f"CPI source artifact not found: {artifact_id}")
+            if artifact[0] != claim.attempt_id:
+                raise RepositoryInvariantError(
+                    "artifact target must be bound by its collector attempt"
+                )
+            for reference_month in canonical:
+                connection.execute(
+                    """
+                    INSERT INTO cpi_artifact_promotion_targets (
+                        source_artifact_id, data_domain, reference_month,
+                        bound_by_attempt_id, bound_by_execution_scope
+                    ) VALUES (%s, 'ECONOMIC', %s, %s, 'ECONOMIC_COLLECT')
+                    ON CONFLICT (source_artifact_id, reference_month) DO NOTHING
+                    """,
+                    (artifact_id, reference_month, claim.attempt_id),
+                )
+            persisted = self.artifact_promotion_targets(
+                connection,
+                artifact_id=artifact_id,
+            )
+            if persisted != canonical:
+                raise RepositoryInvariantError(
+                    "artifact promotion target identity did not converge"
+                )
+            return persisted
+
+    @staticmethod
+    def artifact_promotion_targets(
+        connection: Any,
+        *,
+        artifact_id: UUID,
+    ) -> tuple[date, ...]:
+        rows = connection.execute(
+            """
+            SELECT reference_month
+              FROM cpi_artifact_promotion_targets
+             WHERE source_artifact_id=%s
+             ORDER BY reference_month
+            """,
+            (artifact_id,),
+        ).fetchall()
+        return tuple(row[0] for row in rows)

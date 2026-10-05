@@ -156,11 +156,27 @@ class CpiW1GovernanceMigrationTest(unittest.TestCase):
         self.assertIn("pause requires current claim ownership", self.sql)
         self.assertIn("resume requires canonical case reference", self.sql)
 
-    def test_deferred_promotion_identity_includes_gate_snapshot(self) -> None:
+    def test_deferred_promotion_identity_includes_exact_capability_subject_and_gate(self) -> None:
+        self.assertIn(
+            "DROP INDEX IF EXISTS business_audit_cpi_promotion_deferred_identity",
+            self.sql,
+        )
+        self.assertIn(
+            "DROP FUNCTION IF EXISTS record_cpi_promotion_deferred(UUID, TEXT, TEXT, TEXT, TEXT)",
+            self.sql,
+        )
+        self.assertIn("event_payload ->> 'promotion_capability_id'", self.sql)
+        self.assertIn("event_payload ->> 'release_subject_digest'", self.sql)
+        self.assertIn("event_payload ->> 'evidence_snapshot_digest'", self.sql)
+        self.assertIn("event_payload ->> 'gate_decision_digest'", self.sql)
         self.assertIn("event_payload ->> 'gate_fingerprint'", self.sql)
+        self.assertIn("p_promotion_capability_id TEXT", self.sql)
+        self.assertIn("p_release_subject_digest TEXT", self.sql)
+        self.assertIn("p_evidence_snapshot_digest TEXT", self.sql)
+        self.assertIn("p_gate_decision_digest TEXT", self.sql)
         self.assertIn("p_gate_fingerprint TEXT", self.sql)
 
-    def test_promotion_deferred_audit_is_artifact_and_extractor_idempotent(self) -> None:
+    def test_promotion_deferred_audit_is_artifact_and_release_subject_idempotent(self) -> None:
         self.assertIn("CPI_PROMOTION_DEFERRED", self.sql)
         self.assertIn("source_artifact_id UUID REFERENCES source_artifacts", self.sql)
         self.assertIn("business_audit_cpi_promotion_deferred_identity", self.sql)

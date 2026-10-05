@@ -10,16 +10,36 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertTrue(MIGRATION.exists(), "migration 010 must exist")
         self.sql = MIGRATION.read_text(encoding="utf-8")
 
-    def test_declares_six_foundation_tables(self) -> None:
+    def test_declares_foundation_tables(self) -> None:
         for table in (
             "data_sources",
             "ingestion_runs",
             "ingestion_work_items",
             "ingestion_attempts",
             "source_artifacts",
+            "cpi_artifact_promotion_targets",
             "interpretation_subjects",
         ):
             self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", self.sql)
+
+    def test_artifact_promotion_targets_are_immutable_month_start_bindings(self) -> None:
+        self.assertIn(
+            "PRIMARY KEY (source_artifact_id, reference_month)",
+            self.sql,
+        )
+        self.assertIn(
+            "reference_month = DATE_TRUNC('month', reference_month)::DATE",
+            self.sql,
+        )
+        self.assertIn(
+            "FOREIGN KEY (source_artifact_id, data_domain)",
+            self.sql,
+        )
+        self.assertIn("enforce_cpi_artifact_promotion_target_immutability", self.sql)
+        self.assertIn(
+            "CPI artifact promotion targets are immutable",
+            self.sql,
+        )
 
     def test_declares_required_state_and_provenance_vocabulary(self) -> None:
         for token in (

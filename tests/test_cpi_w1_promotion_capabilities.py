@@ -56,6 +56,18 @@ class PromotionCapabilityRegistryTest(unittest.TestCase):
         self.assertEqual(registry.require(retired_id).lifecycle, "RETIRED")
         self.assertNotIn(retired_id, {item.promotion_capability_id for item in registry.active()})
 
+    def test_active_capabilities_are_resolved_by_exact_artifact_contract(self) -> None:
+        registry = PromotionCapabilityRegistry.from_json(REGISTRY)
+        capabilities = registry.active_for_artifact(
+            source_code="BLS",
+            artifact_contract_kind="CPI_RELEASE_HTML",
+            source_contract_version="bls-cpi-source-v1",
+        )
+        self.assertEqual(
+            tuple(item.promotion_capability_id for item in capabilities),
+            ("BLS_CPI_RELEASE_ENVELOPE_HTML", "BLS_CPI_CORE4_HTML"),
+        )
+
     def test_rejects_runtime_enabled_flag_and_duplicate_capability_id(self) -> None:
         raw = json.loads(REGISTRY.read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as directory:

@@ -1,5 +1,6 @@
 import hashlib
 import os
+import tempfile
 import unittest
 from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -9,6 +10,8 @@ from uuid import uuid4
 
 import psycopg
 
+from scripts.collect_cpi_w1 import CpiW1CollectorOrchestrator
+from src.cpi_w1_artifacts import FilesystemArtifactStore
 from src.cpi_w1_authorization import (
     ExecutorProvenanceV1,
     PromotionAuthorizationError,
@@ -32,6 +35,7 @@ from src.cpi_w1_promoter import (
     PromotionInvariantError,
     promotion_work_key,
 )
+from src.cpi_w1_promotion_capabilities import PromotionCapabilityRegistry
 from src.cpi_w1_release import (
     CorroboratingRepresentationCandidate,
     CorrectionNoticeCandidate,
@@ -53,6 +57,7 @@ from src.cpi_w1_selector import (
     ObservationResolutionState,
     StaleKnowledgeError,
 )
+from src.cpi_w1_source import BlsCpiSourceContract
 
 
 RUN_POSTGRES_INTEGRATION = os.environ.get("RUN_POSTGRES_INTEGRATION") == "1"
@@ -81,6 +86,35 @@ TEST_OBSERVATION_SUBJECT = ReleaseSubjectV1(
 
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+class EligibleCapabilityGate:
+    gate_fingerprint = digest("integration-gate")
+
+    def __init__(self, registry: PromotionCapabilityRegistry) -> None:
+        self.decisions = {
+            capability.promotion_capability_id: CapabilityGateDecision(
+                promotion_capability_id=capability.promotion_capability_id,
+                release_subject_digest=(
+                    capability.release_subject.release_subject_digest
+                ),
+                evidence_snapshot_digest=digest(
+                    f"evidence:{capability.promotion_capability_id}"
+                ),
+                gate_policy_version="cpi-w1-gate-v2",
+                decision="ELIGIBLE",
+                reason_code="APPROVED",
+                review_ref="integration:review",
+                review_digest=digest("integration-review"),
+                gate_decision_digest=digest(
+                    f"decision:{capability.promotion_capability_id}"
+                ),
+            )
+            for capability in registry.active()
+        }
+
+    def decision(self, promotion_capability_id, release_subject_digest=None):
+        return self.decisions[promotion_capability_id]
 
 
 TEST_EXECUTOR = ExecutorProvenanceV1(
@@ -2994,6 +3028,153 @@ class CpiW1PostgresTest(unittest.TestCase):
                     retrieval_url="https://www.bls.gov/news.release/cpi.nr0.htm",
                 )
 
+    def test_artifact_promotion_targets_are_exact_idempotent_and_immutable(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            self.insert_work(
+                connection,
+                run_id,
+                work_key=f"collect:artifact-target:{uuid4()}",
+            )
+            claim = self.claim_work_item(
+                repository,
+                connection,
+                execution_scope="ECONOMIC_COLLECT",
+            )
+            artifact_id = repository.record_source_artifact(
+                connection,
+                claim,
+                source_code="BLS",
+                artifact_contract_kind="CPI_RELEASE_HTML",
+                source_contract_version="bls-cpi-source-v1",
+                locator_key="CURRENT_CPI_RELEASE_HTML",
+                content_sha256=digest("target-material"),
+                content_type="text/html",
+                captured_at=connection.execute(
+                    "SELECT CURRENT_TIMESTAMP"
+                ).fetchone()[0],
+            )
+            expected = (date(2026, 8, 1), date(2026, 9, 1))
+            self.assertEqual(
+                repository.record_artifact_promotion_targets(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    reference_months=expected,
+                ),
+                expected,
+            )
+            self.assertEqual(
+                repository.record_artifact_promotion_targets(
+                    connection,
+                    claim,
+                    artifact_id=artifact_id,
+                    reference_months=expected,
+                ),
+                expected,
+            )
+            with self.assertRaises(Exception):
+                connection.execute(
+                    """
+                    UPDATE cpi_artifact_promotion_targets
+                       SET reference_month=DATE '2026-10-01'
+                     WHERE source_artifact_id=%s
+                       AND reference_month=DATE '2026-09-01'
+                    """,
+                    (artifact_id,),
+                )
+            with self.assertRaises(Exception):
+                connection.execute(
+                    """
+                    INSERT INTO cpi_artifact_promotion_targets (
+                        source_artifact_id, data_domain, reference_month,
+                        bound_by_attempt_id, bound_by_execution_scope
+                    ) VALUES (%s, 'ECONOMIC', DATE '2026-08-02', %s,
+                              'ECONOMIC_COLLECT')
+                    """,
+                    (artifact_id, claim.attempt_id),
+                )
+
+    def test_concurrent_promotion_scheduling_creates_one_run(self) -> None:
+        repository = CpiW1Repository()
+        registry = PromotionCapabilityRegistry.from_json(
+            "config/cpi_w1_promotion_capabilities.json"
+        )
+        source_contract = BlsCpiSourceContract.from_json(
+            "config/cpi_w1_source_contract.json"
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection,
+                f"concurrent-schedule:{uuid4()}",
+            )
+            attempt_id = connection.execute(
+                """
+                SELECT created_by_attempt_id
+                  FROM source_artifacts
+                 WHERE artifact_id=%s
+                """,
+                (artifact_id,),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO cpi_artifact_promotion_targets (
+                    source_artifact_id, data_domain, reference_month,
+                    bound_by_attempt_id, bound_by_execution_scope
+                ) VALUES (%s, 'ECONOMIC', DATE '2026-08-01', %s,
+                          'ECONOMIC_COLLECT')
+                """,
+                (artifact_id, attempt_id),
+            )
+
+        with tempfile.TemporaryDirectory() as artifact_root:
+            orchestrator = CpiW1CollectorOrchestrator(
+                repository=repository,
+                source_contract=source_contract,
+                capability_registry=registry,
+                release_gate=EligibleCapabilityGate(registry),
+                artifact_store=FilesystemArtifactStore(artifact_root),
+            )
+
+            def schedule_once():
+                with self.connection() as connection:
+                    return orchestrator._schedule_promotions(
+                        connection,
+                        artifact_id=artifact_id,
+                        artifact_contract_kind="CPI_RELEASE_HTML",
+                        source_contract_version="bls-cpi-source-v1",
+                        run_mode="BACKFILL",
+                    )
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = tuple(executor.map(lambda _: schedule_once(), range(2)))
+
+        self.assertEqual(
+            sorted(result.status for result in results),
+            ["ALREADY_SCHEDULED", "SCHEDULED"],
+        )
+        with self.connection() as connection:
+            work_count = connection.execute(
+                """
+                SELECT COUNT(*)
+                  FROM ingestion_work_items
+                 WHERE input_artifact_id=%s
+                   AND execution_scope='ECONOMIC_PROMOTE'
+                """,
+                (artifact_id,),
+            ).fetchone()[0]
+            run_count = connection.execute(
+                """
+                SELECT COUNT(*)
+                  FROM ingestion_runs
+                 WHERE job_type='CPI_W1_PROMOTE'
+                   AND job_contract_version='cpi-w1-promoter-v1'
+                """
+            ).fetchone()[0]
+        self.assertEqual(work_count, 2)
+        self.assertEqual(run_count, 1)
+
     def test_retry_delay_uses_database_clock_and_rejects_unbounded_delay(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:
@@ -3053,10 +3234,13 @@ class CpiW1PostgresTest(unittest.TestCase):
                     retry_after_seconds=86401,
                 )
 
-    def test_deferred_promotion_audit_is_idempotent_per_gate_snapshot(self) -> None:
+    def test_deferred_promotion_audit_is_capability_scoped_and_idempotent(self) -> None:
         repository = CpiW1Repository()
         gate_a = "a" * 64
         gate_b = "b" * 64
+        evidence = "c" * 64
+        envelope_decision = "d" * 64
+        core4_decision = "e" * 64
         with self.connection() as connection:
             artifact_id = self.make_artifact(
                 connection,
@@ -3065,7 +3249,11 @@ class CpiW1PostgresTest(unittest.TestCase):
             first = repository.record_promotion_deferred(
                 connection,
                 artifact_id=artifact_id,
-                extractor_contract_version="bls-cpi-release-html-v1",
+                promotion_capability_id="BLS_CPI_RELEASE_ENVELOPE_HTML",
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                extractor_contract_version="bls-cpi-release-envelope-html-v1",
+                evidence_snapshot_digest=evidence,
+                gate_decision_digest=envelope_decision,
                 reason_code="OFFICIAL_CORPUS_NOT_READY",
                 review_ref="CORPUS-REVIEW-1",
                 gate_fingerprint=gate_a,
@@ -3073,7 +3261,23 @@ class CpiW1PostgresTest(unittest.TestCase):
             same = repository.record_promotion_deferred(
                 connection,
                 artifact_id=artifact_id,
-                extractor_contract_version="bls-cpi-release-html-v1",
+                promotion_capability_id="BLS_CPI_RELEASE_ENVELOPE_HTML",
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                extractor_contract_version="bls-cpi-release-envelope-html-v1",
+                evidence_snapshot_digest=evidence,
+                gate_decision_digest=envelope_decision,
+                reason_code="OFFICIAL_CORPUS_NOT_READY",
+                review_ref="CORPUS-REVIEW-1",
+                gate_fingerprint=gate_a,
+            )
+            independent_capability = repository.record_promotion_deferred(
+                connection,
+                artifact_id=artifact_id,
+                promotion_capability_id="BLS_CPI_CORE4_HTML",
+                release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
+                extractor_contract_version="bls-cpi-core4-html-v1",
+                evidence_snapshot_digest=evidence,
+                gate_decision_digest=core4_decision,
                 reason_code="OFFICIAL_CORPUS_NOT_READY",
                 review_ref="CORPUS-REVIEW-1",
                 gate_fingerprint=gate_a,
@@ -3081,29 +3285,37 @@ class CpiW1PostgresTest(unittest.TestCase):
             later_gate = repository.record_promotion_deferred(
                 connection,
                 artifact_id=artifact_id,
-                extractor_contract_version="bls-cpi-release-html-v1",
-                reason_code="EXTRACTOR_NOT_REVIEWED",
+                promotion_capability_id="BLS_CPI_RELEASE_ENVELOPE_HTML",
+                release_subject_digest=TEST_RELEASE_SUBJECT.release_subject_digest,
+                extractor_contract_version="bls-cpi-release-envelope-html-v1",
+                evidence_snapshot_digest=evidence,
+                gate_decision_digest=envelope_decision,
+                reason_code="OFFICIAL_CORPUS_NOT_READY",
                 review_ref="CORPUS-REVIEW-2",
                 gate_fingerprint=gate_b,
             )
             self.assertEqual(first, same)
+            self.assertNotEqual(first, independent_capability)
             self.assertNotEqual(first, later_gate)
             rows = connection.execute(
                 """
-                SELECT event_payload ->> 'gate_fingerprint',
+                SELECT event_payload ->> 'promotion_capability_id',
+                       event_payload ->> 'gate_fingerprint',
                        event_payload ->> 'reason_code'
                   FROM business_audit_events
                  WHERE action_kind='CPI_PROMOTION_DEFERRED'
                    AND source_artifact_id=%s
-                 ORDER BY event_payload ->> 'gate_fingerprint'
+                 ORDER BY event_payload ->> 'promotion_capability_id',
+                          event_payload ->> 'gate_fingerprint'
                 """,
                 (artifact_id,),
             ).fetchall()
             self.assertEqual(
                 rows,
                 [
-                    (gate_a, "OFFICIAL_CORPUS_NOT_READY"),
-                    (gate_b, "EXTRACTOR_NOT_REVIEWED"),
+                    ("BLS_CPI_CORE4_HTML", gate_a, "OFFICIAL_CORPUS_NOT_READY"),
+                    ("BLS_CPI_RELEASE_ENVELOPE_HTML", gate_a, "OFFICIAL_CORPUS_NOT_READY"),
+                    ("BLS_CPI_RELEASE_ENVELOPE_HTML", gate_b, "OFFICIAL_CORPUS_NOT_READY"),
                 ],
             )
 

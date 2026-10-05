@@ -1731,6 +1731,23 @@ the candidate extractor contract, capability, expected semantic digests, actual
 semantic digests, and scoped expected-diff approvals. Recomputing mutable corpus
 state at claim or commit time is not a substitute for this snapshot.
 
+#### 39.2.1 Artifact promotion-target authority
+
+`ReleaseSubjectV1` deliberately excludes reference month, and a mutable source page
+must not select its own business target. During an owned collection attempt, the
+collector therefore binds each immutable source artifact to an exact, non-empty set
+of month-start CPI reference months. That artifact-to-target relation is immutable,
+append-only scheduling authority and is not inferred from locator, URL, capture
+time, or the latest contents of the source page.
+
+Capability-aware scheduling expands the Cartesian product of the artifact's active,
+eligible capabilities and its persisted targets. An approved extractor must still
+validate that the bytes describe the planned reference month before canonical
+promotion; a mismatch fails closed. Reconciliation and replay consume only the
+persisted target relation and may not accept a new reference month from the command
+line. Legacy artifacts without a target relation remain unscheduled rather than
+having a target invented retrospectively.
+
 ### 39.3 Authorization and runtime control
 
 An approved release decision creates an immutable authorization identity for one

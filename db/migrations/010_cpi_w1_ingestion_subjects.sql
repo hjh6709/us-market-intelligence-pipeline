@@ -291,6 +291,26 @@ CREATE TABLE IF NOT EXISTS source_artifacts (
     )
 );
 
+CREATE TABLE IF NOT EXISTS cpi_artifact_promotion_targets (
+    source_artifact_id UUID NOT NULL,
+    data_domain TEXT NOT NULL CHECK (data_domain = 'ECONOMIC'),
+    reference_month DATE NOT NULL CHECK (
+        reference_month = DATE_TRUNC('month', reference_month)::DATE
+    ),
+    bound_by_attempt_id UUID NOT NULL,
+    bound_by_execution_scope TEXT NOT NULL CHECK (
+        bound_by_execution_scope = 'ECONOMIC_COLLECT'
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (source_artifact_id, reference_month),
+    CONSTRAINT cpi_artifact_promotion_targets_artifact_fk
+        FOREIGN KEY (source_artifact_id, data_domain)
+        REFERENCES source_artifacts (artifact_id, data_domain),
+    CONSTRAINT cpi_artifact_promotion_targets_attempt_fk
+        FOREIGN KEY (bound_by_attempt_id, bound_by_execution_scope, data_domain)
+        REFERENCES ingestion_attempts (attempt_id, execution_scope, data_domain)
+);
+
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -817,3 +837,55 @@ DROP TRIGGER IF EXISTS source_artifacts_forensic_immutable ON source_artifacts;
 CREATE TRIGGER source_artifacts_forensic_immutable
     BEFORE UPDATE OR DELETE ON source_artifacts
     FOR EACH ROW EXECUTE FUNCTION enforce_source_artifact_forensic_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_cpi_artifact_promotion_target_binding()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $artifact_target_binding$
+DECLARE
+    artifact_attempt_id UUID;
+    attempt_state TEXT;
+BEGIN
+    SELECT created_by_attempt_id
+      INTO STRICT artifact_attempt_id
+      FROM source_artifacts
+     WHERE artifact_id = NEW.source_artifact_id
+       AND data_domain = NEW.data_domain;
+
+    SELECT state
+      INTO STRICT attempt_state
+      FROM ingestion_attempts
+     WHERE attempt_id = NEW.bound_by_attempt_id
+       AND execution_scope = NEW.bound_by_execution_scope
+       AND data_domain = NEW.data_domain;
+
+    IF artifact_attempt_id <> NEW.bound_by_attempt_id
+       OR attempt_state <> 'RUNNING' THEN
+        RAISE EXCEPTION 'CPI artifact target must be bound by its active collector attempt'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$artifact_target_binding$;
+
+DROP TRIGGER IF EXISTS cpi_artifact_promotion_targets_binding_guard
+    ON cpi_artifact_promotion_targets;
+CREATE TRIGGER cpi_artifact_promotion_targets_binding_guard
+    BEFORE INSERT ON cpi_artifact_promotion_targets
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_artifact_promotion_target_binding();
+
+CREATE OR REPLACE FUNCTION enforce_cpi_artifact_promotion_target_immutability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $artifact_target_immutable$
+BEGIN
+    RAISE EXCEPTION 'CPI artifact promotion targets are immutable'
+        USING ERRCODE = '55000';
+END;
+$artifact_target_immutable$;
+
+DROP TRIGGER IF EXISTS cpi_artifact_promotion_targets_immutable
+    ON cpi_artifact_promotion_targets;
+CREATE TRIGGER cpi_artifact_promotion_targets_immutable
+    BEFORE UPDATE OR DELETE ON cpi_artifact_promotion_targets
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_artifact_promotion_target_immutability();

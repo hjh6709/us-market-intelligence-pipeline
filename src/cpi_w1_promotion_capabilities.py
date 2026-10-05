@@ -112,6 +112,21 @@ class PromotionCapabilityRegistry:
     def active(self) -> tuple[PromotionCapability, ...]:
         return tuple(item for item in self.capabilities if item.lifecycle == "ACTIVE")
 
+    def active_for_artifact(
+        self,
+        *,
+        source_code: str,
+        artifact_contract_kind: str,
+        source_contract_version: str,
+    ) -> tuple[PromotionCapability, ...]:
+        return tuple(
+            item
+            for item in self.active()
+            if item.source_code == source_code
+            and item.artifact_contract_kind == artifact_contract_kind
+            and item.source_contract_version == source_contract_version
+        )
+
 
 def _require_exact_keys(
     value: dict[str, object], expected: frozenset[str], label: str

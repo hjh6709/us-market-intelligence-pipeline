@@ -632,17 +632,27 @@ CREATE TABLE IF NOT EXISTS business_audit_events (
     )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS business_audit_cpi_promotion_deferred_identity
+DROP INDEX IF EXISTS business_audit_cpi_promotion_deferred_identity;
+CREATE UNIQUE INDEX business_audit_cpi_promotion_deferred_identity
     ON business_audit_events (
         source_artifact_id,
         verification_ref,
+        ((event_payload ->> 'promotion_capability_id')),
+        ((event_payload ->> 'release_subject_digest')),
+        ((event_payload ->> 'evidence_snapshot_digest')),
+        ((event_payload ->> 'gate_decision_digest')),
         ((event_payload ->> 'gate_fingerprint'))
     )
     WHERE action_kind = 'CPI_PROMOTION_DEFERRED';
 
+DROP FUNCTION IF EXISTS record_cpi_promotion_deferred(UUID, TEXT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION record_cpi_promotion_deferred(
     p_source_artifact_id UUID,
+    p_promotion_capability_id TEXT,
+    p_release_subject_digest TEXT,
     p_extractor_contract_version TEXT,
+    p_evidence_snapshot_digest TEXT,
+    p_gate_decision_digest TEXT,
     p_reason_code TEXT,
     p_review_ref TEXT,
     p_gate_fingerprint TEXT
@@ -653,9 +663,29 @@ AS $promotion_deferred$
 DECLARE
     event_id UUID;
 BEGIN
+    IF p_promotion_capability_id IS NULL
+       OR p_promotion_capability_id !~ '^[A-Z][A-Z0-9_]*$' THEN
+        RAISE EXCEPTION 'deferred promotion capability is required'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_release_subject_digest IS NULL
+       OR p_release_subject_digest !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION 'deferred promotion release subject must be lowercase SHA-256'
+            USING ERRCODE = '23514';
+    END IF;
     IF p_extractor_contract_version IS NULL
        OR BTRIM(p_extractor_contract_version) = '' THEN
         RAISE EXCEPTION 'deferred promotion extractor is required'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_evidence_snapshot_digest IS NULL
+       OR p_evidence_snapshot_digest !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION 'deferred promotion evidence snapshot must be lowercase SHA-256'
+            USING ERRCODE = '23514';
+    END IF;
+    IF p_gate_decision_digest IS NULL
+       OR p_gate_decision_digest !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION 'deferred promotion gate decision must be lowercase SHA-256'
             USING ERRCODE = '23514';
     END IF;
     IF p_reason_code IS NULL OR p_reason_code !~ '^[A-Z][A-Z0-9_]*$' THEN
@@ -681,7 +711,11 @@ BEGIN
         jsonb_build_object(
             'reason_code', p_reason_code,
             'review_ref', p_review_ref,
+            'promotion_capability_id', p_promotion_capability_id,
+            'release_subject_digest', p_release_subject_digest,
             'extractor_contract_version', p_extractor_contract_version,
+            'evidence_snapshot_digest', p_evidence_snapshot_digest,
+            'gate_decision_digest', p_gate_decision_digest,
             'gate_fingerprint', p_gate_fingerprint
         ),
         CURRENT_TIMESTAMP
@@ -689,6 +723,10 @@ BEGIN
     ON CONFLICT (
         source_artifact_id,
         verification_ref,
+        ((event_payload ->> 'promotion_capability_id')),
+        ((event_payload ->> 'release_subject_digest')),
+        ((event_payload ->> 'evidence_snapshot_digest')),
+        ((event_payload ->> 'gate_decision_digest')),
         ((event_payload ->> 'gate_fingerprint'))
     )
         WHERE action_kind = 'CPI_PROMOTION_DEFERRED'
@@ -702,6 +740,10 @@ BEGIN
          WHERE action_kind = 'CPI_PROMOTION_DEFERRED'
            AND source_artifact_id = p_source_artifact_id
            AND verification_ref = p_extractor_contract_version
+           AND event_payload ->> 'promotion_capability_id' = p_promotion_capability_id
+           AND event_payload ->> 'release_subject_digest' = p_release_subject_digest
+           AND event_payload ->> 'evidence_snapshot_digest' = p_evidence_snapshot_digest
+           AND event_payload ->> 'gate_decision_digest' = p_gate_decision_digest
            AND event_payload ->> 'gate_fingerprint' = p_gate_fingerprint;
     END IF;
 

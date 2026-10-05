@@ -74,6 +74,10 @@ Current implemented foundation on the CPI W1 branch includes:
 - controlled CPI W1 collector/orchestrator skeleton for bounded capture, immutable
   artifact persistence, gate-aware promotion scheduling, scoped replay
   reconciliation, and run finalization.
+- capability-aware orchestration with immutable artifact-to-reference-month target
+  bindings, independent per-capability gate outcomes, exact deferred-decision audit
+  identity, duplicate-delivery convergence, and artifact-scoped PostgreSQL advisory
+  locking for concurrent scheduling.
 
 The following are **not implemented or not launch-ready** and must not be represented
 to Product, Marketing, Sales, CS, or users as production capability:
@@ -125,20 +129,13 @@ the CPI W1 design specification.
 
 ### AMEND
 
-- replace extractor-wide release gating with capability-scoped release subjects;
-- replace opaque `work_key` semantic identity with structured columns;
-- make corpus review/replay support several capabilities for one artifact;
-- implement both zero-attempt and claimed-attempt PAUSED paths;
-- bind claim/reclaim/final commit to immutable authorization and runtime control;
-- acquire the event fence before every first event-scoped mutation;
-- replace text-only domain re-enable evidence with structured recovery evidence.
+- Phases 1-13 implement the accepted subject, capability, authorization, PAUSED,
+  fencing, and capability-aware orchestration corrections on this working branch.
+- Phase 14 domain recovery and re-enable evidence remains to be implemented and
+  verified before the accepted delta can be called complete.
 
 ### ADD
 
-- strict `ReleaseSubjectV1` and migration-owned capability registry;
-- immutable semantic evidence snapshots and authorization identities;
-- append-only per-authorization runtime control and attempt executor provenance;
-- one global lock order: `DOMAIN -> RELEASE_SUBJECT -> WORK -> EVENT`;
 - domain recovery mutation journal and immutable recovery snapshot;
 - 001-009 migration hash manifest plus fresh-versus-upgrade equivalence harness;
 - final verification and evidence package tied to the exact tested HEAD.

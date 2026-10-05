@@ -17,6 +17,11 @@ class CpiW1RepositoryTest(unittest.TestCase):
     def test_repository_owns_run_and_work_creation_boundaries(self) -> None:
         self.assertIn("def create_run(", SOURCE)
         self.assertIn("def create_work_item(", SOURCE)
+
+    def test_repository_owns_immutable_artifact_target_boundaries(self) -> None:
+        self.assertIn("def record_artifact_promotion_targets(", SOURCE)
+        self.assertIn("def artifact_promotion_targets(", SOURCE)
+        self.assertIn("cpi_artifact_promotion_targets", SOURCE)
         self.assertIn("ON CONFLICT DO NOTHING", SOURCE)
         self.assertIn(
             "same ingestion run idempotency key changed immutable metadata",

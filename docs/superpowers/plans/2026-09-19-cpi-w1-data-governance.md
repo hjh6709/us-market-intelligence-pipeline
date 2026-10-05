@@ -1693,6 +1693,20 @@ Schedule all eligible promotion capabilities for an artifact independently, conv
 duplicate collector delivery, retain per-capability deferral, and prevent backfill or
 replay from creating live customer side effects.
 
+The implementation must also:
+
+- persist the collector-owned artifact-to-reference-month binding atomically with
+  artifact capture, without adding reference month to `ReleaseSubjectV1`;
+- use only that immutable relation as scheduling authority while requiring the
+  extractor to validate the planned month against artifact contents;
+- record blocked decisions by artifact, capability, release subject, evidence
+  snapshot, gate decision, and gate fingerprint;
+- serialize concurrent scheduling for one artifact so duplicate delivery creates one
+  global promotion work set and no synthetic empty race-loser run;
+- make reconciliation exact to CPI W1 collection/promotion job contracts and consume
+  persisted targets only; and
+- leave targetless legacy artifacts unscheduled and visible as such.
+
 ### Accepted Delta Phase 14: Domain recovery
 
 Add the domain recovery mutation journal and immutable recovery snapshot required by
