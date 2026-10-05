@@ -1793,7 +1793,7 @@ and input-artifact identity under the same transaction.
 
 ### 39.6 Domain containment and recovery evidence
 
-`cpi_domain_recovery_changes` is an append-only mutation journal with a monotonic
+`cpi_domain_recovery_changes` is the append-only domain recovery mutation journal with a monotonic
 sequence. Event creation, canonical schedule evidence, disclosure/link/artifact
 evidence, marker and observation assertions, applied interpretation decisions, and
 event/domain serving decisions append to it in the same transaction. Rolled-back
@@ -1802,7 +1802,7 @@ Queue-only claim, heartbeat, retry, PAUSED/PENDING and run metadata do not advan
 this truth watermark. Runtime authorization changes control future execution and
 remain outside this journal.
 
-Snapshot generation takes `DOMAIN exclusive` and persists immutable
+Snapshot generation takes `DOMAIN exclusive` and persists an immutable domain recovery snapshot in
 `cpi_domain_recovery_snapshots` under policy `cpi-domain-recovery-v1`. The digest
 binds the current committed watermark, deterministic canonical, interpretation and
 serving digests, event/withheld/conflicting/unresolved/unsafe-uncontained counts,
