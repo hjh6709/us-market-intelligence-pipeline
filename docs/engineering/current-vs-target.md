@@ -133,7 +133,9 @@ the CPI W1 design specification.
   fencing, orchestration, and domain recovery corrections on this working branch.
 - Domain recovery uses an immutable snapshot FK, a committed mutation watermark,
   and zero unsafe-uncontained events; individually WITHHELD events may remain.
-- Phase 15 full verification and Phase 16 final evidence remain completion gates.
+- Phase 15 local CI-equivalent verification is complete. Phase 16 evidence is
+  recorded in [the 2026-10-05 verification report](../evidence/cpi-w1-foundation-2026-10-05.md).
+  Remote CI at the newly pushed revision remains a completion gate.
 
 ### ADD
 

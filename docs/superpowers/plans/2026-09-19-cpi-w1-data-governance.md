@@ -1726,8 +1726,15 @@ Run Python unit/regression, Node UI regression, PostgreSQL constraint/integratio
 fresh-versus-upgrade migration, corpus replay, duplicate-delivery, stale-worker,
 authorization-revocation, lock-order, and legacy FastAPI compatibility verification.
 
+2026-10-05 local verification: Python 736 run / 171 skipped; CPI/governance/migration
+158 passed; remaining CI PostgreSQL regressions 52 passed; Node 6 passed. Official
+corpus remains REMOTE_ONLY and all checked-in release gates remain BLOCKED. Remote
+CI must be checked against the pushed revision.
+
 ### Accepted Delta Phase 16: Final evidence package
 
 Produce the Final evidence package with exact HEAD, commands, outputs, migration
 hashes, capability/authorization vectors, known limitations, scope review, and a
 direct YES/NO semantic completion assessment. Do not claim launch readiness.
+
+Evidence: `docs/evidence/cpi-w1-foundation-2026-10-05.md` and its corpus JSON.
