@@ -179,6 +179,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not schedule-assertion promotion work")
 
@@ -397,6 +399,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not release-envelope promotion work")
 
@@ -700,6 +704,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError(
                 "claim is not corroborating-representation promotion work"
@@ -863,6 +869,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not correction-notice promotion work")
 
@@ -1257,6 +1265,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError("claim is not observation-bundle promotion work")
 
@@ -1361,6 +1371,8 @@ class CpiW1Promoter:
             candidate.extractor_contract_version,
             candidate.reference_month,
         )
+        if claim.target_reference_month != candidate.reference_month:
+            raise PromotionInvariantError("candidate does not match claim target reference month")
         if claim.work_key != expected_work_key:
             raise PromotionInvariantError(
                 "claim is not correction-observation promotion work"

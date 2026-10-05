@@ -164,7 +164,7 @@ class CpiW1IngestionMigrationTest(unittest.TestCase):
         self.assertIn("ingestion_work_items_release_subject_valid", self.sql)
         self.assertIn("release_subject_digest ~ '^[0-9a-f]{64}$'", self.sql)
         self.assertIn(
-            "(input_artifact_id, release_subject_digest)",
+            "(input_artifact_id, release_subject_digest, target_reference_month)",
             self.sql,
         )
         self.assertNotIn(

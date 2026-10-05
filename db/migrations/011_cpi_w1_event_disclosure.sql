@@ -277,7 +277,7 @@ BEGIN
        AND w.state = 'CLAIMED'
        AND w.claim_generation = a.attempt_number
        AND w.claim_token IS NOT NULL
-       AND w.lease_until > CURRENT_TIMESTAMP;
+       AND w.lease_until > clock_timestamp();
 
     IF lineage_scope <> 'ECONOMIC_PROMOTE' OR lineage_domain <> 'ECONOMIC' THEN
         RAISE EXCEPTION 'canonical CPI evidence requires current ECONOMIC_PROMOTE claim ownership'

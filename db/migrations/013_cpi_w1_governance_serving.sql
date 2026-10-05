@@ -996,7 +996,7 @@ BEGIN
        AND w.state='CLAIMED'
        AND w.claim_generation=p_claim_generation
        AND w.claim_token=p_claim_token
-       AND w.lease_until <= CURRENT_TIMESTAMP;
+       AND w.lease_until <= clock_timestamp();
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'reclaim pause requires expired current ownership'
@@ -1093,7 +1093,7 @@ BEGIN
        AND w.state='CLAIMED'
        AND w.claim_generation=p_claim_generation
        AND w.claim_token=p_claim_token
-       AND w.lease_until > CURRENT_TIMESTAMP
+       AND w.lease_until > clock_timestamp()
        AND a.state='RUNNING'
        AND a.attempt_number=w.claim_generation;
 

@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS ingestion_work_items (
     promotion_capability_id TEXT,
     extractor_contract_version TEXT,
     release_subject_digest TEXT,
+    target_reference_month DATE,
     state TEXT NOT NULL DEFAULT 'PENDING' CHECK (
         state IN ('PENDING', 'CLAIMED', 'PAUSED', 'TERMINAL')
     ),
@@ -157,7 +158,28 @@ CREATE INDEX IF NOT EXISTS ingestion_work_items_claimable_idx
 ALTER TABLE ingestion_work_items
     ADD COLUMN IF NOT EXISTS promotion_capability_id TEXT,
     ADD COLUMN IF NOT EXISTS extractor_contract_version TEXT,
-    ADD COLUMN IF NOT EXISTS release_subject_digest TEXT;
+    ADD COLUMN IF NOT EXISTS release_subject_digest TEXT,
+    ADD COLUMN IF NOT EXISTS target_reference_month DATE;
+
+-- Older unmerged draft rows are not assigned a target from their work_key.
+-- NOT VALID preserves them for explicit review while rejecting new invalid work.
+DO $structured_promotion_target$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+         WHERE conrelid = 'ingestion_work_items'::regclass
+           AND conname = 'ingestion_work_items_target_month_valid'
+    ) THEN
+        ALTER TABLE ingestion_work_items
+            ADD CONSTRAINT ingestion_work_items_target_month_valid CHECK (
+                (execution_scope = 'ECONOMIC_COLLECT' AND target_reference_month IS NULL)
+                OR (execution_scope = 'ECONOMIC_PROMOTE'
+                    AND target_reference_month IS NOT NULL
+                    AND target_reference_month = DATE_TRUNC('month', target_reference_month)::DATE)
+            ) NOT VALID;
+    END IF;
+END;
+$structured_promotion_target$;
 
 DO $structured_promotion_identity$
 BEGIN
@@ -189,7 +211,7 @@ $structured_promotion_identity$;
 
 DROP INDEX IF EXISTS ingestion_work_items_promotion_identity;
 CREATE UNIQUE INDEX ingestion_work_items_promotion_identity
-    ON ingestion_work_items (input_artifact_id, release_subject_digest)
+    ON ingestion_work_items (input_artifact_id, release_subject_digest, target_reference_month)
     WHERE execution_scope = 'ECONOMIC_PROMOTE'
       AND input_artifact_id IS NOT NULL
       AND release_subject_digest IS NOT NULL;
@@ -610,6 +632,7 @@ BEGIN
        OR NEW.promotion_capability_id IS DISTINCT FROM OLD.promotion_capability_id
        OR NEW.extractor_contract_version IS DISTINCT FROM OLD.extractor_contract_version
        OR NEW.release_subject_digest IS DISTINCT FROM OLD.release_subject_digest
+       OR NEW.target_reference_month IS DISTINCT FROM OLD.target_reference_month
        OR NEW.created_at IS DISTINCT FROM OLD.created_at
     THEN
         RAISE EXCEPTION 'ingestion work identity and lineage are immutable'
@@ -658,7 +681,7 @@ BEGIN
 
     IF OLD.state = 'CLAIMED' AND NEW.state = 'CLAIMED'
        AND NEW.claim_generation = OLD.claim_generation + 1 THEN
-        IF OLD.lease_until > CURRENT_TIMESTAMP THEN
+        IF OLD.lease_until > clock_timestamp() THEN
             RAISE EXCEPTION 'active claim cannot be reclaimed before lease expiry'
                 USING ERRCODE = '23514';
         END IF;

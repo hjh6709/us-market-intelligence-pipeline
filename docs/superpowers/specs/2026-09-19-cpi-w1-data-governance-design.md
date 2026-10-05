@@ -1748,6 +1748,14 @@ persisted target relation and may not accept a new reference month from the comm
 line. Legacy artifacts without a target relation remain unscheduled rather than
 having a target invented retrospectively.
 
+Promotion work has structured immutable identity `(input_artifact_id,
+release_subject_digest, target_reference_month)`. The target is a month-start DATE
+for ECONOMIC_PROMOTE and NULL for ECONOMIC_COLLECT; it remains outside ReleaseSubjectV1.
+`work_key` is an operational/idempotency representation, not target authority.
+Claimed structured target and extracted candidate month must agree before promotion.
+Pre-correction draft rows without a structured target remain fail-closed and require
+explicit reviewed repair; migrations do not infer targets from work_key strings.
+
 ### 39.3 Authorization and runtime control
 
 An approved release decision creates an immutable authorization identity for one
@@ -1766,6 +1774,11 @@ authorization and its effective runtime control. A stale, revoked, mismatched, o
 unbound worker cannot write canonical evidence even if its lease has not yet expired.
 Each attempt preserves the authorization ID, executor identity, claim generation,
 and relevant runtime-control decision as immutable provenance.
+
+Heartbeat validates the already bound authorization, executor and control decision;
+it never re-resolves the subject's authorization set. A second approved grant
+cannot break an A-bound heartbeat or rescue it after A is revoked. New claim
+admission still rejects ambiguous matching approved grants.
 
 ### 39.4 PAUSED state paths
 
@@ -1790,6 +1803,11 @@ event creation, disclosure topology, marker insertion, observation insertion, or
 governance-controlled serving mutation. Final commit rechecks lease ownership,
 claim generation, authorization, runtime control, release-subject compatibility,
 and input-artifact identity under the same transaction.
+
+Lease admission, renewal, expiry, reclaim and canonical-lineage validation use
+PostgreSQL `clock_timestamp()` for deadlines, including after correctness-lock
+waits. An expired but unreclaimed worker is rejected. Transaction-time metadata
+such as created_at, accepted_at and finished_at retains its existing semantics.
 
 ### 39.6 Domain containment and recovery evidence
 

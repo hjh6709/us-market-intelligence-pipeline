@@ -1639,7 +1639,10 @@ Retain current family behavior while removing inferred identity coupling.
 ### Accepted Delta Phase 4: Structured work identity
 
 Replace semantic dependence on an opaque `work_key` with structured release-subject
-and input-artifact references. Preserve idempotent legacy reconciliation without
+and input-artifact references plus immutable month-start `target_reference_month`.
+The unique promotion work identity is artifact + release subject + target month;
+ReleaseSubject excludes month and work_key is not target authority.
+Preserve idempotent legacy reconciliation without
 creating duplicate automatic-promotion business identities.
 
 ### Accepted Delta Phase 5: Capability-aware corpus and replay
@@ -1679,13 +1682,18 @@ resume; approval must not auto-resume.
 ### Accepted Delta Phase 11: Authorization-aware claim and reclaim
 
 Recheck authorization and effective runtime control during claim, reclaim, and
-heartbeat. A stale/revoked authorization cannot acquire or retain executable work.
+heartbeat. Heartbeat validates its existing bound authorization/control/executor,
+not a replacement resolved from all approvals. New admission remains ambiguous-set
+fail-closed. A stale/revoked authorization cannot acquire or retain executable work.
 
 ### Accepted Delta Phase 12: Final commit fencing and global lock order
 
 Enforce `DOMAIN -> RELEASE_SUBJECT -> WORK -> EVENT`, acquire the event fence before
 the first event mutation, and recheck lease, generation, authorization, control,
 subject compatibility, and artifact identity in the canonical-write transaction.
+Lease deadlines use `clock_timestamp()`, not transaction-start time. Explicitly
+revalidate after work/attempt row-lock acquisition as well as correctness fences;
+a qualifying SQL predicate alone does not prove validity after a lock-only wait.
 
 ### Accepted Delta Phase 13: Capability-aware orchestration
 

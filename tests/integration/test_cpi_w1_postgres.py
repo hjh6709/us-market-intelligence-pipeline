@@ -2,6 +2,8 @@ import hashlib
 import os
 import tempfile
 import unittest
+import time
+from queue import Queue
 from datetime import date, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -45,7 +47,7 @@ from src.cpi_w1_release import (
     extract_core4_from_release_html,
     extract_release_envelope,
 )
-from src.cpi_w1_repository import CpiW1Repository, StaleClaimError
+from src.cpi_w1_repository import CpiW1Repository, RepositoryInvariantError, StaleClaimError
 from src.cpi_w1_release_subject import ReleaseSubjectV1
 from src.cpi_w1_release_gate import CapabilityGateDecision
 from src.cpi_w1_schedule import (
@@ -194,6 +196,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         work_key="collect:cpi:2026-08",
         input_artifact_id=None,
         release_subject=None,
+        target_reference_month=None,
     ):
         work_item_id = work_item_id or uuid4()
         if execution_scope == "ECONOMIC_PROMOTE":
@@ -202,13 +205,14 @@ class CpiW1PostgresTest(unittest.TestCase):
                 f"structured-work:{uuid4()}",
             )
             release_subject = release_subject or TEST_RELEASE_SUBJECT
+            target_reference_month = target_reference_month or date(2026, 8, 1)
         connection.execute(
             """
             INSERT INTO ingestion_work_items (
                 work_item_id, run_id, execution_scope, data_domain, work_key,
                 input_artifact_id, promotion_capability_id,
-                extractor_contract_version, release_subject_digest
-            ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s)
+                extractor_contract_version, release_subject_digest, target_reference_month
+            ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s, %s)
             """,
             (
                 work_item_id,
@@ -219,6 +223,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 release_subject.promotion_capability_id if release_subject else None,
                 release_subject.extractor_contract_version if release_subject else None,
                 release_subject.release_subject_digest if release_subject else None,
+                target_reference_month,
             ),
         )
         return work_item_id
@@ -289,6 +294,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             work_key=work_key,
             input_artifact_id=artifact_id,
             release_subject=release_subject,
+            target_reference_month=date.fromisoformat(_month),
         )
 
     def insert_attempt(
@@ -2676,10 +2682,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
                         work_key, input_artifact_id, promotion_capability_id,
-                        extractor_contract_version, release_subject_digest
+                        extractor_contract_version, release_subject_digest,
+                        target_reference_month
                     ) VALUES (
                         %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, DATE '2026-08-01'
                     )
                     """,
                     (
@@ -3441,6 +3448,193 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assertEqual(work_count, 2)
         self.assertEqual(run_count, 1)
 
+    def test_promotion_scheduling_preserves_two_structured_target_months(self) -> None:
+        repository = CpiW1Repository()
+        registry = PromotionCapabilityRegistry.from_json(
+            "config/cpi_w1_promotion_capabilities.json"
+        )
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"two-targets:{uuid4()}")
+            attempt_id = connection.execute(
+                "SELECT created_by_attempt_id FROM source_artifacts WHERE artifact_id=%s",
+                (artifact_id,),
+            ).fetchone()[0]
+            for month in (date(2026, 8, 1), date(2026, 9, 1)):
+                connection.execute(
+                    """
+                    INSERT INTO cpi_artifact_promotion_targets (
+                        source_artifact_id, data_domain, reference_month,
+                        bound_by_attempt_id, bound_by_execution_scope
+                    ) VALUES (%s, 'ECONOMIC', %s, %s, 'ECONOMIC_COLLECT')
+                    """,
+                    (artifact_id, month, attempt_id),
+                )
+            with tempfile.TemporaryDirectory() as artifact_root:
+                orchestrator = CpiW1CollectorOrchestrator(
+                    repository=repository,
+                    source_contract=BlsCpiSourceContract.from_json(
+                        "config/cpi_w1_source_contract.json"
+                    ),
+                    capability_registry=registry,
+                    release_gate=EligibleCapabilityGate(registry),
+                    artifact_store=FilesystemArtifactStore(artifact_root),
+                )
+                kwargs = dict(
+                    artifact_id=artifact_id,
+                    artifact_contract_kind="CPI_RELEASE_HTML",
+                    source_contract_version="bls-cpi-source-v1",
+                    run_mode="BACKFILL",
+                    only_extractor_version="bls-cpi-release-envelope-html-v1",
+                )
+                first = orchestrator._schedule_promotions(connection, **kwargs)
+                repeated = orchestrator._schedule_promotions(connection, **kwargs)
+            rows = connection.execute(
+                """
+                SELECT work_item_id, input_artifact_id, release_subject_digest,
+                       target_reference_month, work_key
+                  FROM ingestion_work_items
+                 WHERE input_artifact_id=%s AND execution_scope='ECONOMIC_PROMOTE'
+                 ORDER BY target_reference_month
+                """,
+                (artifact_id,),
+            ).fetchall()
+        self.assertEqual(first.status, "SCHEDULED")
+        self.assertEqual(repeated.status, "ALREADY_SCHEDULED")
+        self.assertEqual(set(first.work_item_ids), set(repeated.work_item_ids))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(len({row[0] for row in rows}), 2)
+        self.assertEqual([row[1] for row in rows], [artifact_id, artifact_id])
+        self.assertEqual(
+            [row[2] for row in rows],
+            [TEST_RELEASE_SUBJECT.release_subject_digest] * 2,
+        )
+        self.assertEqual([row[3] for row in rows], [date(2026, 8, 1), date(2026, 9, 1)])
+        self.assertEqual(len({row[4] for row in rows}), 2)
+
+    def test_scheduler_rejects_matching_key_with_contradictory_structured_target(self) -> None:
+        self.assert_scheduler_rejects_unsafe_existing_target(date(2026, 9, 1))
+
+    def test_scheduler_rejects_pre_correction_draft_work_with_null_target(self) -> None:
+        self.assert_scheduler_rejects_unsafe_existing_target(None)
+
+    def assert_scheduler_rejects_unsafe_existing_target(self, target) -> None:
+        repository = CpiW1Repository()
+        registry = PromotionCapabilityRegistry.from_json("config/cpi_w1_promotion_capabilities.json")
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(connection, f"wrong-target-key:{uuid4()}")
+            attempt_id = connection.execute(
+                "SELECT created_by_attempt_id FROM source_artifacts WHERE artifact_id=%s", (artifact_id,),
+            ).fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO cpi_artifact_promotion_targets (
+                    source_artifact_id, data_domain, reference_month,
+                    bound_by_attempt_id, bound_by_execution_scope
+                ) VALUES (%s, 'ECONOMIC', DATE '2026-08-01', %s, 'ECONOMIC_COLLECT')
+                """, (artifact_id, attempt_id),
+            )
+            run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+            work_key = promotion_work_key(
+                PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE, artifact_id,
+                TEST_RELEASE_SUBJECT.extractor_contract_version, date(2026, 8, 1),
+            )
+            if target is None:
+                # Rehearse an already-applied unmerged draft schema: preserve,
+                # but never auto-assign authority to, its targetless promotion row.
+                connection.execute("ALTER TABLE ingestion_work_items DROP CONSTRAINT ingestion_work_items_target_month_valid")
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_work_items (
+                        work_item_id, run_id, execution_scope, data_domain, work_key,
+                        input_artifact_id, promotion_capability_id, extractor_contract_version,
+                        release_subject_digest
+                    ) VALUES (%s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s, %s, %s, %s)
+                    """,
+                    (uuid4(), run_id, work_key, artifact_id,
+                     TEST_RELEASE_SUBJECT.promotion_capability_id,
+                     TEST_RELEASE_SUBJECT.extractor_contract_version,
+                     TEST_RELEASE_SUBJECT.release_subject_digest),
+                )
+                connection.execute(Path("db/migrations/010_cpi_w1_ingestion_subjects.sql").read_text())
+            else:
+                repository.create_work_item(
+                    connection, run_id=run_id, execution_scope="ECONOMIC_PROMOTE",
+                    input_artifact_id=artifact_id, release_subject=TEST_RELEASE_SUBJECT,
+                    target_reference_month=target, work_key=work_key,
+                )
+            with tempfile.TemporaryDirectory() as artifact_root:
+                orchestrator = CpiW1CollectorOrchestrator(
+                    repository=repository,
+                    source_contract=BlsCpiSourceContract.from_json("config/cpi_w1_source_contract.json"),
+                    capability_registry=registry, release_gate=EligibleCapabilityGate(registry),
+                    artifact_store=FilesystemArtifactStore(artifact_root),
+                )
+                with self.assertRaisesRegex(RepositoryInvariantError, "structured promotion identity"):
+                    orchestrator._schedule_promotions(
+                        connection, artifact_id=artifact_id, artifact_contract_kind="CPI_RELEASE_HTML",
+                        source_contract_version="bls-cpi-source-v1", run_mode="BACKFILL",
+                        only_extractor_version=TEST_RELEASE_SUBJECT.extractor_contract_version,
+                    )
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM ingestion_work_items WHERE input_artifact_id=%s AND target_reference_month=DATE '2026-08-01'",
+                (artifact_id,),
+            ).fetchone()[0], 0)
+
+    def test_structured_target_month_constraints_and_immutability(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            collect_run = self.insert_run(connection)
+            collect_id = repository.create_work_item(
+                connection, run_id=collect_run, execution_scope="ECONOMIC_COLLECT",
+                work_key="collect:structured-target",
+            )
+            self.assertIsNone(connection.execute(
+                "SELECT target_reference_month FROM ingestion_work_items WHERE work_item_id=%s",
+                (collect_id,),
+            ).fetchone()[0])
+            promote_run = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+            artifact_id = self.make_artifact(connection, f"target-check:{uuid4()}")
+            kwargs = dict(
+                run_id=promote_run, execution_scope="ECONOMIC_PROMOTE",
+                input_artifact_id=artifact_id, release_subject=TEST_RELEASE_SUBJECT,
+                target_reference_month=date(2026, 8, 1), work_key="operational:first",
+            )
+            first = repository.create_work_item(connection, **kwargs)
+            self.assertEqual(first, repository.create_work_item(connection, **kwargs))
+            second = repository.create_work_item(
+                connection, **{**kwargs, "target_reference_month": date(2026, 9, 1),
+                               "work_key": "operational:second"},
+            )
+            self.assertNotEqual(first, second)
+            for scope, target in (
+                ("ECONOMIC_PROMOTE", None),
+                ("ECONOMIC_PROMOTE", date(2026, 8, 2)),
+                ("ECONOMIC_COLLECT", date(2026, 8, 1)),
+            ):
+                with self.subTest(scope=scope, target=target):
+                    with self.assertRaises(psycopg.errors.CheckViolation):
+                        subject = TEST_RELEASE_SUBJECT if scope == "ECONOMIC_PROMOTE" else None
+                        connection.execute(
+                            """
+                            INSERT INTO ingestion_work_items (
+                                work_item_id, run_id, execution_scope, data_domain,
+                                work_key, input_artifact_id, promotion_capability_id,
+                                extractor_contract_version, release_subject_digest,
+                                target_reference_month
+                            ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s, %s)
+                            """,
+                            (uuid4(), promote_run if subject else collect_run, scope,
+                             f"invalid-target:{uuid4()}", artifact_id if subject else None,
+                             subject.promotion_capability_id if subject else None,
+                             subject.extractor_contract_version if subject else None,
+                             subject.release_subject_digest if subject else None, target),
+                        )
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute(
+                    "UPDATE ingestion_work_items SET target_reference_month=DATE '2026-10-01' WHERE work_item_id=%s",
+                    (first,),
+                )
+
     def test_retry_delay_uses_database_clock_and_rejects_unbounded_delay(self) -> None:
         repository = CpiW1Repository()
         with self.connection() as connection:
@@ -3800,6 +3994,166 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone()
             self.assertEqual(row, ("CANCELED", None, None, None))
 
+    def test_promoter_rejects_candidate_outside_structured_target_even_with_matching_key(self) -> None:
+        repository = CpiW1Repository()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
+        candidate = extract_release_envelope(fixture, expected_reference_month=date(2026, 8, 1))
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection, f"target-mismatch:{uuid4()}",
+                content_sha256=hashlib.sha256(fixture).hexdigest(),
+            )
+            run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+            repository.create_work_item(
+                connection, run_id=run_id, execution_scope="ECONOMIC_PROMOTE",
+                input_artifact_id=artifact_id, release_subject=TEST_RELEASE_SUBJECT,
+                target_reference_month=date(2026, 9, 1),
+                work_key=promotion_work_key(
+                    PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE, artifact_id,
+                    candidate.extractor_contract_version, candidate.reference_month,
+                ),
+            )
+            claim = self.claim_work_item(repository, connection, execution_scope="ECONOMIC_PROMOTE")
+            with self.assertRaisesRegex(PromotionInvariantError, "target reference month"):
+                CpiW1Promoter(repository).promote_release_envelope(
+                    connection, claim, artifact_id=artifact_id, candidate=candidate,
+                )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM core_event_occurrences").fetchone()[0], 0)
+
+    def test_expired_unreclaimed_promotion_waiting_on_domain_lock_cannot_write(self) -> None:
+        self.assert_expired_promotion_lock_wait_rejected("DOMAIN")
+
+    def test_expired_promotion_waiting_on_final_attempt_row_cannot_commit(self) -> None:
+        self.assert_expired_promotion_lock_wait_rejected("ATTEMPT")
+
+    def assert_expired_promotion_lock_wait_rejected(self, lock_kind) -> None:
+        repository = CpiW1Repository()
+        fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
+        candidate = extract_release_envelope(fixture, expected_reference_month=date(2026, 8, 1))
+        with self.connection() as connection:
+            artifact_id = self.make_artifact(
+                connection, f"lease-lock:{uuid4()}",
+                content_sha256=hashlib.sha256(fixture).hexdigest(),
+            )
+            run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+            self.insert_promotion_work(
+                connection, run_id,
+                promotion_work_key(PromotionFamily.CPI_RELEASE_ENVELOPE_PROMOTE,
+                                   artifact_id, candidate.extractor_contract_version,
+                                   candidate.reference_month),
+                artifact_id,
+            )
+            claim = self.claim_work_item(
+                repository, connection, execution_scope="ECONOMIC_PROMOTE", lease_seconds=2,
+            )
+            lease_until = connection.execute(
+                "SELECT lease_until FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone()[0]
+        worker_pid = Queue()
+
+        def promote():
+            with self.connection() as connection:
+                worker_pid.put(connection.execute("SELECT pg_backend_pid()").fetchone()[0])
+                return CpiW1Promoter(repository).promote_release_envelope(
+                    connection, claim, artifact_id=artifact_id, candidate=candidate,
+                )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with self.connection() as blocker:
+                with blocker.transaction():
+                    if lock_kind == "DOMAIN":
+                        repository.lock_cpi_domain_exclusive(blocker)
+                    else:
+                        blocker.execute(
+                            "SELECT attempt_id FROM ingestion_attempts WHERE attempt_id=%s FOR NO KEY UPDATE",
+                            (claim.attempt_id,),
+                        )
+                    future = executor.submit(promote)
+                    pid = worker_pid.get(timeout=5)
+                    timeout = time.monotonic() + 5
+                    while True:
+                        row = blocker.execute(
+                            "SELECT wait_event, xact_start FROM pg_stat_activity WHERE pid=%s",
+                            (pid,),
+                        ).fetchone()
+                        if row and row[0] == ("advisory" if lock_kind == "DOMAIN" else "transactionid"):
+                            self.assertLess(row[1], lease_until)
+                            break
+                        if time.monotonic() >= timeout:
+                            self.fail(f"promotion did not block on {lock_kind}")
+                        blocker.execute("SELECT pg_stat_clear_snapshot()")
+                        time.sleep(0.01)
+                    blocker.execute(
+                        "SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (%s::timestamptz - clock_timestamp()))) + 0.05)",
+                        (lease_until,),
+                    )
+            with self.assertRaises(StaleClaimError):
+                future.result(timeout=5)
+        with self.connection() as connection:
+            for table in ("core_event_occurrences", "event_disclosures", "official_observation_assertions",
+                          "cpi_domain_recovery_changes"):
+                self.assertEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 0)
+            self.assertEqual(connection.execute(
+                "SELECT state, outcome, claim_generation FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone(), ("CLAIMED", None, claim.claim_generation))
+            self.assertEqual(connection.execute(
+                "SELECT state, outcome FROM ingestion_attempts WHERE attempt_id=%s",
+                (claim.attempt_id,),
+            ).fetchone(), ("RUNNING", None))
+
+    def test_collect_heartbeat_cannot_renew_after_work_row_lock_expiry(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            run_id = self.insert_run(connection)
+            self.insert_work(connection, run_id)
+            claim = self.claim_work_item(
+                repository, connection, execution_scope="ECONOMIC_COLLECT", lease_seconds=2,
+            )
+            deadline = connection.execute(
+                "SELECT lease_until FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone()[0]
+        pids = Queue()
+
+        def heartbeat():
+            with self.connection() as connection:
+                pids.put(connection.execute("SELECT pg_backend_pid()").fetchone()[0])
+                return repository.renew_claim(connection, claim)
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            with self.connection() as blocker:
+                with blocker.transaction():
+                    blocker.execute(
+                        "SELECT work_item_id FROM ingestion_work_items WHERE work_item_id=%s FOR NO KEY UPDATE",
+                        (claim.work_item_id,),
+                    )
+                    future = executor.submit(heartbeat)
+                    pid = pids.get(timeout=5)
+                    timeout = time.monotonic() + 5
+                    while True:
+                        row = blocker.execute(
+                            "SELECT wait_event, xact_start FROM pg_stat_activity WHERE pid=%s", (pid,),
+                        ).fetchone()
+                        if row and row[0] == "transactionid":
+                            self.assertLess(row[1], deadline)
+                            break
+                        if time.monotonic() >= timeout:
+                            self.fail("heartbeat did not wait on work row")
+                        blocker.execute("SELECT pg_stat_clear_snapshot()")
+                        time.sleep(0.01)
+                    blocker.execute(
+                        "SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (%s::timestamptz - clock_timestamp()))) + 0.05)",
+                        (deadline,),
+                    )
+            with self.assertRaises(StaleClaimError):
+                future.result(timeout=5)
+        with self.connection() as connection:
+            self.assertEqual(connection.execute(
+                "SELECT lease_until, state FROM ingestion_work_items WHERE work_item_id=%s", (claim.work_item_id,),
+            ).fetchone(), (deadline, "CLAIMED"))
+
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
         repository = CpiW1Repository()
         promoter = CpiW1Promoter(repository)
@@ -4131,10 +4485,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
                         work_key, input_artifact_id, promotion_capability_id,
-                        extractor_contract_version, release_subject_digest
+                        extractor_contract_version, release_subject_digest,
+                        target_reference_month
                     ) VALUES (
                         %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, DATE '2026-08-01'
                     )
                     """,
                     (
@@ -4306,10 +4661,11 @@ class CpiW1PostgresTest(unittest.TestCase):
                     INSERT INTO ingestion_work_items (
                         work_item_id, run_id, execution_scope, data_domain,
                         work_key, input_artifact_id, promotion_capability_id,
-                        extractor_contract_version, release_subject_digest
+                        extractor_contract_version, release_subject_digest,
+                        target_reference_month
                     ) VALUES (
                         %s, %s, 'ECONOMIC_PROMOTE', 'ECONOMIC', %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, DATE '2026-08-01'
                     )
                     """,
                     (
@@ -5884,6 +6240,88 @@ class CpiW1PostgresTest(unittest.TestCase):
                 "RELEASE_AUTHORIZATION_UNAVAILABLE",
             )
             self.assertEqual(audit_payload["claim_generation"], 1)
+
+    def approve_second_matching_authorization(self, connection, claim):
+        repository = CpiW1Repository()
+        material_id = connection.execute(
+            "SELECT authorization_material_id FROM promotion_release_authorizations WHERE authorization_id=%s",
+            (claim.release_authorization_id,),
+        ).fetchone()[0]
+        authorization_b = repository.create_promotion_authorization(
+            connection, authorization_material_id=material_id,
+            release_subject_digest=claim.release_subject_digest,
+            grant_reason_code="TEST_SECOND_APPROVAL", created_by_subject="test:grant-operator",
+        )
+        repository.apply_promotion_release_control(
+            connection, authorization_id=authorization_b, expected_control_version=0,
+            state="APPROVED", reason_code="TEST_SECOND_APPROVAL",
+            actor_subject="test:grant-operator", review_ref="TEST-SECOND-APPROVAL",
+            review_digest=digest("second-approval"),
+        )
+        return authorization_b
+
+    def make_authorization_overlap_claim(self, connection):
+        repository = CpiW1Repository()
+        run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+        self.insert_work(connection, run_id, execution_scope="ECONOMIC_PROMOTE")
+        return self.claim_work_item(repository, connection, execution_scope="ECONOMIC_PROMOTE")
+
+    def test_second_approval_does_not_break_bound_heartbeat(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            claim = self.make_authorization_overlap_claim(connection)
+            self.approve_second_matching_authorization(connection, claim)
+            before = connection.execute(
+                "SELECT lease_until FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone()[0]
+            renewed = repository.renew_claim(connection, claim, lease_seconds=360)
+            self.assertGreater(renewed, before)
+            self.assertEqual(connection.execute(
+                "SELECT release_authorization_id, release_control_decision_id, state FROM ingestion_attempts WHERE attempt_id=%s",
+                (claim.attempt_id,),
+            ).fetchone(), (claim.release_authorization_id, claim.release_control_decision_id, "RUNNING"))
+
+    def test_second_approval_cannot_rescue_revoked_bound_heartbeat(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            claim = self.make_authorization_overlap_claim(connection)
+            authorization_b = self.approve_second_matching_authorization(connection, claim)
+            repository.apply_promotion_release_control(
+                connection, authorization_id=claim.release_authorization_id,
+                expected_control_version=1, state="REVOKED", reason_code="TEST_REVOKE_A",
+                actor_subject="test:grant-operator", review_ref="TEST-REVOKE-A",
+                review_digest=digest("revoke-a"),
+            )
+            with self.assertRaisesRegex(RuntimeError, "authorization is no longer active"):
+                repository.renew_claim(connection, claim)
+            self.assertEqual(connection.execute(
+                "SELECT state, reason_code FROM ingestion_work_items WHERE work_item_id=%s",
+                (claim.work_item_id,),
+            ).fetchone(), ("PAUSED", "RELEASE_AUTHORIZATION_REVOKED"))
+            self.assertEqual(connection.execute(
+                "SELECT release_authorization_id, state FROM ingestion_attempts WHERE attempt_id=%s",
+                (claim.attempt_id,),
+            ).fetchone(), (claim.release_authorization_id, "TERMINAL"))
+            self.assertNotEqual(authorization_b, claim.release_authorization_id)
+
+    def test_new_claim_with_two_matching_approvals_remains_ambiguous(self) -> None:
+        repository = CpiW1Repository()
+        with self.connection() as connection:
+            claim = self.make_authorization_overlap_claim(connection)
+            self.approve_second_matching_authorization(connection, claim)
+            run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
+            pending = self.insert_work(
+                connection, run_id, execution_scope="ECONOMIC_PROMOTE", work_key="pending:ambiguous",
+            )
+            with self.assertRaisesRegex(psycopg.errors.CheckViolation, "ambiguous active promotion authorization"):
+                repository.claim_work_item(connection, execution_scope="ECONOMIC_PROMOTE", executor=TEST_EXECUTOR)
+            self.assertEqual(connection.execute(
+                "SELECT state, claim_generation FROM ingestion_work_items WHERE work_item_id=%s", (pending,),
+            ).fetchone(), ("PENDING", 0))
+            self.assertEqual(connection.execute(
+                "SELECT COUNT(*) FROM ingestion_attempts WHERE work_item_id=%s", (pending,),
+            ).fetchone()[0], 0)
 
     def test_heartbeat_revocation_pauses_current_claim(self) -> None:
         repository = CpiW1Repository()

@@ -127,7 +127,7 @@ class CpiW1EventMigrationTest(unittest.TestCase):
         self.assertIn("a.state = 'RUNNING'", self.sql)
         self.assertIn("w.state = 'CLAIMED'", self.sql)
         self.assertIn("w.claim_generation = a.attempt_number", self.sql)
-        self.assertIn("w.lease_until > CURRENT_TIMESTAMP", self.sql)
+        self.assertIn("w.lease_until > clock_timestamp()", self.sql)
         self.assertIn(
             "canonical CPI evidence requires current ECONOMIC_PROMOTE claim ownership",
             self.sql,

@@ -68,7 +68,7 @@ class CpiW1RepositoryTest(unittest.TestCase):
     def test_claim_sql_uses_skip_locked_and_due_or_expired_work(self) -> None:
         self.assertIn("FOR UPDATE OF w SKIP LOCKED", SOURCE)
         self.assertIn("w.next_claim_at <= CURRENT_TIMESTAMP", SOURCE)
-        self.assertIn("w.lease_until <= CURRENT_TIMESTAMP", SOURCE)
+        self.assertIn("w.lease_until <= clock_timestamp()", SOURCE)
 
     def test_claim_binds_exact_authorization_and_executor_to_attempt(self) -> None:
         claim_pos = SOURCE.index("def claim_work_item(")
@@ -93,7 +93,8 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("pause_reclaimed_cpi_ingestion_work", claim_body)
         self.assertIn("RELEASE_AUTHORIZATION_UNAVAILABLE", claim_body)
         self.assertIn("LEASE_EXPIRED_RECLAIM", claim_body)
-        self.assertIn("resolve_promotion_release_authorization", renew_body)
+        self.assertIn("assert_current_promotion_authorization", renew_body)
+        self.assertNotIn("resolve_promotion_release_authorization", renew_body)
         self.assertIn("RELEASE_AUTHORIZATION_REVOKED", renew_body)
 
     def test_final_commit_exposes_global_fences_and_exact_authorization_check(self) -> None:
@@ -151,7 +152,7 @@ class CpiW1RepositoryTest(unittest.TestCase):
         for fragment in (
             "w.claim_generation = %s",
             "w.claim_token = %s",
-            "w.lease_until > CURRENT_TIMESTAMP",
+            "w.lease_until > clock_timestamp()",
             "a.state = 'RUNNING'",
             "a.attempt_number = w.claim_generation",
         ):
@@ -206,7 +207,7 @@ class CpiW1RepositoryTest(unittest.TestCase):
         self.assertIn("def renew_claim(", SOURCE)
         self.assertIn("w.claim_generation=%s", SOURCE)
         self.assertIn("w.claim_token=%s", SOURCE)
-        self.assertIn("w.lease_until > CURRENT_TIMESTAMP", SOURCE)
+        self.assertIn("w.lease_until > clock_timestamp()", SOURCE)
         self.assertIn("a.state='RUNNING'", SOURCE)
         self.assertIn("GREATEST(", SOURCE)
 

@@ -194,6 +194,7 @@ class CpiW1CollectorOrchestrator:
                 planned.append(
                     (
                         capability,
+                        reference_month,
                         promotion_work_key(
                             family,
                             artifact_id,
@@ -226,13 +227,16 @@ class CpiW1CollectorOrchestrator:
                 )
             raise RuntimeError("capability evaluation produced no scheduling outcome")
 
-        work_keys = tuple(work_key for _, work_key in planned)
+        work_keys = tuple(work_key for _, _, work_key in planned)
         with connection.transaction():
             self.repository.lock_promotion_scheduling(connection, artifact_id)
             existing = self.repository.existing_promotion_work_items(
                 connection,
                 artifact_id=artifact_id,
-                work_keys=work_keys,
+                work_identities={
+                    key: (capability.release_subject.release_subject_digest, month)
+                    for capability, month, key in planned
+                },
             )
             missing = tuple(key for key in work_keys if key not in existing)
             if not missing:
@@ -271,11 +275,11 @@ class CpiW1CollectorOrchestrator:
                 job_contract_version=_PROMOTE_JOB_CONTRACT,
                 config_fingerprint=self._config_fingerprint(),
             )
-            capability_by_key = {
-                work_key: capability for capability, work_key in planned
+            target_by_key = {
+                work_key: (capability, month) for capability, month, work_key in planned
             }
             for work_key in missing:
-                capability = capability_by_key[work_key]
+                capability, month = target_by_key[work_key]
                 existing[work_key] = self.repository.create_work_item(
                     connection,
                     run_id=promote_run_id,
@@ -283,6 +287,7 @@ class CpiW1CollectorOrchestrator:
                     work_key=work_key,
                     input_artifact_id=artifact_id,
                     release_subject=capability.release_subject,
+                    target_reference_month=month,
                 )
         return PromotionScheduleResult(
             status=("PARTIALLY_SCHEDULED" if deferred_ids else "SCHEDULED"),

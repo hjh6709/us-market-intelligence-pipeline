@@ -61,8 +61,8 @@ class _Repository:
     def lock_promotion_scheduling(self, connection, artifact_id):
         self.locked.append(artifact_id)
 
-    def existing_promotion_work_items(self, connection, *, artifact_id, work_keys):
-        return {key: self.existing[key] for key in work_keys if key in self.existing}
+    def existing_promotion_work_items(self, connection, *, artifact_id, work_identities):
+        return {key: self.existing[key] for key in work_identities if key in self.existing}
 
     def create_run(self, connection, **kwargs):
         self.runs.append(kwargs)
@@ -220,6 +220,10 @@ class CollectCpiW1Test(unittest.TestCase):
         self.assertEqual(result.status, "PARTIALLY_SCHEDULED")
         self.assertEqual(len(repository.works), 2)
         self.assertEqual(len(repository.runs), 1)
+        self.assertEqual(
+            [work["target_reference_month"] for work in repository.works],
+            [date(2026, 8, 1), date(2026, 9, 1)],
+        )
 
     def test_missing_target_is_not_misreported_as_all_capabilities_blocked(self) -> None:
         registry = PromotionCapabilityRegistry.from_json(

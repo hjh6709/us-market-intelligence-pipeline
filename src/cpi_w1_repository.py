@@ -46,6 +46,7 @@ class Claim:
     promotion_capability_id: str | None = None
     extractor_contract_version: str | None = None
     release_subject_digest: str | None = None
+    target_reference_month: date | None = None
 
 
 CLAIM_SELECT_SQL = """
@@ -59,7 +60,8 @@ SELECT
     w.work_key,
     w.promotion_capability_id,
     w.extractor_contract_version,
-    w.release_subject_digest
+    w.release_subject_digest,
+    w.target_reference_month
   FROM ingestion_work_items w
   JOIN ingestion_runs r
     ON r.run_id = w.run_id
@@ -76,7 +78,7 @@ SELECT
         OR
         (
             w.state = 'CLAIMED'
-            AND w.lease_until <= CURRENT_TIMESTAMP
+            AND w.lease_until <= clock_timestamp()
         )
    )
  ORDER BY COALESCE(w.next_claim_at, w.created_at), w.created_at, w.work_item_id
@@ -104,7 +106,8 @@ SELECT
     a.release_control_decision_id,
     a.executor_source_revision,
     a.executor_workload_artifact_digest,
-    a.executor_job_contract_version
+    a.executor_job_contract_version,
+    w.target_reference_month
   FROM ingestion_work_items w
   JOIN ingestion_attempts a
     ON a.attempt_id = %s
@@ -117,7 +120,7 @@ SELECT
    AND w.state = 'CLAIMED'
    AND w.claim_generation = %s
    AND w.claim_token = %s
-   AND w.lease_until > CURRENT_TIMESTAMP
+   AND w.lease_until > clock_timestamp()
    AND a.state = 'RUNNING'
    AND a.attempt_number = w.claim_generation
  FOR UPDATE OF w
@@ -512,6 +515,7 @@ class CpiW1Repository:
         work_key: str,
         input_artifact_id: UUID | None = None,
         release_subject: ReleaseSubjectV1 | None = None,
+        target_reference_month: date | None = None,
     ) -> UUID:
         if execution_scope not in {"ECONOMIC_COLLECT", "ECONOMIC_PROMOTE"}:
             raise ValueError("unsupported execution_scope")
@@ -522,7 +526,13 @@ class CpiW1Repository:
                 raise ValueError(
                     "promotion work requires input_artifact_id and release_subject"
                 )
-        elif input_artifact_id is not None or release_subject is not None:
+            if type(target_reference_month) is not date or target_reference_month.day != 1:
+                raise ValueError("promotion target_reference_month must be a month-start date")
+        elif (
+            input_artifact_id is not None
+            or release_subject is not None
+            or target_reference_month is not None
+        ):
             raise ValueError("collection work must not carry promotion identity")
 
         promotion_capability_id = (
@@ -542,8 +552,8 @@ class CpiW1Repository:
                 INSERT INTO ingestion_work_items (
                     work_item_id, run_id, execution_scope, data_domain,
                     work_key, input_artifact_id, promotion_capability_id,
-                    extractor_contract_version, release_subject_digest
-                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s)
+                    extractor_contract_version, release_subject_digest, target_reference_month
+                ) VALUES (%s, %s, %s, 'ECONOMIC', %s, %s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
                 (
@@ -555,6 +565,7 @@ class CpiW1Repository:
                     promotion_capability_id,
                     extractor_contract_version,
                     release_subject_digest,
+                    target_reference_month,
                 ),
             )
             if execution_scope == "ECONOMIC_PROMOTE":
@@ -563,13 +574,14 @@ class CpiW1Repository:
                     SELECT work_item_id, run_id, execution_scope,
                            input_artifact_id, work_key,
                            promotion_capability_id, extractor_contract_version,
-                           release_subject_digest
+                           release_subject_digest, target_reference_month
                       FROM ingestion_work_items
                      WHERE execution_scope='ECONOMIC_PROMOTE'
                        AND input_artifact_id=%s
                        AND release_subject_digest=%s
+                       AND target_reference_month=%s
                     """,
-                    (input_artifact_id, release_subject_digest),
+                    (input_artifact_id, release_subject_digest, target_reference_month),
                 ).fetchone()
             else:
                 row = connection.execute(
@@ -577,7 +589,7 @@ class CpiW1Repository:
                     SELECT work_item_id, run_id, execution_scope,
                            input_artifact_id, work_key,
                            promotion_capability_id, extractor_contract_version,
-                           release_subject_digest
+                           release_subject_digest, target_reference_month
                       FROM ingestion_work_items
                      WHERE run_id=%s AND work_key=%s
                     """,
@@ -592,6 +604,7 @@ class CpiW1Repository:
                 promotion_capability_id,
                 extractor_contract_version,
                 release_subject_digest,
+                target_reference_month,
             )
             if tuple(row[2:]) != expected:
                 raise RepositoryInvariantError(
@@ -604,21 +617,34 @@ class CpiW1Repository:
         connection: Any,
         *,
         artifact_id: UUID,
-        work_keys: tuple[str, ...],
+        work_identities: dict[str, tuple[str, date]],
     ) -> dict[str, UUID]:
-        if not work_keys:
+        if not work_identities:
             return {}
         rows = connection.execute(
             """
-            SELECT work_key, work_item_id
+            SELECT work_key, work_item_id, release_subject_digest, target_reference_month
               FROM ingestion_work_items
              WHERE execution_scope='ECONOMIC_PROMOTE'
                AND input_artifact_id=%s
-               AND work_key = ANY(%s::text[])
+               AND (
+                    work_key = ANY(%s::text[])
+                    OR (release_subject_digest, target_reference_month) IN (
+                        SELECT * FROM UNNEST(%s::text[], %s::date[])
+                    )
+               )
             """,
-            (artifact_id, list(work_keys)),
+            (artifact_id, list(work_identities),
+             [identity[0] for identity in work_identities.values()],
+             [identity[1] for identity in work_identities.values()]),
         ).fetchall()
-        result = {row[0]: row[1] for row in rows}
+        result = {}
+        for work_key, work_id, subject_digest, target_month in rows:
+            if work_identities.get(work_key) != (subject_digest, target_month):
+                raise RepositoryInvariantError(
+                    "existing work contradicts structured promotion identity"
+                )
+            result[work_key] = work_id
         if len(result) != len(rows):
             raise RepositoryInvariantError(
                 "promotion work identity resolved to duplicate work keys"
@@ -760,6 +786,7 @@ class CpiW1Repository:
                 promotion_capability_id,
                 extractor_contract_version,
                 release_subject_digest,
+                target_reference_month,
             ) = row
             previous_generation = int(generation)
             release_authorization_id: UUID | None = None
@@ -861,7 +888,7 @@ class CpiW1Repository:
                    SET state='CLAIMED',
                        claim_generation=%s,
                        claim_token=%s,
-                       lease_until=CURRENT_TIMESTAMP + (%s * INTERVAL '1 second'),
+                       lease_until=clock_timestamp() + (%s * INTERVAL '1 second'),
                        next_claim_at=NULL
                  WHERE work_item_id=%s
                  RETURNING work_item_id
@@ -911,6 +938,7 @@ class CpiW1Repository:
                 promotion_capability_id=promotion_capability_id,
                 extractor_contract_version=extractor_contract_version,
                 release_subject_digest=release_subject_digest,
+                target_reference_month=target_reference_month,
             )
 
     def assert_current_claim(self, connection: Any, claim: Claim) -> tuple[UUID, UUID | None]:
@@ -926,6 +954,14 @@ class CpiW1Repository:
         ).fetchone()
         if row is None:
             raise StaleClaimError("claim is stale, expired, or no longer running")
+        # SQL qualification can precede a row-lock-only wait. Check the deadline
+        # again after CURRENT_CLAIM_SQL has actually acquired the work fence.
+        still_valid = connection.execute(
+            "SELECT lease_until > clock_timestamp() FROM ingestion_work_items WHERE work_item_id=%s",
+            (claim.work_item_id,),
+        ).fetchone()
+        if still_valid is None or not still_valid[0]:
+            raise StaleClaimError("claim expired while acquiring the work fence")
         (
             run_id,
             input_artifact_id,
@@ -940,6 +976,7 @@ class CpiW1Repository:
             executor_source_revision,
             executor_workload_artifact_digest,
             executor_job_contract_version,
+            target_reference_month,
         ) = row
         if run_id != claim.run_id:
             raise RepositoryInvariantError("claim run identity changed")
@@ -949,6 +986,7 @@ class CpiW1Repository:
             promotion_capability_id != claim.promotion_capability_id
             or extractor_contract_version != claim.extractor_contract_version
             or release_subject_digest != claim.release_subject_digest
+            or target_reference_month != claim.target_reference_month
         ):
             raise RepositoryInvariantError("claim release subject identity changed")
         if attempt_state != "RUNNING" or int(attempt_number) != claim.claim_generation:
@@ -1039,25 +1077,16 @@ class CpiW1Repository:
         row = None
         with connection.transaction():
             if claim.execution_scope == "ECONOMIC_PROMOTE":
-                self.assert_current_claim(connection, claim)
                 if claim.release_subject_digest is None:
                     raise RepositoryInvariantError(
                         "promotion claim has no release subject"
                     )
-                active_authorization_id = (
-                    self.resolve_promotion_release_authorization(
-                        connection,
-                        release_subject_digest=claim.release_subject_digest,
-                        executor=ExecutorProvenanceV1(
-                            source_revision=claim.executor_source_revision,
-                            workload_artifact_digest=(
-                                claim.executor_workload_artifact_digest
-                            ),
-                            job_contract_version=claim.executor_job_contract_version,
-                        ),
-                    )
-                )
-                if active_authorization_id != claim.release_authorization_id:
+                self.lock_cpi_domain_shared(connection)
+                self.lock_cpi_release_subject(connection, claim.release_subject_digest)
+                self.assert_current_claim(connection, claim)
+                try:
+                    self.assert_current_promotion_authorization(connection, claim)
+                except RepositoryInvariantError:
                     connection.execute(
                         """
                         SELECT pause_cpi_ingestion_work(
@@ -1076,13 +1105,16 @@ class CpiW1Repository:
                     )
                     authorization_lost = True
 
+            else:
+                self.assert_current_claim(connection, claim)
+
             if not authorization_lost:
                 row = connection.execute(
                     """
                     UPDATE ingestion_work_items w
                        SET lease_until = GREATEST(
                                w.lease_until,
-                               CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
+                               clock_timestamp() + (%s * INTERVAL '1 second')
                            )
                       FROM ingestion_attempts a
                      WHERE w.work_item_id=%s
@@ -1091,7 +1123,7 @@ class CpiW1Repository:
                        AND w.state='CLAIMED'
                        AND w.claim_generation=%s
                        AND w.claim_token=%s
-                       AND w.lease_until > CURRENT_TIMESTAMP
+                       AND w.lease_until > clock_timestamp()
                        AND a.attempt_id=%s
                        AND a.work_item_id=w.work_item_id
                        AND a.execution_scope=w.execution_scope
@@ -1138,6 +1170,12 @@ class CpiW1Repository:
             )
         self.assert_current_claim(connection, claim)
 
+        connection.execute(
+            "SELECT attempt_id FROM ingestion_attempts WHERE attempt_id=%s FOR UPDATE",
+            (claim.attempt_id,),
+        )
+        self.assert_current_claim(connection, claim)
+
         attempt = connection.execute(
             """
             UPDATE ingestion_attempts a
@@ -1153,7 +1191,7 @@ class CpiW1Repository:
                AND w.state='CLAIMED'
                AND w.claim_generation=%s
                AND w.claim_token=%s
-               AND w.lease_until > CURRENT_TIMESTAMP
+               AND w.lease_until > clock_timestamp()
                AND a.state='RUNNING'
                AND a.attempt_number=w.claim_generation
              RETURNING a.attempt_id
@@ -1310,7 +1348,7 @@ class CpiW1Repository:
                    AND w.state='CLAIMED'
                    AND w.claim_generation=%s
                    AND w.claim_token=%s
-                   AND w.lease_until > CURRENT_TIMESTAMP
+                   AND w.lease_until > clock_timestamp()
                    AND a.state='RUNNING'
                    AND a.attempt_number=w.claim_generation
                  RETURNING a.attempt_id
