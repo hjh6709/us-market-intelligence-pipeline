@@ -1,0 +1,82 @@
+{
+  "contract_version": "bls-cpi-source-v1",
+  "transport": {
+    "https_only": true,
+    "allowlisted_hosts": [
+      "www.bls.gov"
+    ],
+    "max_redirects": 3,
+    "connect_timeout_seconds": 5,
+    "read_timeout_seconds": 15,
+    "accept_encoding": "identity",
+    "max_response_bytes": 20971520
+  },
+  "artifact_limits": {
+    "CPI_SCHEDULE_HTML": 5242880,
+    "BLS_GLOBAL_ICS": 2097152,
+    "CPI_RELEASE_HTML": 8388608,
+    "CPI_TABLE1_XLSX": 20971520,
+    "CPI_CORRECTION_HTML": 8388608,
+    "BLS_REVISED_RELEASE_DATES_HTML": 5242880
+  },
+  "locators": {
+    "CPI_SCHEDULE_HTML": {
+      "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
+      "surface_role": "AUTHORITATIVE",
+      "artifact_contract_kind": "CPI_SCHEDULE_HTML",
+      "schedule_timezone": "America/New_York",
+      "capture_chronology_allowed": false
+    },
+    "BLS_GLOBAL_ICS": {
+      "url": "https://www.bls.gov/schedule/news_release/bls.ics",
+      "surface_role": "FALLBACK_CORROBORATION",
+      "artifact_contract_kind": "BLS_GLOBAL_ICS",
+      "schedule_timezone": "America/New_York",
+      "capture_chronology_allowed": false
+    },
+    "CURRENT_CPI_RELEASE_HTML": {
+      "url": "https://www.bls.gov/news.release/cpi.nr0.htm",
+      "surface_role": "RELEASE_EVIDENCE",
+      "artifact_contract_kind": "CPI_RELEASE_HTML"
+    },
+    "CURRENT_CPI_TABLE1_XLSX": {
+      "url": "https://www.bls.gov/web/cpi/cpipress1.xlsx",
+      "surface_role": "CORROBORATING_REPRESENTATION",
+      "artifact_contract_kind": "CPI_TABLE1_XLSX",
+      "mutable_current_locator": true,
+      "requires_reference_month_validation": true,
+      "historical_as_released_authority": false
+    },
+    "BLS_REVISED_RELEASE_DATES_HTML": {
+      "url": "https://www.bls.gov/bls/2025-lapse-revised-release-dates.htm",
+      "surface_role": "AUTHORITATIVE",
+      "artifact_contract_kind": "BLS_REVISED_RELEASE_DATES_HTML",
+      "capture_chronology_allowed": false,
+      "requires_reference_month_validation": true,
+      "requires_program_scope_validation": true,
+      "explicit_cancellation_evidence": true
+    }
+  },
+  "legal_operational_notes": {
+    "bls_material_default_status": "PUBLIC_DOMAIN_EXCEPT_THIRD_PARTY_PHOTOS_OR_ILLUSTRATIONS",
+    "source_attribution_requested": true,
+    "bls_emblem_or_logo_reuse_prohibited_without_authorization": true,
+    "raw_capture_retention_does_not_imply_product_republication": true,
+    "api_access_date_disclaimer_if_api_used": true,
+    "public_beta_legal_review_required": true,
+    "evidence_refs": [
+      "https://www.bls.gov/opub/copyright-information.htm",
+      "https://www.bls.gov/developers/termsOfService.htm"
+    ]
+  },
+  "dynamic_artifact_contracts": {
+    "CPI_CORRECTION_HTML": {
+      "surface_role": "CORRECTION_EVIDENCE",
+      "artifact_contract_kind": "CPI_CORRECTION_HTML",
+      "capture_chronology_allowed": false,
+      "requires_reference_month_validation": true,
+      "requires_explicit_disclosure_scope": true,
+      "locator_status": "NOT_YET_FROZEN"
+    }
+  }
+}

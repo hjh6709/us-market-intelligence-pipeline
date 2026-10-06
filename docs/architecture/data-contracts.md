@@ -1,6 +1,9 @@
 # Canonical data contracts
 
-Status: **foundation implemented, adapters not implemented**. Migration 009 creates and enforces the normalized foundation. It does not populate it or connect it to current serving. Legacy rows remain historical evidence under [the compatibility ledger](../engineering/current-vs-target.md).
+Status: `HISTORICAL_SUPERSEDED` migration-009 foundation contract. Migration 009
+remains immutable and executable, but its event semantics do not define the CPI W1
+target. Use [the authority index](AUTHORITY.md). The foundation is not populated or
+connected to current serving.
 
 ## Event universe, ontology, and lifecycle
 

@@ -1,4 +1,6 @@
-STATUS: PLANNING OUTLINE — EXPAND BEFORE EXECUTION
+STATUS: `HISTORICAL_SUPERSEDED` — former planning outline, retained for history.
+It is not production ingestion authority; see
+[`docs/architecture/AUTHORITY.md`](../../architecture/AUTHORITY.md).
 
 # Operational pipelines and storage design
 

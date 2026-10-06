@@ -1,5 +1,9 @@
 # Canonical docs and event-data foundation design
 
+STATUS: `HISTORICAL_SUPERSEDED` — retained for migration-009 rationale. It is not
+the CPI W1 semantic authority; see
+[`docs/architecture/AUTHORITY.md`](../../architecture/AUTHORITY.md).
+
 ## Scope
 
 Correct the unpopulated migration 009 foundation without rewriting legacy rows. Legacy `economic_events` remains the Phase-A serving model. Canonical event identity, lifecycle versions, numeric official observations, external consensus snapshots, point-in-time surprise and raw-derived validation bars are additive and physically isolated.

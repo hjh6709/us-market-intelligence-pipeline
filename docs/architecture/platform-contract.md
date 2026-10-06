@@ -1,8 +1,13 @@
 # Economic Event Intelligence & Strategy Validation Platform contract
 
-Status: canonical contract. Its migration/pure-contract subset is implemented as a **foundation only**; adapters, backfill, v2 reaction calculation, and serving integration remain target-only. Baseline revision: `63633a50c85c88e507be458067ecf6706220f813` (2026-09-10). The final corrective revision is recorded in the dated verification receipt.
+Status: `HISTORICAL_SUPERSEDED` target contract from 2026-09-10. It is not
+the semantic authority for CPI W1. Use [the authority index](AUTHORITY.md) to route
+current implementation and target questions. Baseline revision:
+`63633a50c85c88e507be458067ecf6706220f813` (2026-09-10).
 
-This document defines the approved destination. It does not claim that every component is implemented. For implementation truth, read [current-system.md](current-system.md) and [current-vs-target.md](../engineering/current-vs-target.md). Dated evidence remains true only for the run it records.
+This document preserves the former destination and migration-009 rationale. It does
+not define the CPI W1 destination and does not claim that every component is
+implemented. For current behavior inspect executable code, migrations, and tests.
 
 Configuration boundaries are owned by [the configuration contract](../configuration/README.md). The additive foundation decision is recorded in [ADR 0001](../adr/0001-additive-event-session-foundation.md).
 

@@ -1,0 +1,87 @@
+{
+  "schema_version": "cpi-w1-promotion-capability-registry-v1",
+  "contract_version": "cpi-w1-promotion-capabilities-v1",
+  "capabilities": [
+    {
+      "promotion_capability_id": "BLS_CPI_SCHEDULE_HTML",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_SCHEDULE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-schedule-html-v1",
+      "promotion_family": "CPI_SCHEDULE_ASSERTION_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_GLOBAL_ICS_SCHEDULE",
+      "source_code": "BLS",
+      "artifact_contract_kind": "BLS_GLOBAL_ICS",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-global-ics-v1",
+      "promotion_family": "CPI_SCHEDULE_ASSERTION_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_REVISED_RELEASE_DATES",
+      "source_code": "BLS",
+      "artifact_contract_kind": "BLS_REVISED_RELEASE_DATES_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-revised-release-dates-v1",
+      "promotion_family": "CPI_SCHEDULE_ASSERTION_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-release-envelope-html-v1",
+      "promotion_family": "CPI_RELEASE_ENVELOPE_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_RELEASE_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-core4-html-v1",
+      "promotion_family": "CPI_OBSERVATION_BUNDLE_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_TABLE1_REPRESENTATION_XLSX",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_TABLE1_XLSX",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-table1-representation-xlsx-v1",
+      "promotion_family": "CPI_CORROBORATING_REPRESENTATION_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_XLSX",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_TABLE1_XLSX",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-core4-xlsx-v1",
+      "promotion_family": "CPI_OBSERVATION_BUNDLE_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTION_NOTICE_HTML",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_CORRECTION_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-correction-notice-html-v1",
+      "promotion_family": "CPI_CORRECTION_NOTICE_PROMOTE",
+      "lifecycle": "ACTIVE"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTED_OBSERVATIONS_HTML",
+      "source_code": "BLS",
+      "artifact_contract_kind": "CPI_CORRECTION_HTML",
+      "source_contract_version": "bls-cpi-source-v1",
+      "extractor_contract_version": "bls-cpi-corrected-observations-html-v1",
+      "promotion_family": "CPI_CORRECTION_OBSERVATION_PROMOTE",
+      "lifecycle": "ACTIVE"
+    }
+  ]
+}

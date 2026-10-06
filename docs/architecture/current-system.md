@@ -1,6 +1,9 @@
 # Current system architecture
 
-Status: implementation truth. Historical baseline: `63633a50c85c88e507be458067ecf6706220f813`; the corrective artifact revision is recorded in the dated verification receipt. This page does not describe the approved target; see [platform-contract.md](platform-contract.md).
+Status: `CURRENT_IMPLEMENTATION` snapshot verified at historical baseline
+`63633a50c85c88e507be458067ecf6706220f813`. This snapshot cannot override newer
+executable code, migrations, or tests. It does not describe the CPI W1 target; use
+[the authority index](AUTHORITY.md).
 
 ## Product identity
 
@@ -56,4 +59,7 @@ Paper 로컬 기록은 서버에 고정한 `ALPACA_PAPER_ACCOUNT_ID`로 읽고, 
 
 See the final-presentation [current architecture source](../presentation/final/CURRENT_ARCHITECTURE.mmd) and the application `/pipelines` lineage panel. The older Session 7 Archify artifact is historical and predates the validation-storage isolation now described here.
 
-The approved target diagram is separately published as [target-platform.html](../diagrams/target-platform.html). A target node is not evidence of current implementation; use the [current-versus-target matrix](../engineering/current-vs-target.md).
+The 2026-09-10 historical target diagram is separately preserved as
+[target-platform.html](../diagrams/target-platform.html). A target node is not
+evidence of current implementation; use the [authority index](AUTHORITY.md) and
+[status ledger](../engineering/current-vs-target.md).

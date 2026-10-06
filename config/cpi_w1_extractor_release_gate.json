@@ -1,0 +1,96 @@
+{
+  "schema_version": "cpi-w1-capability-release-gate-v2",
+  "gate_policy_version": "cpi-w1-gate-v2",
+  "decisions": [
+    {
+      "promotion_capability_id": "BLS_CPI_SCHEDULE_HTML",
+      "release_subject_digest": "ef694a2f208bdf98db0f656a81cef83dfdd394c51184d58cda81abd1f05c879c",
+      "evidence_snapshot_digest": "8a1a6407db794dd52f53d2830901e4495db13d2aeb3f07dcda4a5dc1075a2424",
+      "decision": "BLOCKED",
+      "reason_code": "SCHEDULE_OFFICIAL_FIXTURE_NOT_READY",
+      "review_ref": "docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md",
+      "review_digest": "02805c61b4411b3a34db3d16fe3b575f6597f4ffaf2acd9bfd87ea0d2367aeb3",
+      "gate_decision_digest": "f2059594bb401297669827727b29308795b480129cf9d6ce4c2c0d7c5c7ab190"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_GLOBAL_ICS_SCHEDULE",
+      "release_subject_digest": "a178dde883fc07ada6682bd99e2e0dd7428e1de1308af4e2872e408761537abc",
+      "evidence_snapshot_digest": "0dc00644dce339af2b0bb3cb3fcfaff2d7f3523d261c7960929e872237f899d9",
+      "decision": "BLOCKED",
+      "reason_code": "SCHEDULE_OFFICIAL_FIXTURE_NOT_READY",
+      "review_ref": "docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md",
+      "review_digest": "02805c61b4411b3a34db3d16fe3b575f6597f4ffaf2acd9bfd87ea0d2367aeb3",
+      "gate_decision_digest": "aa3905815e5efda971865963929f466224ca70e07b40c7eb94eca3b70c28b03d"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_REVISED_RELEASE_DATES",
+      "release_subject_digest": "0d49979142dc9ae5f4e35f2446ebf00d9c4e0e775b037ab7a37e1dd77872e432",
+      "evidence_snapshot_digest": "fcf9934d76bed7ea08dc097ba619739c3dd0ae6e1e6e340bde814449327cb488",
+      "decision": "BLOCKED",
+      "reason_code": "CANCELLATION_OFFICIAL_FIXTURE_NOT_READY",
+      "review_ref": "tests/fixtures/cpi_w1/corpus.json",
+      "review_digest": "43a6f6b61dbc6775188f741900cbedb4e2eb294ff054d09736e31530bd824b63",
+      "gate_decision_digest": "b620ae976cfd4067f86b9d2d6dfc403e0d80266ca231ae022fd1a4ffef3ff459"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+      "release_subject_digest": "3fe048ad6168e1a5bf2b3211bb6b0d045df3b35ff7fd5c280af6733d60504b9f",
+      "evidence_snapshot_digest": "c429f1b7e7d5b76d93c5f972fbbdad77f47113ef156ebaff04e0302c7fd55900",
+      "decision": "BLOCKED",
+      "reason_code": "OFFICIAL_CORPUS_NOT_READY",
+      "review_ref": "tests/fixtures/cpi_w1/corpus.json",
+      "review_digest": "43a6f6b61dbc6775188f741900cbedb4e2eb294ff054d09736e31530bd824b63",
+      "gate_decision_digest": "185ca13152661d7727ebb2dabf703614dcf7a94adc9f2bea749fd2c541142b04"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+      "release_subject_digest": "9be6522e1b2db41e0745c687799f44446b7f375a578b057b94a09c218a28dfe7",
+      "evidence_snapshot_digest": "d207e319c8c106a929eed34f18610be9805c615b925ba1105a74e9a0a265836f",
+      "decision": "BLOCKED",
+      "reason_code": "OFFICIAL_CORPUS_NOT_READY",
+      "review_ref": "tests/fixtures/cpi_w1/corpus.json",
+      "review_digest": "43a6f6b61dbc6775188f741900cbedb4e2eb294ff054d09736e31530bd824b63",
+      "gate_decision_digest": "c244ef2448f8099147982e3405a81177cfffa19a657fb62c5b60b387f9ac0c59"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_TABLE1_REPRESENTATION_XLSX",
+      "release_subject_digest": "967e574d1a6eb27b16e46e24e14024f42d53155ecce50cedb0de63757ef15c77",
+      "evidence_snapshot_digest": "4802a708e8874b6d6dbcb7f83d2ab4fe1d06217611bd85cd28041c9dbe77520b",
+      "decision": "BLOCKED",
+      "reason_code": "XLSX_PARSER_NOT_READY",
+      "review_ref": "docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md",
+      "review_digest": "02805c61b4411b3a34db3d16fe3b575f6597f4ffaf2acd9bfd87ea0d2367aeb3",
+      "gate_decision_digest": "520d55834f7632d1948e57690916865a5f71614258f2fb21d090de80a4abd915"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORE4_XLSX",
+      "release_subject_digest": "031457a8de495edbf10a01485479ead089d2196e58a336cbad4ecbac49b90263",
+      "evidence_snapshot_digest": "286021acc4cc4ae1cb6564bccddf46560543ceb8d1e7ee09e1699c3f3b3f065d",
+      "decision": "BLOCKED",
+      "reason_code": "XLSX_PARSER_NOT_READY",
+      "review_ref": "docs/superpowers/plans/2026-09-19-cpi-w1-data-governance.md",
+      "review_digest": "02805c61b4411b3a34db3d16fe3b575f6597f4ffaf2acd9bfd87ea0d2367aeb3",
+      "gate_decision_digest": "ad6f713623491b38a7a5d4f2d9738cf2ca1278b8d7c84f6f02e87937d8b73be1"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTION_NOTICE_HTML",
+      "release_subject_digest": "2c4fc07a54389e83caffe9660698d0c11848c93a0def0085dc535979628b9804",
+      "evidence_snapshot_digest": "8165f14ebed69d27c0a4ae2b4ba684010ef735c0239cddb4f288aa6b09f70fbf",
+      "decision": "BLOCKED",
+      "reason_code": "CORRECTION_SOURCE_NOT_FROZEN",
+      "review_ref": "config/cpi_w1_source_contract.json",
+      "review_digest": "2fd5ef1a24b27cc55e2b9b34454d13f3d17ee144c8aaf4adc3a0794b9a4e4469",
+      "gate_decision_digest": "6bc9d0aafa2309988b030c693ee7a15c55219f4981908faa824eba03a1dd590a"
+    },
+    {
+      "promotion_capability_id": "BLS_CPI_CORRECTED_OBSERVATIONS_HTML",
+      "release_subject_digest": "f39cae4fea4654a53a6b571d787636ada26f990dfebc27bfea5959ed3939458d",
+      "evidence_snapshot_digest": "1b31397398603836fa3d5260fa348fdbeee50e65ac9f47e56dce48a8993719d2",
+      "decision": "BLOCKED",
+      "reason_code": "CORRECTION_SOURCE_NOT_FROZEN",
+      "review_ref": "config/cpi_w1_source_contract.json",
+      "review_digest": "2fd5ef1a24b27cc55e2b9b34454d13f3d17ee144c8aaf4adc3a0794b9a4e4469",
+      "gate_decision_digest": "07a955dc85d510514c8b58bf542481503e7bc89e31cdf8ce72115a4281a6b687"
+    }
+  ]
+}
