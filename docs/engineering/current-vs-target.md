@@ -1,15 +1,19 @@
 # Current implementation versus historical target
 
-## R1 local V2 extension (2026-10-10)
+## R1 local V2 extension (verified 2026-10-11)
 
-Local Tasks 1–9 add capability-scoped evidence policies/readiness, canonical verified
+Local Tasks 1–10 add capability-scoped evidence policies/readiness, canonical verified
 review bytes, explicit V2 snapshots and additive migration 014. Current effective
 policy registration, exact tested workload/job/executor revision and review binding
 are enforced in Python and PostgreSQL material/grant/admission/final-write paths.
 V1 serialization/history remains historical; V1 cannot authorize new or resumed
 promotion. Legacy market serving is unchanged. See the [R1 local verification](../evidence/cpi-w1-release-evidence-v2-2026-10-07.md).
 
-Independent R1 review is pending; this is not production authorization. All nine
+Independent R1 review and correction verification completed at code `075bb456`;
+all six concrete findings were resolved. R1 `FOUNDATION_VERIFIED = YES` is local,
+not production authorization or GitHub CI verification (NOT RUN, no push). Default
+repository validation also rejects checked-in/effective policy drift; V2 promotion
+requires READ COMMITTED to avoid stale transaction snapshots. All nine
 capability gates remain BLOCKED, all nine readiness rows NOT_READY, and
 `RELEASE_ELIGIBLE = NO`. No Product/UI/deployment/IAM work or official bulk collection
 is part of this extension. Older baseline statements below retain their historical

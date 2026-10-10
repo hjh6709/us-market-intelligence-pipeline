@@ -1,13 +1,16 @@
 # CPI W1 R1 local verification — Release Evidence V2
 
-Execution date: 2026-10-10. Branch: `feat/cpi-w1-official-corpus-readiness`.
+Execution dates: 2026-10-10 through 2026-10-11 (Asia/Seoul).
+Branch: `feat/cpi-w1-official-corpus-readiness`.
 Starting implementation commit: `64a9a7637ec27460f383d7bb918c5ac54f9cf5da`.
+Independently reviewed final code commit: `075bb4563538fd5fd2202f09611fcd94ff8e106a`.
+The subsequent evidence/plan-status commit changes documentation only.
 This record concerns R1 only, not historical PR #39 or production readiness.
 
 ## Status
 
-- Tasks 1–9 locally implemented and tested; independent Task 10 review pending.
-- R1 `FOUNDATION_VERIFIED` is **not yet asserted** until review findings are resolved.
+- Tasks 1–10 locally implemented, independently reviewed and tested.
+- R1 `FOUNDATION_VERIFIED = YES`, bounded to this local foundation verification.
 - `RELEASE_ELIGIBLE = NO`; all nine checked-in capability gates remain BLOCKED.
 - No official downloads, production authorizations, push, merge or deployment.
 - GitHub exact-new-head CI: **NOT RUN (no push permitted)**.
@@ -51,13 +54,14 @@ Task 9: missing foundation comparison failed; reapplying 014 failed with duplica
 function error. Migration reapplication now preserves schema/history and reinstalls
 V2 guards after the legacy runner reapplies earlier migrations.
 
-## Local verification before independent review
+## Final local verification after independent-review corrections
 
 | Verification | Run | Passed | Failed/errors | Skipped |
 | --- | ---: | ---: | ---: | ---: |
-| Full Python (`unittest discover -s tests -v`, PostgreSQL opt-out) | 802 | 600 | 0 | 202 |
-| Combined CPI/event-session/provider-bars/raw-lineage PostgreSQL | 179 | 179 | 0 | 0 |
-| New V2 PostgreSQL + migration comparisons/manifest | 18 | 18 | 0 | 0 |
+| Full Python (`unittest discover -s tests -v`, PostgreSQL opt-out) | 814 | 608 | 0 | 206 |
+| CPI Python discovery (`test_cpi_w1_*.py`, PostgreSQL opt-out) | 467 | 316 | 0 | 151 |
+| Combined CPI/event-session/provider-bars/raw-lineage PostgreSQL | 181 | 181 | 0 | 0 |
+| New V2 PostgreSQL + migration comparisons/manifest | 20 | 20 | 0 | 0 |
 | Research identity/pipeline detail isolated PostgreSQL | 4 | 4 | 0 | 0 |
 | Browser (`node --test tests/research_ui.cjs`) | 6 | 6 | 0 | 0 |
 
@@ -66,6 +70,11 @@ were actually run, not inferred from skipped discovery. All database writes occu
 in generated UUID-named disposable test databases on the development test container;
 the supplied database is used only as an administrative connection to create/drop
 those exact test databases. Python compileall and whitespace checks passed.
+
+Full discovery skips comprise 181 existing PostgreSQL cases, 14 new isolated V2
+cases, two migration comparisons and four research cases, all actually verified
+in the explicit DB runs above; five unrelated opt-in Kafka/Spark vertical-slice
+and Paper journal/recovery cases were not run in R1. They are not counted as passed.
 
 Fresh 001→014, legacy 001–009→014 and seeded foundation 001–013→014 have equivalent
 schema snapshots, including functions, triggers, constraints and reference rows.
@@ -87,6 +96,9 @@ convert or relabel V1 as V2. Verify hash history, schema, V1 refusal, V2 negativ
 guards and absence of new canonical writes before releasing maintenance fences.
 The defensive active-V1 upgrade test intentionally checks an old running claim;
 it is not permission to skip production drain or migration preconditions.
+Promotion connection isolation must be READ COMMITTED before admission is reopened.
+The shared V2 assertion rejects REPEATABLE READ and SERIALIZABLE; advisory locks
+cannot refresh their pinned snapshots. No code silently changes transaction isolation.
 
 ## Release evidence remains unavailable
 
@@ -109,6 +121,87 @@ unfrozen. Missing official evidence is not a parser success. Review byte integri
 does not prove human identity/SoD; production IAM and customer readiness are out of
 scope. No checked-in gate is changed or DB policy/authorization automatically seeded.
 
-## Independent review and final exact-head verification
+## Independent review and corrective TDD
 
-Pending Task 10. Do not treat this pre-review evidence as final foundation approval.
+One fresh-context read-only reviewer audited `54cd626ba2b68e442d2effee6cd4010e8963f708`.
+The review was briefly interrupted by a credit error and resumed with the same
+reviewer, not a replacement or second independent review. It found five important
+and one minor issue. No finding was accepted on speculation: each was reproduced
+and corrected within R1, then checked again by that same reviewer at `075bb456`.
+
+| Finding | Observed RED | Correction commit | Final result |
+| --- | --- | --- | --- |
+| Stale ordinary/cancellation replay proof | Changed expected semantics/subject or wrong dependency hash/extractor still counted | `d95196a` | Exact current evaluation and byte/semantic bindings required |
+| Missing conformance class or unlisted proof | Supplied PASS labels incorrectly produced READY | `d95196a` | Join fixture identity/hash/semantics and require every class |
+| Configured policy differs from effective DB policy | Resolver returned the synthetic old-policy authorization; final assertion did not refuse it | `628a7ed` | Actual checkout policy reread, resolution refused and heartbeat paused |
+| Stale transaction snapshot | Both REPEATABLE READ and SERIALIZABLE accepted stale-policy canonical INSERT | `075bb45` | Shared SQL assertion refuses with 23514; canonical row count zero |
+| Incomplete cancellation dependency projection | Review/source-contract/replay mutations did not change digest | `e183473` | Relevant dependency subject, contract, review, replay and tags bound |
+| Wrong expected-diff transition field names (minor) | Distinct before/after pairs falsely collapsed into one duplicate identity | `e183473` | Actual `expected_semantics_sha256` / `actual_semantics_sha256` used |
+
+Independent correction-only closure: **all six findings closed; no unresolved
+correctness finding**. Reviewer independently ran focused proof tests (48/48),
+V2/migration checks (20/20), immutable hash checks, and both stale-isolation
+reproductions; its databases were dropped and no checkout files were changed.
+
+Default repository checks compare actual checked-in policy with effective DB state
+at resolution and final/heartbeat validation, without registering anything. DB
+guards independently enforce persisted effective-policy and exact-build relations;
+they do not read repository files. Existing positive integration fixtures inject
+explicit synthetic current-policy inputs; separate negatives use the real default
+checkout config. Those test inputs never alter checked-in gates or authorize a live
+workload. Historical pre-014 seeding explicitly emulates the old Python boundary;
+the new check is restored before actual 014 transition/rejection assertions.
+
+Exact tested workload, job contract and executor source revision remain distinct
+and equal only to their corresponding V2 fields. Wrong/null build, mismatched review
+bytes/bindings, stale registration, revoked approval and stale worker generation
+are rejected by the relevant Python/SQL guards. V1 canonical bytes, null-build history
+and control records are preserved, but no V1 authorization resumes or becomes V2.
+
+The local ignored ledger/logs are under
+`.superpowers/sdd/2026-10-07-cpi-w1-release-evidence-v2/`; `task10-*-red.log` captures
+the corrective failures. Early task REDs documented above include some original
+tool output rather than a dedicated saved log. Final logs contain actual unittest
+run/pass/skip outputs; they are not inferred from CI. GitHub CI remains NOT RUN.
+
+## Exact R1 changed-file inventory
+
+Relative to starting implementation commit `64a9a763` (29 tracked paths):
+
+```text
+.github/workflows/ci.yml
+config/cpi_w1_capability_evidence_policies.json
+db/migrations/014_cpi_w1_release_evidence_v2.sql
+db/migrations/immutable-001-013.sha256
+docs/engineering/current-vs-target.md
+docs/evidence/cpi-w1-release-evidence-v2-2026-10-07.md
+docs/evidence/cpi-w1-release-evidence-v2-inventory-2026-10-07.json
+docs/superpowers/plans/2026-10-07-cpi-w1-release-evidence-v2.md
+docs/superpowers/specs/2026-09-19-cpi-w1-data-governance-design.md
+scripts/replay_cpi_w1_corpus.py
+src/cpi_w1_authorization.py
+src/cpi_w1_evidence_policy.py
+src/cpi_w1_evidence_readiness.py
+src/cpi_w1_evidence_snapshot_v2.py
+src/cpi_w1_migration_verification.py
+src/cpi_w1_repository.py
+src/cpi_w1_review_artifact.py
+tests/integration/test_cpi_w1_evidence_v2_postgres.py
+tests/integration/test_cpi_w1_postgres.py
+tests/test_cpi_w1_authorization.py
+tests/test_cpi_w1_corpus.py
+tests/test_cpi_w1_evidence_policy.py
+tests/test_cpi_w1_evidence_readiness.py
+tests/test_cpi_w1_evidence_snapshot.py
+tests/test_cpi_w1_evidence_snapshot_v2.py
+tests/test_cpi_w1_migration_verification.py
+tests/test_cpi_w1_release_evidence_docs.py
+tests/test_cpi_w1_repository.py
+tests/test_cpi_w1_review_artifact.py
+```
+
+No unrelated photographs, presentation outputs, older official-corpus evidence,
+legacy ingestion implementation or migrations 001–013 were staged or modified.
+Remaining release blockers are official bytes/access, six unfrozen coverage rules,
+and out-of-scope production approval/deployment/customer readiness. No next product
+phase is started. `FOUNDATION_VERIFIED = YES`; `RELEASE_ELIGIBLE = NO`.

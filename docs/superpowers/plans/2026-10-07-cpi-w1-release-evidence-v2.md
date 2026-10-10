@@ -1,6 +1,6 @@
 # CPI W1 Release Evidence V2 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Execution requires separate user approval; this document authorizes no implementation.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking. Execution requires separate user approval; this document authorizes no implementation.
 
 **Goal:** Close R1 release-evidence gaps with capability-specific policies/readiness, explicit V2 snapshots, and persisted exact-build authorization without releasing CPI W1.
 
@@ -9,6 +9,11 @@
 **Tech Stack:** Existing Python/unittest/psycopg, PostgreSQL (CI 17.6), canonical JSON and SHA-256; no new product dependencies.
 
 **Spec:** `docs/superpowers/specs/2026-10-07-cpi-w1-release-evidence-v2-design.md` — approved by the user on 2026-10-07. Its original draft label records creation-stage status; this plan does not change the approved scope.
+
+**Execution record (2026-10-11):** Tasks 1–10 completed locally after explicit
+execution approval; one independent review's six findings resolved at code
+`075bb456`. See the [R1 evidence](../../evidence/cpi-w1-release-evidence-v2-2026-10-07.md).
+No push, merge, production authorization or next product phase. RELEASE_ELIGIBLE = NO.
 
 ## Global Constraints
 
@@ -207,22 +212,22 @@ lock inversion, grants, SECURITY DEFINER shortcut, or production authorization.
 **Files:** existing `scripts/replay_cpi_w1_corpus.py`, `tests/test_cpi_w1_corpus.py`, `tests/test_cpi_w1_evidence_snapshot.py`; section 31.2 of canonical 2026-09-19 design; new `tests/test_cpi_w1_release_evidence_docs.py`.
 **Interfaces:** retain `replay_entry(...)`/`build_report(...)` signatures and registry dispatch; later tasks consume their result dictionaries.
 
-- [ ] Add docs assertions for artifact × capability ownership and absence of stale entry-scoped wording; record RED using `.venv/bin/python -m unittest tests.test_cpi_w1_release_evidence_docs -v`.
-- [ ] Run `tests.test_cpi_w1_corpus.CpiW1MaterializedV2ReplayTest`; retain existing observed historical RED record, do not revert product code.
-- [ ] Amend only section 31.2 and minimally fix any newly failing replay assertion; preserve all nine required replay cases.
-- [ ] GREEN: `.venv/bin/python -m unittest tests.test_cpi_w1_release_evidence_docs tests.test_cpi_w1_corpus tests.test_cpi_w1_evidence_snapshot -v`.
-- [ ] Review exact diff and whitespace; commit only Task 1 files as `fix: reconcile capability-scoped CPI corpus replay`. Do not stage other evidence/photos.
+- [x] Add docs assertions for artifact × capability ownership and absence of stale entry-scoped wording; record RED using `.venv/bin/python -m unittest tests.test_cpi_w1_release_evidence_docs -v`.
+- [x] Run `tests.test_cpi_w1_corpus.CpiW1MaterializedV2ReplayTest`; retain existing observed historical RED record, do not revert product code.
+- [x] Amend only section 31.2 and minimally fix any newly failing replay assertion; preserve all nine required replay cases.
+- [x] GREEN: `.venv/bin/python -m unittest tests.test_cpi_w1_release_evidence_docs tests.test_cpi_w1_corpus tests.test_cpi_w1_evidence_snapshot -v`.
+- [x] Review exact diff and whitespace; commit only Task 1 files as `fix: reconcile capability-scoped CPI corpus replay`. Do not stage other evidence/photos.
 
 ### Task 2: Canonical policies for every ACTIVE capability
 
 **Files:** create policy module/config and `tests/test_cpi_w1_evidence_policy.py`.
 **Interfaces:** `CapabilityEvidencePolicyV1.from_mapping(value: Mapping[str, object], registry: PromotionCapabilityRegistry) -> CapabilityEvidencePolicyV1`; `.policy_digest`, `.complete`, `.payload()`; `CapabilityEvidencePolicyRegistry.require(capability_id: str) -> CapabilityEvidencePolicyV1`; canonical bytes helper from contract A.
 
-- [ ] RED tests: missing ACTIVE policy; duplicate/mismatched subject; unknown keys; reordered sets stable; float/NaN rejected; incomplete coverage explicit; nine policies all forbid zero official evidence.
-- [ ] Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_policy -v`; observe missing implementation/assertion failure, not environment failure.
-- [ ] Implement strict models and exact nine-policy coverage matrix from the spec. Encode monthly interval obligations and verified cancellation requirements; six unfrozen surfaces remain INCOMPLETE.
-- [ ] GREEN/regression: `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_policy tests.test_cpi_w1_promotion_capabilities tests.test_cpi_w1_release_subject -v`.
-- [ ] Self-review threshold/source claims and commit Task 2 files as `feat: add fail-closed capability evidence policies`.
+- [x] RED tests: missing ACTIVE policy; duplicate/mismatched subject; unknown keys; reordered sets stable; float/NaN rejected; incomplete coverage explicit; nine policies all forbid zero official evidence.
+- [x] Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_policy -v`; observe missing implementation/assertion failure, not environment failure.
+- [x] Implement strict models and exact nine-policy coverage matrix from the spec. Encode monthly interval obligations and verified cancellation requirements; six unfrozen surfaces remain INCOMPLETE.
+- [x] GREEN/regression: `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_policy tests.test_cpi_w1_promotion_capabilities tests.test_cpi_w1_release_subject -v`.
+- [x] Self-review threshold/source claims and commit Task 2 files as `feat: add fail-closed capability evidence policies`.
 
 ### Task 3: Scoped digests and readiness report
 
@@ -238,11 +243,11 @@ self.assertEqual(before_digest, unrelated_mutation_digest)
 self.assertNotEqual(before_digest, relevant_hash_mutation_digest)
 ```
 
-- [ ] RED tests: missing policy/zero official/empty required set, omitted ACTIVE expectation, synthetic-only evidence, incomplete policy, unverified cancellation, missing January coverage, duplicate result identities.
-- [ ] RED digest tests: unrelated capability expectation change stable; relevant hash/semantic/tag/dependency change differs; ordering stable. Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_readiness -v`.
-- [ ] Implement filtered canonical corpus/diff/replay projections and obligation evaluation; supplement existing report with all ACTIVE rows, never mutate gates or fetch URLs.
-- [ ] GREEN: `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_readiness tests.test_cpi_w1_evidence_policy tests.test_cpi_w1_corpus -v`; inventory report must show nine NOT_READY, zero official materialized, no network.
-- [ ] Review scope independence and commit `feat: report capability-scoped CPI evidence readiness`.
+- [x] RED tests: missing policy/zero official/empty required set, omitted ACTIVE expectation, synthetic-only evidence, incomplete policy, unverified cancellation, missing January coverage, duplicate result identities.
+- [x] RED digest tests: unrelated capability expectation change stable; relevant hash/semantic/tag/dependency change differs; ordering stable. Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_readiness -v`.
+- [x] Implement filtered canonical corpus/diff/replay projections and obligation evaluation; supplement existing report with all ACTIVE rows, never mutate gates or fetch URLs.
+- [x] GREEN: `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_readiness tests.test_cpi_w1_evidence_policy tests.test_cpi_w1_corpus -v`; inventory report must show nine NOT_READY, zero official materialized, no network.
+- [x] Review scope independence and commit `feat: report capability-scoped CPI evidence readiness`.
 
 ### Task 4: Verified review bytes and exact semantic binding
 
@@ -251,22 +256,22 @@ self.assertNotEqual(before_digest, relevant_hash_mutation_digest)
 
 Pin `test_valid_hash_wrong_bindings_rejected`: the loader succeeds for real canonical bytes, then `review.require_bindings(expected)` raises `ReviewArtifactError` because its policy digest differs. Do not make this only a hash-shape test.
 
-- [ ] RED tests: canonical authorization/diff review accepted; wrong bytes/bindings rejected; missing file, traversal, symlink, noncanonical encoding, duplicate JSON keys, unknown purpose rejected; whitespace changes digest.
-- [ ] Run `.venv/bin/python -m unittest tests.test_cpi_w1_review_artifact -v` and observe behavioral RED.
-- [ ] Implement immutable helper and local approval checks without approving any checked-in evidence; historical prose references remain explicitly unverified.
-- [ ] GREEN/regression: `.venv/bin/python -m unittest tests.test_cpi_w1_review_artifact tests.test_cpi_w1_corpus_review tests.test_cpi_w1_corpus_materialization tests.test_cpi_w1_corpus -v`.
-- [ ] Self-review cyclic hash/path handling and commit `feat: verify CPI review artifact bytes and bindings`.
+- [x] RED tests: canonical authorization/diff review accepted; wrong bytes/bindings rejected; missing file, traversal, symlink, noncanonical encoding, duplicate JSON keys, unknown purpose rejected; whitespace changes digest.
+- [x] Run `.venv/bin/python -m unittest tests.test_cpi_w1_review_artifact -v` and observe behavioral RED.
+- [x] Implement immutable helper and local approval checks without approving any checked-in evidence; historical prose references remain explicitly unverified.
+- [x] GREEN/regression: `.venv/bin/python -m unittest tests.test_cpi_w1_review_artifact tests.test_cpi_w1_corpus_review tests.test_cpi_w1_corpus_materialization tests.test_cpi_w1_corpus -v`.
+- [x] Self-review cyclic hash/path handling and commit `feat: verify CPI review artifact bytes and bindings`.
 
 ### Task 5: V2 snapshots and pure eligible-material validation
 
 **Files:** create snapshot V2 module/tests; modify authorization and release-gate modules/tests; preserve V1 serialization module.
 **Interfaces:** `PromotionEvidenceSnapshotV2.from_mapping(value) -> PromotionEvidenceSnapshotV2`; `.payload()`, `.canonical_json`, `.evidence_snapshot_digest`; `PromotionAuthorizationMaterialV2.from_review(*, evidence, gate_decision, executor, current_policy, source_contract_digest, review: ReviewArtifactV1) -> PromotionAuthorizationMaterialV2`.
 
-- [ ] RED V2 tests: exact schema/digest roundtrip, null build readable only as blocked, unknown/mixed fields rejected, current-policy/source-contract mismatch rejected; V1 frozen digest unchanged.
-- [ ] RED eligible-material tests: null workload/revision, wrong artifact/job/revision, wrong review binding, stale policy fail; equal source-content hash is not executor-revision evidence. Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_snapshot_v2 tests.test_cpi_w1_authorization -v`.
-- [ ] Implement explicit V2 models and gate validation using scoped evidence. Retire V1 review-to-new-authorization constructor per contract C, without changing V1 historical serialization.
-- [ ] GREEN/regression: run V1/V2 snapshot, policy, review, gate, authorization suites together; all actual config gates remain BLOCKED.
-- [ ] Self-review no implicit V1 coercion and commit `feat: bind CPI V2 evidence to reviewed tested builds`.
+- [x] RED V2 tests: exact schema/digest roundtrip, null build readable only as blocked, unknown/mixed fields rejected, current-policy/source-contract mismatch rejected; V1 frozen digest unchanged.
+- [x] RED eligible-material tests: null workload/revision, wrong artifact/job/revision, wrong review binding, stale policy fail; equal source-content hash is not executor-revision evidence. Run `.venv/bin/python -m unittest tests.test_cpi_w1_evidence_snapshot_v2 tests.test_cpi_w1_authorization -v`.
+- [x] Implement explicit V2 models and gate validation using scoped evidence. Retire V1 review-to-new-authorization constructor per contract C, without changing V1 historical serialization.
+- [x] GREEN/regression: run V1/V2 snapshot, policy, review, gate, authorization suites together; all actual config gates remain BLOCKED.
+- [x] Self-review no implicit V1 coercion and commit `feat: bind CPI V2 evidence to reviewed tested builds`.
 
 ### Task 6: Migration 014 immutable evidence/policy/review persistence
 
@@ -275,58 +280,58 @@ Pin `test_valid_hash_wrong_bindings_rejected`: the loader succeeds for real cano
 
 Pin `test_concurrent_expected_version_has_one_winner`: synchronize two registration transactions with expected 0; collect one UUID and one constraint failure. Query `MAX(registration_version)` and `COUNT(*)` for the subject; both must equal 1. Pin `test_review_json_columns_cannot_disagree_with_bytes` with direct SQL INSERT whose bytes hash is valid but parsed bindings differ; require a constraint exception.
 
-- [ ] RED real PG tests for new objects, schema-discriminated rows, payload/hash mismatches, review semantic-column tampering, immutable UPDATE/DELETE, missing FK and unsupported versions.
-- [ ] RED concurrency test: two independent connections register expected 0; one succeeds, one rejects, effective version exactly 1. Subsequent stale version and registration without policy reject.
-- [ ] RED fresh/upgrade + hash-freeze tests; run `RUN_POSTGRES_INTEGRATION=1 .venv/bin/python -m unittest tests.integration.test_cpi_w1_evidence_v2_postgres tests.test_cpi_w1_migration_verification -v` with an approved isolated test DSN.
-- [ ] Implement 014 tables, schema changes, canonical byte/hash guards, registration function/trigger, immutable triggers and explicit repository writers. Extend hash loader without loosening original exact 001–009 manifest validation.
-- [ ] GREEN using the same command; Python/SQL canonical vectors include Unicode, escaping, reordered keys, integers, forbidden floats, and parsed-field disagreement. No seeded policy/gate/grant rows.
-- [ ] Self-review lock acquisition in direct SQL, row/history preservation and commit `feat: persist versioned CPI evidence policies and V2 snapshots`.
+- [x] RED real PG tests for new objects, schema-discriminated rows, payload/hash mismatches, review semantic-column tampering, immutable UPDATE/DELETE, missing FK and unsupported versions.
+- [x] RED concurrency test: two independent connections register expected 0; one succeeds, one rejects, effective version exactly 1. Subsequent stale version and registration without policy reject.
+- [x] RED fresh/upgrade + hash-freeze tests; run `RUN_POSTGRES_INTEGRATION=1 .venv/bin/python -m unittest tests.integration.test_cpi_w1_evidence_v2_postgres tests.test_cpi_w1_migration_verification -v` with an approved isolated test DSN.
+- [x] Implement 014 tables, schema changes, canonical byte/hash guards, registration function/trigger, immutable triggers and explicit repository writers. Extend hash loader without loosening original exact 001–009 manifest validation.
+- [x] GREEN using the same command; Python/SQL canonical vectors include Unicode, escaping, reordered keys, integers, forbidden floats, and parsed-field disagreement. No seeded policy/gate/grant rows.
+- [x] Self-review lock acquisition in direct SQL, row/history preservation and commit `feat: persist versioned CPI evidence policies and V2 snapshots`.
 
 ### Task 7: Persisted authorization guards and V1 runtime retirement
 
 **Files:** extend new 014; modify repository/authorization tests; extend V2 PG integration and existing CPI PG fixtures.
 **Interfaces:** repository `create_promotion_authorization_material_v2(connection, material, evidence_snapshot_id, created_by_subject) -> UUID`; SQL material/bound-authorization assertions per D; existing resolver signature retained.
 
-- [ ] RED direct SQL and Python cases: null tested workload, wrong artifact/job/revision, nonexistent/current-policy mismatch, wrong review, V1 new material/grant rejected.
-- [ ] RED historical test: seed V1 evidence/material/APPROVED grant/control before applying 014; afterward bytes/rows readable and unchanged, resolver returns no V1 authorization; V1 revocation history still appendable.
-- [ ] Run focused authorization + real PG suites; confirm invariant failures, not missing DSN/skips.
-- [ ] Implement V2 material/grant assertions, resolver and attempt admission replacement guards; convert only execution-positive test fixtures to explicitly reviewed V2 fixtures. Preserve historical V1 tests and collection/legacy tests.
-- [ ] GREEN/regression: authorization, repository, gate and both CPI PostgreSQL modules; compare all seeded V1 business values before/after migration.
-- [ ] Self-review every entrypoint and commit `fix: enforce tested-build authorization and retire legacy promotion grants`.
+- [x] RED direct SQL and Python cases: null tested workload, wrong artifact/job/revision, nonexistent/current-policy mismatch, wrong review, V1 new material/grant rejected.
+- [x] RED historical test: seed V1 evidence/material/APPROVED grant/control before applying 014; afterward bytes/rows readable and unchanged, resolver returns no V1 authorization; V1 revocation history still appendable.
+- [x] Run focused authorization + real PG suites; confirm invariant failures, not missing DSN/skips.
+- [x] Implement V2 material/grant assertions, resolver and attempt admission replacement guards; convert only execution-positive test fixtures to explicitly reviewed V2 fixtures. Preserve historical V1 tests and collection/legacy tests.
+- [x] GREEN/regression: authorization, repository, gate and both CPI PostgreSQL modules; compare all seeded V1 business values before/after migration.
+- [x] Self-review every entrypoint and commit `fix: enforce tested-build authorization and retire legacy promotion grants`.
 
 ### Task 8: Policy freshness through heartbeat and final canonical writes
 
 **Files:** modify repository `assert_current_promotion_authorization`/heartbeat use and promoter guard integration; extend new 014 final SQL guards only as required; repository/promoter/PG tests.
 **Interfaces:** shared DB authorization assertion from Task 7 remains sole persisted invariant predicate; existing Claim identity and pause workflow unchanged.
 
-- [ ] RED two-connection tests: claim under registration 1, commit registration 2, then canonical promotion rejected with no canonical writes; old heartbeat pauses through existing behavior. V1 claimed pre-upgrade cannot finish.
-- [ ] RED serialized race: final writer holds domain/release lock before policy registration; registration waits, then any subsequent write sees version 2. Test reverse order too; no sleep-only proof, use synchronization barriers and bounded lock timeouts.
-- [ ] RED revocation/stale-generation/direct SQL bypass regressions; run focused repository/promoter and PG suites.
-- [ ] Implement common final revalidation under existing domain → release → work → event order; prevent indirect writes from avoiding it. No new pause semantics or automatic policy approval.
-- [ ] GREEN/regression includes existing recovery/deadlock/fencing CPI tests; verify rejected transaction leaves no observations/envelope promotion records.
-- [ ] Self-review lock-order paths and commit `fix: fence CPI canonical promotion against stale release policy`.
+- [x] RED two-connection tests: claim under registration 1, commit registration 2, then canonical promotion rejected with no canonical writes; old heartbeat pauses through existing behavior. V1 claimed pre-upgrade cannot finish.
+- [x] RED serialized race: final writer holds domain/release lock before policy registration; registration waits, then any subsequent write sees version 2. Test reverse order too; no sleep-only proof, use synchronization barriers and bounded lock timeouts.
+- [x] RED revocation/stale-generation/direct SQL bypass regressions; run focused repository/promoter and PG suites.
+- [x] Implement common final revalidation under existing domain → release → work → event order; prevent indirect writes from avoiding it. No new pause semantics or automatic policy approval.
+- [x] GREEN/regression includes existing recovery/deadlock/fencing CPI tests; verify rejected transaction leaves no observations/envelope promotion records.
+- [x] Self-review lock-order paths and commit `fix: fence CPI canonical promotion against stale release policy`.
 
 ### Task 9: Fresh/upgrade equivalence, legacy preservation, and CI coverage
 
 **Files:** migration verification module/tests; existing/new PG modules; `.github/workflows/ci.yml` only to include new PG module; current-vs-target, R1 evidence document.
 **Interfaces:** retain `compare_fresh_and_upgrade(base_dsn)` legacy 001–009 path; add `compare_foundation_upgrade(base_dsn: str) -> MigrationEquivalenceResult` for seeded 001–013→014 path with explicit historical preservation result.
 
-- [ ] RED comparison tests missing new constraints/functions/triggers or mutated V1 values; preserve original legacy fixture and test null-workload historical row. Schema snapshot includes new policy/review tables, guard functions and constraints.
-- [ ] Implement isolated fresh/upgrade comparisons, complete 001–013 frozen manifest verification, and new PG CI test inclusion; never alter old migration bytes.
-- [ ] GREEN full commands below, capturing actual run/pass/skip counts and why each skip occurred. PostgreSQL tests cannot be counted as verified if skipped.
-- [ ] Generate deterministic all-nine capability inventory and evidence under `docs/evidence/cpi-w1-release-evidence-v2-2026-10-07.md`; distinguish old replay verification from this run. Update current-vs-target only for tested implementation, keeping official access and release blockers explicit.
-- [ ] Self-review evidence assertions against logs and commit `test: verify CPI V2 migration and legacy compatibility` with scoped docs/CI changes.
+- [x] RED comparison tests missing new constraints/functions/triggers or mutated V1 values; preserve original legacy fixture and test null-workload historical row. Schema snapshot includes new policy/review tables, guard functions and constraints.
+- [x] Implement isolated fresh/upgrade comparisons, complete 001–013 frozen manifest verification, and new PG CI test inclusion; never alter old migration bytes.
+- [x] GREEN full commands below, capturing actual run/pass/skip counts and why each skip occurred. PostgreSQL tests cannot be counted as verified if skipped.
+- [x] Generate deterministic all-nine capability inventory and evidence under `docs/evidence/cpi-w1-release-evidence-v2-2026-10-07.md`; distinguish old replay verification from this run. Update current-vs-target only for tested implementation, keeping official access and release blockers explicit.
+- [x] Self-review evidence assertions against logs and commit `test: verify CPI V2 migration and legacy compatibility` with scoped docs/CI changes.
 
 ### Task 10: One independent R1 red-team and final handoff
 
 **Files:** evidence report; code only if a concrete R1 finding requires corrective TDD.
 **Interfaces:** completed branch + exact HEAD, spec and logs are audit inputs; no unrelated architecture review.
 
-- [ ] Dispatch one independent reviewer after GREEN, as explicitly authorized by R1, to try to disprove readiness closure, policy invalidation, digest scope, exact build, review binding, V1 isolation, migration history, and blocked gate preservation.
-- [ ] Each concrete finding gets its own observed RED, minimum correction, GREEN/regression and scoped commit; do not expand feature scope.
-- [ ] Re-run affected and final verification at the exact post-correction HEAD; save audit verdict/counts. An unresolved correctness finding prevents completion claims.
-- [ ] Return R1 required report: starting/final SHA, branch, exact files, 014 necessity, RED/fixes/GREEN, per-capability output, V1/V2 compatibility, authorization negative tests, blockers and CI status. No push means GitHub new-head CI is NOT RUN, not green by inference.
-- [ ] Stop: `RELEASE_ELIGIBLE = NO`; do not push/merge or begin a next product phase without new user instruction.
+- [x] Dispatch one independent reviewer after GREEN, as explicitly authorized by R1, to try to disprove readiness closure, policy invalidation, digest scope, exact build, review binding, V1 isolation, migration history, and blocked gate preservation.
+- [x] Each concrete finding gets its own observed RED, minimum correction, GREEN/regression and scoped commit; do not expand feature scope.
+- [x] Re-run affected and final verification at the exact post-correction HEAD; save audit verdict/counts. An unresolved correctness finding prevents completion claims.
+- [x] Return R1 required report: starting/final SHA, branch, exact files, 014 necessity, RED/fixes/GREEN, per-capability output, V1/V2 compatibility, authorization negative tests, blockers and CI status. No push means GitHub new-head CI is NOT RUN, not green by inference.
+- [x] Stop: `RELEASE_ELIGIBLE = NO`; do not push/merge or begin a next product phase without new user instruction.
 
 ## Final verification commands (execution phase only)
 
