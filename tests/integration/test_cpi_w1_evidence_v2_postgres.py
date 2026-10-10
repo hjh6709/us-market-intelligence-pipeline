@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from uuid import uuid4
@@ -238,6 +239,43 @@ class CpiEvidenceV2PostgresTest(unittest.TestCase):
                          payload['executor_source_revision'],payload['executor_workload_artifact_digest'],payload['executor_job_contract_version'],
                          payload['review_ref'],payload['review_digest'],hashlib.sha256(raw).hexdigest(),payload['schema'],raw))
 
+    def test_repository_rejects_effective_policy_different_from_checked_in_config(self):
+        from src.cpi_w1_repository import CpiW1Repository
+        from tests.integration.test_cpi_w1_postgres import reviewed_v2_case, persist_v2_case, TEST_EXECUTOR, TEST_OBSERVATION_SUBJECT
+        repository = CpiW1Repository()
+        case = reviewed_v2_case(TEST_OBSERVATION_SUBJECT.release_subject_digest,
+                                TEST_OBSERVATION_SUBJECT.promotion_capability_id, TEST_EXECUTOR)
+        repository.store_capability_evidence_policy(self.connection, case[1])
+        current = self.connection.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s',
+                                          (case[1].release_subject_digest,)).fetchone()[0]
+        repository.register_capability_evidence_policy(self.connection, case[1], current or 0, 'test:old-policy')
+        material_id = persist_v2_case(repository, self.connection, case)
+        authorization = repository.create_promotion_authorization(self.connection,
+            authorization_material_id=material_id, release_subject_digest=case[1].release_subject_digest,
+            grant_reason_code='TEST_ONLY', created_by_subject='test')
+        repository.apply_promotion_release_control(self.connection, authorization_id=authorization,
+            expected_control_version=0, state='APPROVED', reason_code='TEST_ONLY', actor_subject='test',
+            review_ref=case[2].review_ref, review_digest=case[2].review_digest)
+        # DB state is self-consistent, but it is not this checkout's current policy.
+        self.connection.execute('SELECT assert_cpi_v2_authorization_binding(%s)', (authorization,))
+        self.assertIsNone(repository.resolve_promotion_release_authorization(self.connection,
+            release_subject_digest=case[1].release_subject_digest, executor=TEST_EXECUTOR))
+
+    def test_config_mismatch_final_check_and_heartbeat_pause_claim(self):
+        from src.cpi_w1_repository import CpiW1Repository, RepositoryInvariantError
+        from tests.integration.test_cpi_w1_postgres import CpiW1PostgresTest
+        helper = CpiW1PostgresTest()
+        claim = helper.make_authorization_overlap_claim(self.connection)
+        repository = CpiW1Repository()  # actual checkout, not synthetic current-policy input
+        self.assertIsNotNone(claim)
+        with self.assertRaises(RepositoryInvariantError):
+            repository.assert_current_promotion_authorization(self.connection, claim)
+        with self.assertRaises(RepositoryInvariantError):
+            repository.renew_claim(self.connection, claim)
+        self.assertEqual(self.connection.execute('SELECT state FROM ingestion_work_items WHERE work_item_id=%s',
+                                                 (claim.work_item_id,)).fetchone()[0], 'PAUSED')
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0], 0)
+
 
 @unittest.skipUnless(os.environ.get('RUN_POSTGRES_INTEGRATION') == '1', 'isolated PostgreSQL opt-in required')
 class CpiV1TransitionPostgresTest(unittest.TestCase):
@@ -282,7 +320,11 @@ class CpiV1TransitionPostgresTest(unittest.TestCase):
                 helper=CpiW1PostgresTest()
                 run_id=helper.insert_run(connection,execution_scope='ECONOMIC_PROMOTE')
                 helper.insert_work(connection,run_id,execution_scope='ECONOMIC_PROMOTE',release_subject=TEST_OBSERVATION_SUBJECT)
-                claim=repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR)
+                # Seed history under the old 001–013 runtime boundary. No 014
+                # policy table existed then; restore the new Python check before
+                # applying 014 and exercising its actual retirement behavior.
+                with patch.object(repository, '_assert_configured_policy', return_value=None):
+                    claim=repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR)
                 self.assertIsNotNone(claim, 'pre-014 V1 active claim required')
                 columns=tuple(values)
                 query=sql.SQL('SELECT {} FROM promotion_release_authorization_materials WHERE authorization_material_id=%s').format(sql.SQL(',').join(map(sql.Identifier,columns)))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -143,6 +144,35 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    def __init__(self, *, evidence_policy_loader=None):
+        # Trusted dependency injection for declared test/checkout policy inputs;
+        # production defaults to the actual checked-in registry on every check.
+        self._evidence_policy_loader = evidence_policy_loader
+
+    def _assert_configured_policy(self, connection, release_subject_digest):
+        from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry
+        from src.cpi_w1_promotion_capabilities import PromotionCapabilityRegistry
+        row = connection.execute("""SELECT promotion_capability_id, policy_digest
+            FROM promotion_capability_evidence_policy_registrations
+            WHERE release_subject_digest=%s ORDER BY registration_version DESC LIMIT 1""",
+            (release_subject_digest,)).fetchone()
+        if row is None:
+            raise RepositoryInvariantError('effective evidence policy missing')
+        try:
+            if self._evidence_policy_loader is not None:
+                policy = self._evidence_policy_loader(row[0], release_subject_digest)
+            else:
+                root = Path(__file__).resolve().parents[1]
+                registry = PromotionCapabilityRegistry.from_json(root / 'config/cpi_w1_promotion_capabilities.json')
+                policy = CapabilityEvidencePolicyRegistry.from_json(
+                    root / 'config/cpi_w1_capability_evidence_policies.json', registry).require(row[0])
+            if (policy.release_subject_digest != release_subject_digest
+                or policy.promotion_capability_id != row[0] or not policy.complete
+                or policy.policy_digest != row[1]):
+                raise ValueError('configured/effective evidence policy mismatch')
+        except (ValueError, KeyError, OSError) as error:
+            raise RepositoryInvariantError('configured/effective evidence policy mismatch or unavailable') from error
+
     def store_capability_evidence_policy(self, connection, policy) -> str:
         payload = policy.payload()
         connection.execute("""INSERT INTO promotion_capability_evidence_policies
@@ -392,6 +422,11 @@ class CpiW1Repository:
         ).fetchone()
         if row is None:
             raise RepositoryInvariantError("authorization resolver returned no row")
+        if row[0] is not None:
+            try:
+                self._assert_configured_policy(connection, release_subject_digest)
+            except RepositoryInvariantError:
+                return None
         return row[0]
 
     def create_run(
@@ -1053,6 +1088,7 @@ class CpiW1Repository:
                     (claim.release_authorization_id,))
         except CheckViolation as error:
             raise RepositoryInvariantError(f'current V2 promotion authorization rejected: {error}') from error
+        self._assert_configured_policy(connection, claim.release_subject_digest)
         row = connection.execute(
             """
             SELECT a.release_subject_digest,
