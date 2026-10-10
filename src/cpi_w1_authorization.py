@@ -95,26 +95,7 @@ class PromotionAuthorizationMaterialV1:
         review_ref: str,
         review_digest: str,
     ) -> "PromotionAuthorizationMaterialV1":
-        if not gate_decision.eligible:
-            raise PromotionAuthorizationError("gate decision is not eligible")
-        if gate_decision.gate_decision_digest is None:
-            raise PromotionAuthorizationError("gate decision has no immutable digest")
-        if gate_decision.release_subject_digest != evidence.release_subject_digest:
-            raise PromotionAuthorizationError("gate and evidence subject mismatch")
-        if gate_decision.evidence_snapshot_digest != evidence.evidence_snapshot_digest:
-            raise PromotionAuthorizationError("gate and evidence snapshot mismatch")
-        return cls(
-            release_subject_digest=evidence.release_subject_digest,
-            evidence_snapshot_digest=evidence.evidence_snapshot_digest,
-            gate_decision_digest=gate_decision.gate_decision_digest,
-            gate_policy_version=gate_decision.gate_policy_version,
-            authorization_policy_version=cls.POLICY,
-            executor_source_revision=executor.source_revision,
-            executor_workload_artifact_digest=executor.workload_artifact_digest,
-            executor_job_contract_version=executor.job_contract_version,
-            review_ref=review_ref,
-            review_digest=review_digest,
-        )
+        raise PromotionAuthorizationError("LEGACY_AUTHORIZATION_RETIRED")
 
     def payload(self) -> dict[str, str]:
         return {
@@ -144,3 +125,72 @@ class PromotionAuthorizationMaterialV1:
     @property
     def authorization_material_digest(self) -> str:
         return hashlib.sha256(self.canonical_json.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class PromotionAuthorizationMaterialV2:
+    _bytes: bytes
+    SCHEMA = "cpi-w1-promotion-authorization-material-v2"
+    POLICY = "cpi-w1-authorization-v2"
+
+    @classmethod
+    def from_review(cls, *, evidence, gate_decision, executor, current_policy, source_contract_digest, review):
+        from src.cpi_w1_evidence_snapshot_v2 import PromotionEvidenceSnapshotV2
+        from src.cpi_w1_evidence_policy import canonical_evidence_bytes
+        if not isinstance(evidence, PromotionEvidenceSnapshotV2):
+            raise PromotionAuthorizationError("V2 authorization requires explicit V2 evidence")
+        if not current_policy.complete or evidence.capability_evidence_policy_digest != current_policy.policy_digest:
+            raise PromotionAuthorizationError("current evidence policy mismatch or incomplete")
+        if (evidence.release_subject_digest != current_policy.release_subject_digest
+            or evidence.promotion_capability_id != current_policy.promotion_capability_id
+            or evidence.source_contract_digest != source_contract_digest):
+            raise PromotionAuthorizationError("subject/capability/source contract mismatch")
+        if evidence.tested_workload_artifact_digest is None or evidence.tested_executor_source_revision is None:
+            raise PromotionAuthorizationError("eligible authorization requires tested build")
+        if (executor.workload_artifact_digest != evidence.tested_workload_artifact_digest
+            or executor.job_contract_version != evidence.tested_job_contract_version
+            or executor.source_revision != evidence.tested_executor_source_revision):
+            raise PromotionAuthorizationError("executor is not the exact tested build")
+        if (not gate_decision.eligible or gate_decision.gate_decision_digest is None
+            or gate_decision.release_subject_digest != evidence.release_subject_digest
+            or gate_decision.promotion_capability_id != evidence.promotion_capability_id
+            or gate_decision.evidence_snapshot_digest != evidence.evidence_snapshot_digest):
+            raise PromotionAuthorizationError("gate/evidence identity mismatch or blocked")
+        bindings = {key: evidence.payload()[key] for key in (
+            "release_subject_digest", "promotion_capability_id", "capability_evidence_policy_digest",
+            "source_contract_digest", "tested_source_content_digest", "tested_executor_source_revision",
+            "tested_workload_artifact_digest", "tested_job_contract_version")}
+        bindings.update(evidence_snapshot_digest=evidence.evidence_snapshot_digest,
+                        gate_policy_version=gate_decision.gate_policy_version)
+        if review.payload()["purpose"] != "PROMOTION_AUTHORIZATION":
+            raise PromotionAuthorizationError("authorization review purpose required")
+        review.require_bindings(bindings)
+        if gate_decision.review_ref != review.review_ref or gate_decision.review_digest != review.review_digest:
+            raise PromotionAuthorizationError("gate review does not match verified review")
+        return cls(canonical_evidence_bytes({"schema": cls.SCHEMA,
+            "authorization_policy_version": cls.POLICY, "release_subject_digest": evidence.release_subject_digest,
+            "evidence_snapshot_digest": evidence.evidence_snapshot_digest,
+            "gate_decision_digest": gate_decision.gate_decision_digest,
+            "gate_policy_version": gate_decision.gate_policy_version,
+            "executor_source_revision": executor.source_revision,
+            "executor_workload_artifact_digest": executor.workload_artifact_digest,
+            "executor_job_contract_version": executor.job_contract_version,
+            "review_ref": review.review_ref, "review_digest": review.review_digest}))
+
+    def payload(self):
+        from src.cpi_w1_evidence_policy import parse_evidence_json
+        return parse_evidence_json(self._bytes, require_canonical=True)
+
+    def __getattr__(self, name):
+        values = self.payload()
+        if name in values:
+            return values[name]
+        raise AttributeError(name)
+
+    @property
+    def canonical_json(self):
+        return self._bytes.decode("utf-8")
+
+    @property
+    def authorization_material_digest(self):
+        return hashlib.sha256(self._bytes).hexdigest()
