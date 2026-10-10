@@ -194,6 +194,33 @@ class CapabilityEvidenceReadinessTest(unittest.TestCase):
             path.write_bytes(review + b"\n")
             self.assertEqual(evaluate().status, "NOT_READY")
 
+    def test_cancellation_dependency_digest_binds_complete_evidence_projection(self):
+        baseline = self.digest(self.manifest)
+        for field, value in (("review", {"status": "CHANGED"}), ("source_contract_version", "changed-source")):
+            raw = copy.deepcopy(self.manifest)
+            cancellation = next(e for e in raw["entries"] if e["corpus_id"] == "cpi:2025-10:explicit-cancellation")
+            cancellation[field] = value
+            with self.subTest(field=field):
+                self.assertNotEqual(baseline, self.digest(raw))
+        raw = copy.deepcopy(self.manifest)
+        cancellation = next(e for e in raw["entries"] if e["corpus_id"] == "cpi:2025-10:explicit-cancellation")
+        cancellation["capability_expectations"][0]["replay_required"] = False
+        self.assertNotEqual(baseline, self.digest(raw))
+
+    def test_expected_diff_digest_uses_full_actual_transition_identity(self):
+        first = {"corpus_id": "x", "promotion_capability_id": self.cap, "artifact_sha256": "a" * 64,
+                 "extractor_contract_version": "bls-cpi-core4-html-v1",
+                 "expected_semantics_sha256": "b" * 64, "actual_semantics_sha256": "c" * 64}
+        second = dict(first, actual_semantics_sha256="d" * 64)
+        api = self.api()
+        try:
+            digest = api.capability_expected_diff_digest([first, second], self.cap)
+        except ValueError as error:
+            self.fail(f"distinct full transition identities were collapsed: {error}")
+        self.assertEqual(digest, api.capability_expected_diff_digest([second, first], self.cap))
+        with self.assertRaises(ValueError):
+            api.capability_expected_diff_digest([first, dict(first, reason_code="different")], self.cap)
+
 
 if __name__ == "__main__":
     unittest.main()

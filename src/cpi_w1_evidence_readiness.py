@@ -31,7 +31,7 @@ def capability_replay_result_digest(results, capability_id):
 def capability_expected_diff_digest(approvals, capability_id):
     return _digest(_scoped(approvals, capability_id, (
         "corpus_id", "artifact_sha256", "extractor_contract_version",
-        "prior_expected_semantics_digest", "new_actual_semantics_digest")))
+        "expected_semantics_sha256", "actual_semantics_sha256")))
 
 
 def _applicable(entries, capability_id):
@@ -115,6 +115,11 @@ def capability_corpus_snapshot_digest(manifest, registry, policy):
                 dependencies.append({"id": entry["corpus_id"], "month": entry["reference_month"],
                     "hash": entry.get("expected_sha256"), "state": entry["materialization_status"],
                     "extractor": dependency_cap.extractor_contract_version,
+                    "release_subject_digest": dependency_cap.release_subject.release_subject_digest,
+                    "artifact_contract_kind": entry["artifact_contract_kind"],
+                    "source_contract_version": entry["source_contract_version"],
+                    "review": entry.get("review"), "exceptional_tags": sorted(entry.get("exceptional_tags", [])),
+                    "replay_required": expectation["replay_required"],
                     "expected": expectation["expected_semantics"], "locator": entry["official_locator"]})
     return _digest({"capability": capability.promotion_capability_id,
         "subject": capability.release_subject.release_subject_digest,
