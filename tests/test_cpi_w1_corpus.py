@@ -23,6 +23,15 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = ROOT / "tests/fixtures/cpi_w1/corpus.json"
 
 
+def write_diff_review(root, approval):
+    from src.cpi_w1_evidence_policy import canonical_evidence_bytes
+    keys = ("artifact_sha256", "promotion_capability_id", "release_subject_digest", "extractor_contract_version", "expected_semantics_sha256", "actual_semantics_sha256")
+    raw = canonical_evidence_bytes({"schema": "cpi-w1-review-artifact-v1", "purpose": "EXPECTED_DIFF", "bindings": {key: approval[key] for key in keys}})
+    approval["review_ref"] = "test-diff-review.json"
+    approval["review_digest"] = hashlib.sha256(raw).hexdigest()
+    (root / approval["review_ref"]).write_bytes(raw)
+
+
 class CpiW1CorpusTest(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = load_manifest(MANIFEST_PATH)
@@ -254,6 +263,10 @@ class CpiW1CorpusTest(unittest.TestCase):
             "reason_code": "INTENTIONAL_PARSER_CHANGE",
             "review_ref": "REVIEW-123",
         }
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        review_root = Path(directory.name)
+        write_diff_review(review_root, approval)
         self.assertTrue(
             _approved_semantic_change(
                 approvals=[approval],
@@ -263,6 +276,7 @@ class CpiW1CorpusTest(unittest.TestCase):
                 extractor_contract_version="extractor-v2",
                 expected=expected,
                 actual=actual,
+                repo_root=review_root,
             )
         )
         changed_artifact = dict(entry)
@@ -417,6 +431,7 @@ class CpiW1MaterializedV2ReplayTest(unittest.TestCase):
             "actual_semantics_sha256": _semantic_digest(after),
             "reason_code": "UNIT_TEST_ONLY", "review_ref": "UNIT_TEST_ONLY_NOT_OFFICIAL_APPROVAL",
         }
+        write_diff_review(self.root, approval)
         outcomes = {r["promotion_capability_id"]: r["semantic_status"] for r in self.results([approval])}
         self.assertEqual(outcomes, {"BLS_CPI_CORE4_HTML": "EXPECTED_CHANGED", "BLS_CPI_RELEASE_ENVELOPE_HTML": "SEMANTIC_UNCHANGED"})
         for field in ("corpus_id", "artifact_sha256", "promotion_capability_id", "release_subject_digest", "extractor_contract_version", "expected_semantics_sha256", "actual_semantics_sha256"):

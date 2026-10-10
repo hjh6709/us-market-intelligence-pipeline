@@ -130,6 +130,7 @@ def _approved_semantic_change(
     extractor_contract_version: str,
     expected: Any,
     actual: Any,
+    repo_root: Path | None = None,
 ) -> bool:
     corpus_id = corpus_id or entry.get("corpus_id") or entry.get("fixture_id")
     if not isinstance(corpus_id, str) or not corpus_id:
@@ -156,6 +157,17 @@ def _approved_semantic_change(
                 and review_ref
                 and review_ref == review_ref.strip()
             ):
+                from src.cpi_w1_review_artifact import load_review_artifact
+                try:
+                    review = load_review_artifact(
+                        repo_root or Path(__file__).resolve().parents[1],
+                        review_ref, approval.get("review_digest"),
+                    )
+                    if review.payload()["purpose"] != "EXPECTED_DIFF":
+                        continue
+                    review.require_bindings({key: value for key, value in required.items() if key != "corpus_id"})
+                except (ValueError, OSError):
+                    continue
                 matches.append(approval)
     if len(matches) > 1:
         raise CorpusValidationError(
@@ -609,6 +621,7 @@ def _replay_capability(
             extractor_contract_version=capability.extractor_contract_version,
             expected=expected_value,
             actual=actual,
+            repo_root=repo_root,
         )
         else "UNEXPECTED_CHANGED"
     )
