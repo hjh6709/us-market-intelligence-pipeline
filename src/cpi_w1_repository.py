@@ -9,6 +9,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from psycopg import sql
+from psycopg.errors import CheckViolation
 from psycopg.types.json import Jsonb
 
 from src.cpi_w1_authorization import (
@@ -778,15 +779,22 @@ class CpiW1Repository:
 
         with connection.transaction():
             if work_key_prefix is None:
-                row = connection.execute(
-                    CLAIM_SELECT_SQL,
-                    (execution_scope,),
-                ).fetchone()
+                query = CLAIM_SELECT_SQL
+                parameters = (execution_scope,)
             else:
-                row = connection.execute(
-                    CLAIM_SELECT_PREFIX_SQL,
-                    (execution_scope, work_key_prefix, work_key_prefix),
-                ).fetchone()
+                query = CLAIM_SELECT_PREFIX_SQL
+                parameters = (execution_scope, work_key_prefix, work_key_prefix)
+            if execution_scope == 'ECONOMIC_PROMOTE':
+                self.lock_cpi_domain_shared(connection)
+                # Discover without a work lock, then reselect under the exact
+                # release fence. Never wait for release while holding work.
+                candidate = connection.execute(query.replace(' FOR UPDATE OF w SKIP LOCKED',''),parameters).fetchone()
+                if candidate is None:
+                    return None
+                self.lock_cpi_release_subject(connection,candidate[9])
+                query = query.replace(' ORDER BY', ' AND w.release_subject_digest=%s\n ORDER BY')
+                parameters = (*parameters,candidate[9])
+            row = connection.execute(query,parameters).fetchone()
             if row is None:
                 return None
 
@@ -1037,6 +1045,14 @@ class CpiW1Repository:
             raise RepositoryInvariantError(
                 "promotion claim is missing exact authorization identity"
             )
+        try:
+            # Savepoint preserves the existing heartbeat pause path when DB
+            # revalidation rejects a grant; the surrounding transaction survives.
+            with connection.transaction():
+                connection.execute('SELECT assert_cpi_v2_authorization_binding(%s)',
+                    (claim.release_authorization_id,))
+        except CheckViolation as error:
+            raise RepositoryInvariantError(f'current V2 promotion authorization rejected: {error}') from error
         row = connection.execute(
             """
             SELECT a.release_subject_digest,

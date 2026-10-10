@@ -508,3 +508,43 @@ END;
 $$;
 CREATE TRIGGER aa_cpi_v2_attempt_admission BEFORE INSERT ON ingestion_attempts
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_attempt_admission();
+
+CREATE FUNCTION enforce_cpi_v2_canonical_authorization() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    lineage_attempt UUID := (to_jsonb(NEW)->>TG_ARGV[0])::UUID;
+    attempt ingestion_attempts;
+    work ingestion_work_items;
+BEGIN
+    SELECT * INTO attempt FROM ingestion_attempts WHERE attempt_id=lineage_attempt;
+    IF NOT FOUND OR attempt.execution_scope <> 'ECONOMIC_PROMOTE' THEN
+        RAISE EXCEPTION 'canonical write requires promotion attempt' USING ERRCODE='23514';
+    END IF;
+    SELECT * INTO work FROM ingestion_work_items WHERE work_item_id=attempt.work_item_id;
+    PERFORM lock_cpi_domain_shared();
+    PERFORM pg_advisory_xact_lock(hashtextextended('CPI_RELEASE_SUBJECT:' || work.release_subject_digest,0));
+    SELECT * INTO work FROM ingestion_work_items WHERE work_item_id=attempt.work_item_id FOR UPDATE;
+    SELECT * INTO attempt FROM ingestion_attempts WHERE attempt_id=lineage_attempt;
+    IF work.state IS DISTINCT FROM 'CLAIMED' OR attempt.state IS DISTINCT FROM 'RUNNING'
+       OR work.claim_generation IS DISTINCT FROM attempt.attempt_number
+       OR work.claim_token IS NULL OR work.lease_until IS NULL OR work.lease_until <= clock_timestamp() THEN
+        RAISE EXCEPTION 'canonical write requires current work fence' USING ERRCODE='23514';
+    END IF;
+    PERFORM assert_cpi_v2_authorization_binding(attempt.release_authorization_id);
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON core_event_occurrences
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('created_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_schedule_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosures
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('established_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosure_links
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosure_artifacts
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON disclosure_marker_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON official_observation_assertions
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');

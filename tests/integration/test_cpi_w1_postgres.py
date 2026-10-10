@@ -202,6 +202,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """
                 TRUNCATE cpi_domain_recovery_changes,
                          cpi_domain_recovery_snapshots,
+                         promotion_capability_evidence_policies,
+                         promotion_release_review_artifacts,
                          promotion_release_evidence_snapshots,
                          interpretation_subjects, source_artifacts,
                          ingestion_attempts, ingestion_work_items, ingestion_runs
@@ -1139,7 +1141,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (uuid4(), work_id),
             )
-            with self.assertRaises(psycopg.errors.NoDataFound):
+            with self.assertRaisesRegex(psycopg.errors.CheckViolation, 'current work fence'):
                 connection.execute(
                     """
                     INSERT INTO core_event_occurrences (
@@ -6362,6 +6364,108 @@ class CpiW1PostgresTest(unittest.TestCase):
         run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
         self.insert_work(connection, run_id, execution_scope="ECONOMIC_PROMOTE")
         return self.claim_work_item(repository, connection, execution_scope="ECONOMIC_PROMOTE")
+
+    def change_registered_test_policy(self, connection, claim):
+        registry=PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json')
+        row=connection.execute("""SELECT p.payload,r.registration_version FROM promotion_capability_evidence_policy_registrations r
+            JOIN promotion_capability_evidence_policies p USING (policy_digest)
+            WHERE r.release_subject_digest=%s ORDER BY r.registration_version DESC LIMIT 1""", (claim.release_subject_digest,)).fetchone()
+        payload=dict(row[0]); payload['required_exceptional_cases']=payload['required_exceptional_cases']+['TEST_POLICY_CHANGE']
+        policy=CapabilityEvidencePolicyV1.from_mapping(payload,registry)
+        repository=CpiW1Repository()
+        repository.store_capability_evidence_policy(connection,policy)
+        repository.register_capability_evidence_policy(connection,policy,row[1],'test:policy-change')
+
+    def test_changed_policy_rejects_final_authorization(self):
+        repository=CpiW1Repository()
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.assert_current_promotion_authorization(connection,claim)
+
+    def test_changed_policy_heartbeat_pauses_without_auto_resume(self):
+        repository=CpiW1Repository()
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.renew_claim(connection,claim)
+            self.assertEqual(connection.execute('SELECT state FROM ingestion_work_items WHERE work_item_id=%s',(claim.work_item_id,)).fetchone()[0],'PAUSED')
+            self.assertIsNone(repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR))
+
+    def test_changed_policy_direct_canonical_insert_is_rejected(self):
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute("INSERT INTO core_event_occurrences (event_occurrence_id,event_type,reference_month,created_by_attempt_id) VALUES (%s,'CPI','2026-08-01',%s)",(uuid4(),claim.attempt_id))
+            self.assertEqual(connection.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0],0)
+
+    def test_final_writer_serializes_policy_registration_then_rejects_next_write(self):
+        repository=CpiW1Repository()
+        with self.connection() as writer:
+            claim=self.make_authorization_overlap_claim(writer)
+            pid_queue=Queue()
+            def register():
+                with self.connection() as registrar:
+                    registrar.execute("SET lock_timeout='5s'")
+                    pid_queue.put(registrar.info.backend_pid)
+                    self.change_registered_test_policy(registrar,claim)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with writer.transaction():
+                    repository.lock_cpi_domain_shared(writer)
+                    repository.lock_cpi_release_subject(writer,claim.release_subject_digest)
+                    repository.assert_current_claim(writer,claim)
+                    repository.assert_current_promotion_authorization(writer,claim)
+                    future=pool.submit(register)
+                    registrar_pid=pid_queue.get(timeout=5)
+                    deadline=time.monotonic()+3
+                    blocked=False
+                    with self.connection() as observer:
+                        while time.monotonic()<deadline:
+                            blockers=observer.execute('SELECT pg_blocking_pids(%s)',(registrar_pid,)).fetchone()[0]
+                            if writer.info.backend_pid in blockers:
+                                blocked=True; break
+                            time.sleep(0.01)
+                    self.assertTrue(blocked,'prove registration wait through PostgreSQL lock graph')
+                    repository.assert_current_promotion_authorization(writer,claim)
+                future.result(timeout=5)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.assert_current_promotion_authorization(writer,claim)
+
+    def test_claim_waiting_for_release_does_not_hold_work_lock(self):
+        repository=CpiW1Repository()
+        with self.connection() as writer:
+            claim=self.make_authorization_overlap_claim(writer)
+            writer.execute("UPDATE ingestion_work_items SET lease_until=clock_timestamp()-interval '1 second' WHERE work_item_id=%s",(claim.work_item_id,))
+            pid_queue=Queue()
+            def reclaim():
+                with self.connection() as claimer:
+                    claimer.execute("SET lock_timeout='5s'")
+                    pid_queue.put(claimer.info.backend_pid)
+                    return repository.claim_work_item(claimer,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with writer.transaction():
+                    repository.lock_cpi_domain_shared(writer)
+                    repository.lock_cpi_release_subject(writer,claim.release_subject_digest)
+                    future=pool.submit(reclaim); claimer_pid=pid_queue.get(timeout=5)
+                    deadline=time.monotonic()+3; blocked=False
+                    with self.connection() as observer:
+                        while time.monotonic()<deadline:
+                            if writer.info.backend_pid in observer.execute('SELECT pg_blocking_pids(%s)',(claimer_pid,)).fetchone()[0]:
+                                blocked=True; break
+                            time.sleep(0.01)
+                    self.assertTrue(blocked)
+                    try:
+                        with writer.transaction():
+                            writer.execute('SELECT work_item_id FROM ingestion_work_items WHERE work_item_id=%s FOR UPDATE NOWAIT',(claim.work_item_id,))
+                    except psycopg.errors.LockNotAvailable:
+                        self.fail('claim acquired work before release: canonical writer deadlock risk')
+                self.assertIsNotNone(future.result(timeout=5))
 
     def test_second_approval_does_not_break_bound_heartbeat(self) -> None:
         repository = CpiW1Repository()

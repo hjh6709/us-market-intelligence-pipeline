@@ -280,6 +280,9 @@ class CpiV1TransitionPostgresTest(unittest.TestCase):
                 self.assertEqual(connection.execute('SELECT tested_workload_artifact_digest FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_id=%s',(evidence_id,)).fetchone(),(None,))
                 self.assertIsNone(repository.resolve_promotion_release_authorization(connection,
                     release_subject_digest=snapshot.release_subject_digest,executor=TEST_EXECUTOR))
+                from src.cpi_w1_repository import RepositoryInvariantError
+                with self.assertRaises(RepositoryInvariantError):
+                    repository.assert_current_promotion_authorization(connection,claim)
                 with self.assertRaises(psycopg.Error) as admission_error:
                     with connection.transaction():
                         connection.execute("""INSERT INTO ingestion_attempts
@@ -301,6 +304,10 @@ class CpiV1TransitionPostgresTest(unittest.TestCase):
                                     (uuid4(),material_id,snapshot.release_subject_digest))
                 repository.apply_promotion_release_control(connection,authorization_id=authorization,expected_control_version=1,
                     state='REVOKED',reason_code='LEGACY_RETIRED',actor_subject='test',review_ref='revocation',review_digest='7'*64)
+                with self.assertRaises(RepositoryInvariantError):
+                    repository.renew_claim(connection,claim)
+                self.assertEqual(connection.execute('SELECT state FROM ingestion_work_items WHERE work_item_id=%s',(claim.work_item_id,)).fetchone()[0],'PAUSED')
+                self.assertIsNone(repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR))
         finally:
             with psycopg.connect(base,autocommit=True) as admin:
                 admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))
