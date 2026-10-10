@@ -1,7 +1,7 @@
 -- R1 additive migration. No policy, gate, review or authorization seed rows.
 -- Tasks 6-8 are a connected unit: intermediate revisions are not deployable.
 -- Inspect JSON (not JSONB) first so duplicate keys cannot disappear.
-CREATE FUNCTION cpi_evidence_canonical_json(value JSON) RETURNS TEXT
+CREATE OR REPLACE FUNCTION cpi_evidence_canonical_json(value JSON) RETURNS TEXT
 LANGUAGE plpgsql IMMUTABLE STRICT AS $$
 DECLARE
     kind TEXT := json_typeof(value);
@@ -37,7 +37,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION validate_cpi_evidence_canonical_bytes(raw_bytes BYTEA) RETURNS JSONB
+CREATE OR REPLACE FUNCTION validate_cpi_evidence_canonical_bytes(raw_bytes BYTEA) RETURNS JSONB
 LANGUAGE plpgsql IMMUTABLE STRICT AS $$
 DECLARE
     raw_json JSON := convert_from(raw_bytes, 'UTF8')::JSON;
@@ -49,7 +49,7 @@ BEGIN
 END;
 $$;
 
-CREATE TABLE promotion_capability_evidence_policies (
+CREATE TABLE IF NOT EXISTS promotion_capability_evidence_policies (
     policy_digest TEXT PRIMARY KEY CHECK (policy_digest ~ '^[0-9a-f]{64}$'),
     release_subject_digest TEXT NOT NULL CHECK (release_subject_digest ~ '^[0-9a-f]{64}$'),
     promotion_capability_id TEXT NOT NULL CHECK (promotion_capability_id <> ''),
@@ -78,7 +78,7 @@ CREATE TABLE promotion_capability_evidence_policies (
         'zero_official_allowed','complete','incomplete_reasons'] = '{}'::JSONB)
 );
 
-CREATE TABLE promotion_capability_evidence_policy_registrations (
+CREATE TABLE IF NOT EXISTS promotion_capability_evidence_policy_registrations (
     registration_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     release_subject_digest TEXT NOT NULL,
     promotion_capability_id TEXT NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE promotion_capability_evidence_policy_registrations (
             (policy_digest, release_subject_digest, promotion_capability_id)
 );
 
-CREATE TABLE promotion_release_review_artifacts (
+CREATE TABLE IF NOT EXISTS promotion_release_review_artifacts (
     review_ref TEXT NOT NULL,
     review_digest TEXT NOT NULL CHECK (review_digest ~ '^[0-9a-f]{64}$'),
     raw_bytes BYTEA NOT NULL,
@@ -111,7 +111,7 @@ CREATE TABLE promotion_release_review_artifacts (
            AND payload - ARRAY['schema','purpose','bindings'] = '{}'::JSONB)
 );
 
-CREATE FUNCTION enforce_cpi_evidence_policy_payload() RETURNS TRIGGER
+CREATE OR REPLACE FUNCTION enforce_cpi_evidence_policy_payload() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
     item TEXT;
@@ -177,10 +177,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS cpi_evidence_policy_payload_guard ON promotion_capability_evidence_policies;
 CREATE TRIGGER cpi_evidence_policy_payload_guard BEFORE INSERT ON promotion_capability_evidence_policies
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_evidence_policy_payload();
 
-CREATE FUNCTION enforce_cpi_review_artifact_payload() RETURNS TRIGGER
+CREATE OR REPLACE FUNCTION enforce_cpi_review_artifact_payload() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
     required_keys TEXT[];
@@ -217,10 +218,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS cpi_review_artifact_payload_guard ON promotion_release_review_artifacts;
 CREATE TRIGGER cpi_review_artifact_payload_guard BEFORE INSERT ON promotion_release_review_artifacts
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_review_artifact_payload();
 
-CREATE FUNCTION enforce_cpi_capability_policy_registration() RETURNS TRIGGER
+CREATE OR REPLACE FUNCTION enforce_cpi_capability_policy_registration() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
     current_version BIGINT;
@@ -238,11 +240,12 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS promotion_capability_policy_registration_guard ON promotion_capability_evidence_policy_registrations;
 CREATE TRIGGER promotion_capability_policy_registration_guard
     BEFORE INSERT ON promotion_capability_evidence_policy_registrations
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_capability_policy_registration();
 
-CREATE FUNCTION register_cpi_capability_evidence_policy(
+CREATE OR REPLACE FUNCTION register_cpi_capability_evidence_policy(
     subject TEXT, capability TEXT, digest TEXT, expected_version BIGINT, registration_actor TEXT
 ) RETURNS UUID LANGUAGE plpgsql AS $$
 DECLARE
@@ -257,12 +260,15 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS promotion_capability_evidence_policies_immutable ON promotion_capability_evidence_policies;
 CREATE TRIGGER promotion_capability_evidence_policies_immutable
     BEFORE UPDATE OR DELETE ON promotion_capability_evidence_policies
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+DROP TRIGGER IF EXISTS promotion_capability_evidence_policy_registrations_immutable ON promotion_capability_evidence_policy_registrations;
 CREATE TRIGGER promotion_capability_evidence_policy_registrations_immutable
     BEFORE UPDATE OR DELETE ON promotion_capability_evidence_policy_registrations
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
+DROP TRIGGER IF EXISTS promotion_release_review_artifacts_immutable ON promotion_release_review_artifacts;
 CREATE TRIGGER promotion_release_review_artifacts_immutable
     BEFORE UPDATE OR DELETE ON promotion_release_review_artifacts
     FOR EACH ROW EXECUTE FUNCTION reject_cpi_w1_immutable_evidence_mutation();
@@ -283,6 +289,10 @@ BEGIN
 END;
 $$;
 
+DO $v2_evidence_schema$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='promotion_release_evidence_snapshots'::regclass
+               AND attname='canonical_payload' AND NOT attisdropped) THEN
 ALTER TABLE promotion_release_evidence_snapshots
     ALTER COLUMN corpus_snapshot_digest DROP NOT NULL,
     ALTER COLUMN tested_source_revision DROP NOT NULL,
@@ -314,8 +324,11 @@ ALTER TABLE promotion_release_evidence_snapshots
         (capability_evidence_policy_digest, release_subject_digest, promotion_capability_id)
         REFERENCES promotion_capability_evidence_policies
             (policy_digest, release_subject_digest, promotion_capability_id);
+END IF;
+END;
+$v2_evidence_schema$;
 
-CREATE FUNCTION enforce_cpi_v2_evidence_payload() RETURNS TRIGGER
+CREATE OR REPLACE FUNCTION enforce_cpi_v2_evidence_payload() RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
 DECLARE
     expected JSONB;
@@ -342,6 +355,7 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS cpi_v2_evidence_payload_guard ON promotion_release_evidence_snapshots;
 CREATE TRIGGER cpi_v2_evidence_payload_guard BEFORE INSERT ON promotion_release_evidence_snapshots
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_evidence_payload();
 
@@ -358,6 +372,10 @@ BEGIN
     END LOOP;
 END;
 $$;
+DO $v2_material_schema$
+BEGIN
+IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='promotion_release_authorization_materials'::regclass
+               AND attname='canonical_payload' AND NOT attisdropped) THEN
 ALTER TABLE promotion_release_authorization_materials
     ADD COLUMN schema_version TEXT NOT NULL DEFAULT 'cpi-w1-promotion-authorization-material-v1',
     ADD COLUMN canonical_payload BYTEA,
@@ -368,8 +386,11 @@ ALTER TABLE promotion_release_authorization_materials
             AND authorization_policy_version='cpi-w1-authorization-v2' AND canonical_payload IS NOT NULL)),
     ADD CONSTRAINT cpi_v2_review_exact_fk FOREIGN KEY (review_ref,review_digest)
         REFERENCES promotion_release_review_artifacts(review_ref,review_digest) NOT VALID;
+END IF;
+END;
+$v2_material_schema$;
 
-CREATE FUNCTION assert_cpi_v2_material_binding(m promotion_release_authorization_materials)
+CREATE OR REPLACE FUNCTION assert_cpi_v2_material_binding(m promotion_release_authorization_materials)
 RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE
     e promotion_release_evidence_snapshots;
@@ -425,16 +446,17 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION enforce_cpi_v2_material_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION enforce_cpi_v2_material_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM assert_cpi_v2_material_binding(NEW);
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS cpi_v2_material_binding_guard ON promotion_release_authorization_materials;
 CREATE TRIGGER cpi_v2_material_binding_guard BEFORE INSERT ON promotion_release_authorization_materials
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_material_binding();
 
-CREATE FUNCTION enforce_cpi_v2_grant_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION enforce_cpi_v2_grant_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE m promotion_release_authorization_materials;
 BEGIN
     SELECT * INTO m FROM promotion_release_authorization_materials WHERE authorization_material_id=NEW.authorization_material_id;
@@ -445,10 +467,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS cpi_v2_grant_binding_guard ON promotion_release_authorizations;
 CREATE TRIGGER cpi_v2_grant_binding_guard BEFORE INSERT ON promotion_release_authorizations
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_grant_binding();
 
-CREATE FUNCTION assert_cpi_v2_authorization_binding(p_authorization_id UUID) RETURNS VOID
+CREATE OR REPLACE FUNCTION assert_cpi_v2_authorization_binding(p_authorization_id UUID) RETURNS VOID
 LANGUAGE plpgsql AS $$
 DECLARE m promotion_release_authorization_materials; effective_state TEXT;
 BEGIN
@@ -465,7 +488,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION cpi_v2_authorization_is_current(p_authorization_id UUID) RETURNS BOOLEAN
+CREATE OR REPLACE FUNCTION cpi_v2_authorization_is_current(p_authorization_id UUID) RETURNS BOOLEAN
 LANGUAGE plpgsql AS $$
 BEGIN
     PERFORM assert_cpi_v2_authorization_binding(p_authorization_id);
@@ -498,7 +521,7 @@ END;
 $$;
 
 -- Preserve original subject/control/executor/generation checks; add V2 proof.
-CREATE FUNCTION enforce_cpi_v2_attempt_admission() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION enforce_cpi_v2_attempt_admission() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW.execution_scope='ECONOMIC_PROMOTE' THEN
         PERFORM assert_cpi_v2_authorization_binding(NEW.release_authorization_id);
@@ -506,10 +529,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+DROP TRIGGER IF EXISTS aa_cpi_v2_attempt_admission ON ingestion_attempts;
 CREATE TRIGGER aa_cpi_v2_attempt_admission BEFORE INSERT ON ingestion_attempts
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_attempt_admission();
 
-CREATE FUNCTION enforce_cpi_v2_canonical_authorization() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION enforce_cpi_v2_canonical_authorization() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
     lineage_attempt UUID := (to_jsonb(NEW)->>TG_ARGV[0])::UUID;
     attempt ingestion_attempts;
@@ -534,17 +558,24 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON core_event_occurrences;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON core_event_occurrences
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('created_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON event_schedule_assertions;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_schedule_assertions
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON event_disclosures;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosures
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('established_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON event_disclosure_links;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosure_links
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON event_disclosure_artifacts;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON event_disclosure_artifacts
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON disclosure_marker_assertions;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON disclosure_marker_assertions
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');
+DROP TRIGGER IF EXISTS aa_cpi_v2_canonical_guard ON official_observation_assertions;
 CREATE TRIGGER aa_cpi_v2_canonical_guard BEFORE INSERT ON official_observation_assertions
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_canonical_authorization('accepted_by_attempt_id');

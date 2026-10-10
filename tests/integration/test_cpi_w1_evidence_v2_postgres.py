@@ -70,6 +70,19 @@ class CpiEvidenceV2PostgresTest(unittest.TestCase):
             self.assertIsNotNone(self.connection.execute("SELECT to_regclass(%s)", (table,)).fetchone()[0])
         self.assertEqual(self.initial_registrations, 0)
 
+    def test_migration014_reapplication_preserves_schema_and_policy_history(self):
+        self.require_v2()
+        from src.cpi_w1_migration_verification import _schema_snapshot
+        before=_schema_snapshot(self.connection)
+        count=self.connection.execute('SELECT count(*) FROM promotion_capability_evidence_policy_registrations').fetchone()[0]
+        try:
+            with self.connection.transaction():
+                self.connection.execute(Path('db/migrations/014_cpi_w1_release_evidence_v2.sql').read_text())
+        except psycopg.Error as error:
+            self.fail(f'existing migration runner reapplies SQL: {error.sqlstate}')
+        self.assertEqual(_schema_snapshot(self.connection),before)
+        self.assertEqual(self.connection.execute('SELECT count(*) FROM promotion_capability_evidence_policy_registrations').fetchone()[0],count)
+
     def store_policy(self, policy):
         from psycopg.types.json import Jsonb
         self.connection.execute("""INSERT INTO promotion_capability_evidence_policies

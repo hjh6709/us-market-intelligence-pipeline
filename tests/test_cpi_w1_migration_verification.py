@@ -54,6 +54,14 @@ class CpiW1MigrationManifestTest(unittest.TestCase):
     "set RUN_POSTGRES_INTEGRATION=1 to test isolated migration databases",
 )
 class CpiW1MigrationEquivalencePostgresTest(unittest.TestCase):
+    def test_foundation_upgrade_preserves_historical_v1_and_matches_fresh_014(self):
+        from src import cpi_w1_migration_verification as verification
+        self.assertTrue(hasattr(verification,'compare_foundation_upgrade'))
+        result=verification.compare_foundation_upgrade(os.environ.get('DATABASE_URL','postgresql://market:market@localhost:55435/market'))
+        self.assertEqual(result.differences,())
+        self.assertTrue(result.historical_fixture_preserved)
+        self.assertTrue(result.legacy_fixture_preserved)
+        self.assertEqual(result.migration_names[-1],'014_cpi_w1_release_evidence_v2.sql')
     def test_fresh_and_legacy_upgrade_have_equivalent_target_schema(self) -> None:
         result = compare_fresh_and_upgrade(
             os.environ.get(
