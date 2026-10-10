@@ -8,6 +8,9 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from psycopg import sql
+from psycopg.types.json import Jsonb
+
 from src.cpi_w1_authorization import (
     ExecutorProvenanceV1,
     PromotionAuthorizationMaterialV1,
@@ -139,6 +142,57 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    def store_capability_evidence_policy(self, connection, policy) -> str:
+        payload = policy.payload()
+        connection.execute("""INSERT INTO promotion_capability_evidence_policies
+            (policy_digest,release_subject_digest,promotion_capability_id,schema_version,
+             policy_version,complete,canonical_payload,payload) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (policy_digest) DO NOTHING""", (policy.policy_digest,
+            policy.release_subject_digest, policy.promotion_capability_id, payload['schema'],
+            payload['policy_version'], policy.complete, policy.canonical_bytes, Jsonb(payload)))
+        row = connection.execute("SELECT canonical_payload FROM promotion_capability_evidence_policies WHERE policy_digest=%s",
+            (policy.policy_digest,)).fetchone()
+        if row is None or bytes(row[0]) != policy.canonical_bytes:
+            raise RepositoryInvariantError('policy digest changed immutable bytes')
+        return policy.policy_digest
+
+    def register_capability_evidence_policy(self, connection, policy, expected_version: int, actor: str) -> UUID:
+        # Registration is explicit: storing or reading a policy never registers it.
+        return connection.execute("SELECT register_cpi_capability_evidence_policy(%s,%s,%s,%s,%s)",
+            (policy.release_subject_digest, policy.promotion_capability_id,
+             policy.policy_digest, expected_version, actor)).fetchone()[0]
+
+    def store_review_artifact(self, connection, review) -> tuple[str, str]:
+        payload = review.payload()
+        connection.execute("""INSERT INTO promotion_release_review_artifacts
+            (review_ref,review_digest,raw_bytes,payload,schema_version,purpose,bindings)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (review_ref,review_digest) DO NOTHING""",
+            (review.review_ref, review.review_digest, review.raw_bytes, Jsonb(payload),
+             payload['schema'], payload['purpose'], Jsonb(payload['bindings'])))
+        row = connection.execute("SELECT raw_bytes FROM promotion_release_review_artifacts WHERE review_ref=%s AND review_digest=%s",
+            (review.review_ref, review.review_digest)).fetchone()
+        if row is None or bytes(row[0]) != review.raw_bytes:
+            raise RepositoryInvariantError('review reference changed immutable bytes')
+        return review.review_ref, review.review_digest
+
+    def create_promotion_evidence_snapshot_v2(self, connection, snapshot, created_by_subject: str) -> UUID:
+        from src.cpi_w1_evidence_snapshot_v2 import PromotionEvidenceSnapshotV2
+        if not isinstance(snapshot, PromotionEvidenceSnapshotV2):
+            raise ValueError('explicit V2 snapshot required')
+        if not created_by_subject or created_by_subject != created_by_subject.strip():
+            raise ValueError('created_by_subject must be canonical and non-empty')
+        values = snapshot.payload()
+        values['schema_version'] = values.pop('schema')
+        values.update(evidence_snapshot_id=uuid4(), evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
+                      canonical_payload=snapshot.canonical_json.encode('utf-8'), created_by_subject=created_by_subject)
+        connection.execute(sql.SQL("INSERT INTO promotion_release_evidence_snapshots ({}) VALUES ({}) ON CONFLICT (evidence_snapshot_digest) DO NOTHING").format(
+            sql.SQL(',').join(map(sql.Identifier, values)), sql.SQL(',').join(sql.Placeholder() for _ in values)), tuple(values.values()))
+        row = connection.execute("SELECT evidence_snapshot_id,canonical_payload FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_digest=%s",
+            (snapshot.evidence_snapshot_digest,)).fetchone()
+        if row is None or bytes(row[1]) != values['canonical_payload']:
+            raise RepositoryInvariantError('V2 snapshot digest changed immutable bytes')
+        return row[0]
+
     def create_promotion_evidence_snapshot(
         self,
         connection: Any,

@@ -71,6 +71,20 @@ def verify_immutable_baseline(
     return tuple(failures)
 
 
+def load_foundation_hash_manifest(
+    path: Path = MIGRATION_DIR / 'immutable-001-013.sha256',
+) -> tuple[MigrationHash, ...]:
+    entries = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        match = re.fullmatch(r'([0-9a-f]{64})  (db/migrations/(?:00[1-9]|01[0-3])_[^/]+\.sql)', line)
+        if match is None:
+            raise ValueError('invalid foundation manifest line')
+        entries.append(MigrationHash(match[1], Path(match[2])))
+    if [int(entry.path.name[:3]) for entry in entries] != list(range(1, 14)):
+        raise ValueError('foundation manifest must contain exactly ordered 001-013')
+    return tuple(entries)
+
+
 def migration_paths() -> tuple[Path, ...]:
     return tuple(sorted(MIGRATION_DIR.glob("[0-9][0-9][0-9]_*.sql")))
 
