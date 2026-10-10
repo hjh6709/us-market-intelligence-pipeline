@@ -709,6 +709,19 @@ def build_report(
         result.semantic_status in _PASS_SEMANTIC
         for result in conformance_results
     )
+    from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry
+    from src.cpi_w1_evidence_readiness import evaluate_capability_readiness
+
+    policy_path = repo_root / "config/cpi_w1_capability_evidence_policies.json"
+    policies = (CapabilityEvidencePolicyRegistry.from_json(policy_path, registry)
+                if policy_path.is_file() else CapabilityEvidencePolicyRegistry(()))
+    readiness = evaluate_capability_readiness(
+        registry, policies, manifest,
+        [result.as_dict() for result in results],
+        [result.as_dict() for result in conformance_results],
+        expected_diff_approvals or [],
+    )
+    official_corpus_ready = all(row.status == "READY" for row in readiness)
     evidence_requirements_satisfied = official_corpus_ready and conformance_ready
     return {
         "schema_version": _SCHEMA_VERSION,
@@ -716,6 +729,7 @@ def build_report(
         "official_corpus_ready": official_corpus_ready,
         "conformance_ready": conformance_ready,
         "evidence_requirements_satisfied": evidence_requirements_satisfied,
+        "capability_readiness": [row.as_dict() for row in readiness],
         "counts": {
             "entries": len(manifest["entries"]),
             "capability_results": len(results),
