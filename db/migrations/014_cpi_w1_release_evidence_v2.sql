@@ -344,3 +344,167 @@ END;
 $$;
 CREATE TRIGGER cpi_v2_evidence_payload_guard BEFORE INSERT ON promotion_release_evidence_snapshots
     FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_evidence_payload();
+
+DO $$
+DECLARE constraint_name TEXT;
+BEGIN
+    FOR constraint_name IN
+        SELECT c.conname FROM pg_constraint c
+        JOIN pg_attribute a ON a.attrelid=c.conrelid AND c.conkey=ARRAY[a.attnum]::SMALLINT[]
+        WHERE c.conrelid='promotion_release_authorization_materials'::regclass
+          AND c.contype='c' AND a.attname='authorization_policy_version'
+    LOOP
+        EXECUTE format('ALTER TABLE promotion_release_authorization_materials DROP CONSTRAINT %I', constraint_name);
+    END LOOP;
+END;
+$$;
+ALTER TABLE promotion_release_authorization_materials
+    ADD COLUMN schema_version TEXT NOT NULL DEFAULT 'cpi-w1-promotion-authorization-material-v1',
+    ADD COLUMN canonical_payload BYTEA,
+    ADD CONSTRAINT cpi_authorization_schema_boundary CHECK (
+        (schema_version='cpi-w1-promotion-authorization-material-v1'
+         AND authorization_policy_version='cpi-w1-authorization-v1' AND canonical_payload IS NULL)
+        OR (schema_version='cpi-w1-promotion-authorization-material-v2'
+            AND authorization_policy_version='cpi-w1-authorization-v2' AND canonical_payload IS NOT NULL)),
+    ADD CONSTRAINT cpi_v2_review_exact_fk FOREIGN KEY (review_ref,review_digest)
+        REFERENCES promotion_release_review_artifacts(review_ref,review_digest) NOT VALID;
+
+CREATE FUNCTION assert_cpi_v2_material_binding(m promotion_release_authorization_materials)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    e promotion_release_evidence_snapshots;
+    p promotion_capability_evidence_policies;
+    r promotion_release_review_artifacts;
+    effective_digest TEXT;
+    expected_review JSONB;
+    expected_material JSONB;
+BEGIN
+    PERFORM lock_cpi_domain_shared();
+    PERFORM pg_advisory_xact_lock(hashtextextended('CPI_RELEASE_SUBJECT:' || m.release_subject_digest,0));
+    IF m.schema_version IS DISTINCT FROM 'cpi-w1-promotion-authorization-material-v2'
+       OR m.authorization_policy_version IS DISTINCT FROM 'cpi-w1-authorization-v2' THEN
+        RAISE EXCEPTION 'LEGACY_AUTHORIZATION_RETIRED' USING ERRCODE='23514';
+    END IF;
+    SELECT * INTO e FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_id=m.evidence_snapshot_id;
+    IF NOT FOUND OR e.schema_version <> 'cpi-w1-promotion-evidence-snapshot-v2'
+       OR e.release_subject_digest IS DISTINCT FROM m.release_subject_digest
+       OR e.evidence_snapshot_digest IS DISTINCT FROM m.evidence_snapshot_digest
+       OR e.tested_workload_artifact_digest IS NULL OR e.tested_executor_source_revision IS NULL
+       OR e.tested_workload_artifact_digest IS DISTINCT FROM m.executor_workload_artifact_digest
+       OR e.tested_executor_source_revision IS DISTINCT FROM m.executor_source_revision
+       OR e.tested_job_contract_version IS DISTINCT FROM m.executor_job_contract_version THEN
+        RAISE EXCEPTION 'V2 evidence/exact tested build mismatch' USING ERRCODE='23514';
+    END IF;
+    SELECT * INTO p FROM promotion_capability_evidence_policies WHERE policy_digest=e.capability_evidence_policy_digest;
+    SELECT policy_digest INTO effective_digest FROM promotion_capability_evidence_policy_registrations
+        WHERE release_subject_digest=m.release_subject_digest ORDER BY registration_version DESC LIMIT 1;
+    IF p.complete IS DISTINCT FROM TRUE OR p.release_subject_digest IS DISTINCT FROM m.release_subject_digest
+       OR p.promotion_capability_id IS DISTINCT FROM e.promotion_capability_id
+       OR effective_digest IS DISTINCT FROM e.capability_evidence_policy_digest THEN
+        RAISE EXCEPTION 'V2 effective policy missing, stale or incomplete' USING ERRCODE='23514';
+    END IF;
+    SELECT * INTO r FROM promotion_release_review_artifacts WHERE review_ref=m.review_ref AND review_digest=m.review_digest;
+    expected_review := jsonb_build_object('release_subject_digest',e.release_subject_digest,
+        'promotion_capability_id',e.promotion_capability_id,'capability_evidence_policy_digest',e.capability_evidence_policy_digest,
+        'evidence_snapshot_digest',e.evidence_snapshot_digest,'source_contract_digest',e.source_contract_digest,
+        'tested_source_content_digest',e.tested_source_content_digest,'tested_executor_source_revision',e.tested_executor_source_revision,
+        'tested_workload_artifact_digest',e.tested_workload_artifact_digest,'tested_job_contract_version',e.tested_job_contract_version,
+        'gate_policy_version',m.gate_policy_version);
+    IF r.purpose IS DISTINCT FROM 'PROMOTION_AUTHORIZATION' OR r.bindings IS DISTINCT FROM expected_review THEN
+        RAISE EXCEPTION 'V2 verified review semantic binding mismatch' USING ERRCODE='23514';
+    END IF;
+    expected_material := jsonb_build_object('schema',m.schema_version,'authorization_policy_version',m.authorization_policy_version,
+        'release_subject_digest',m.release_subject_digest,'evidence_snapshot_digest',m.evidence_snapshot_digest,
+        'gate_decision_digest',m.gate_decision_digest,'gate_policy_version',m.gate_policy_version,
+        'executor_source_revision',m.executor_source_revision,'executor_workload_artifact_digest',m.executor_workload_artifact_digest,
+        'executor_job_contract_version',m.executor_job_contract_version,'review_ref',m.review_ref,'review_digest',m.review_digest);
+    IF validate_cpi_evidence_canonical_bytes(m.canonical_payload) IS DISTINCT FROM expected_material
+       OR encode(sha256(m.canonical_payload),'hex') IS DISTINCT FROM m.authorization_material_digest THEN
+        RAISE EXCEPTION 'V2 material byte/column/hash mismatch' USING ERRCODE='23514';
+    END IF;
+END;
+$$;
+
+CREATE FUNCTION enforce_cpi_v2_material_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM assert_cpi_v2_material_binding(NEW);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER cpi_v2_material_binding_guard BEFORE INSERT ON promotion_release_authorization_materials
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_material_binding();
+
+CREATE FUNCTION enforce_cpi_v2_grant_binding() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE m promotion_release_authorization_materials;
+BEGIN
+    SELECT * INTO m FROM promotion_release_authorization_materials WHERE authorization_material_id=NEW.authorization_material_id;
+    IF NOT FOUND OR m.release_subject_digest IS DISTINCT FROM NEW.release_subject_digest THEN
+        RAISE EXCEPTION 'grant requires exact material subject' USING ERRCODE='23514';
+    END IF;
+    PERFORM assert_cpi_v2_material_binding(m);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER cpi_v2_grant_binding_guard BEFORE INSERT ON promotion_release_authorizations
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_grant_binding();
+
+CREATE FUNCTION assert_cpi_v2_authorization_binding(p_authorization_id UUID) RETURNS VOID
+LANGUAGE plpgsql AS $$
+DECLARE m promotion_release_authorization_materials; effective_state TEXT;
+BEGIN
+    SELECT material.* INTO m FROM promotion_release_authorizations a
+        JOIN promotion_release_authorization_materials material USING (authorization_material_id)
+        WHERE a.authorization_id=p_authorization_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'missing authorization' USING ERRCODE='23514'; END IF;
+    PERFORM assert_cpi_v2_material_binding(m);
+    SELECT state INTO effective_state FROM promotion_release_control_decisions
+        WHERE authorization_id=p_authorization_id ORDER BY control_version DESC LIMIT 1;
+    IF effective_state IS DISTINCT FROM 'APPROVED' THEN
+        RAISE EXCEPTION 'authorization is not currently approved' USING ERRCODE='23514';
+    END IF;
+END;
+$$;
+
+CREATE FUNCTION cpi_v2_authorization_is_current(p_authorization_id UUID) RETURNS BOOLEAN
+LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM assert_cpi_v2_authorization_binding(p_authorization_id);
+    RETURN TRUE;
+EXCEPTION WHEN check_violation THEN RETURN FALSE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION resolve_promotion_release_authorization(
+    p_release_subject_digest TEXT, p_executor_source_revision TEXT,
+    p_executor_workload_artifact_digest TEXT, p_executor_job_contract_version TEXT
+) RETURNS UUID LANGUAGE plpgsql AS $$
+DECLARE matches UUID[];
+BEGIN
+    PERFORM lock_cpi_domain_shared();
+    PERFORM pg_advisory_xact_lock(hashtextextended('CPI_RELEASE_SUBJECT:' || p_release_subject_digest,0));
+    SELECT array_agg(a.authorization_id ORDER BY a.authorization_id) INTO matches
+      FROM promotion_release_authorizations a
+      JOIN promotion_release_authorization_materials m USING (authorization_material_id)
+     WHERE a.release_subject_digest=p_release_subject_digest
+       AND m.authorization_policy_version='cpi-w1-authorization-v2'
+       AND m.executor_source_revision=p_executor_source_revision
+       AND m.executor_workload_artifact_digest=p_executor_workload_artifact_digest
+       AND m.executor_job_contract_version=p_executor_job_contract_version
+       AND cpi_v2_authorization_is_current(a.authorization_id);
+    IF coalesce(cardinality(matches),0)=0 THEN RETURN NULL; END IF;
+    IF cardinality(matches)>1 THEN RAISE EXCEPTION 'ambiguous active promotion authorization' USING ERRCODE='23514'; END IF;
+    RETURN matches[1];
+END;
+$$;
+
+-- Preserve original subject/control/executor/generation checks; add V2 proof.
+CREATE FUNCTION enforce_cpi_v2_attempt_admission() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.execution_scope='ECONOMIC_PROMOTE' THEN
+        PERFORM assert_cpi_v2_authorization_binding(NEW.release_authorization_id);
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER aa_cpi_v2_attempt_admission BEFORE INSERT ON ingestion_attempts
+    FOR EACH ROW EXECUTE FUNCTION enforce_cpi_v2_attempt_admission();

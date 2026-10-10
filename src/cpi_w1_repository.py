@@ -267,67 +267,28 @@ class CpiW1Repository:
         material: PromotionAuthorizationMaterialV1,
         created_by_subject: str,
     ) -> UUID:
+        raise ValueError('LEGACY_AUTHORIZATION_RETIRED')
+
+    def create_promotion_authorization_material_v2(
+        self, connection, *, material, evidence_snapshot_id: UUID, created_by_subject: str,
+    ) -> UUID:
+        from src.cpi_w1_authorization import PromotionAuthorizationMaterialV2
+        if not isinstance(material, PromotionAuthorizationMaterialV2):
+            raise ValueError('explicit V2 authorization material required')
         if not created_by_subject or created_by_subject != created_by_subject.strip():
-            raise ValueError("created_by_subject must be canonical and non-empty")
-        candidate_id = uuid4()
-        expected = (
-            material.release_subject_digest,
-            evidence_snapshot_id,
-            material.evidence_snapshot_digest,
-            material.gate_decision_digest,
-            material.gate_policy_version,
-            material.authorization_policy_version,
-            material.executor_source_revision,
-            material.executor_workload_artifact_digest,
-            material.executor_job_contract_version,
-            material.review_ref,
-            material.review_digest,
-        )
-        with connection.transaction():
-            connection.execute(
-                """
-                INSERT INTO promotion_release_authorization_materials (
-                    authorization_material_id, release_subject_digest,
-                    evidence_snapshot_id, evidence_snapshot_digest,
-                    gate_decision_digest, gate_policy_version,
-                    authorization_policy_version, executor_source_revision,
-                    executor_workload_artifact_digest,
-                    executor_job_contract_version, review_ref, review_digest,
-                    authorization_material_digest, created_by_subject
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (authorization_material_digest) DO NOTHING
-                """,
-                (
-                    candidate_id,
-                    *expected,
-                    material.authorization_material_digest,
-                    created_by_subject,
-                ),
-            )
-            row = connection.execute(
-                """
-                SELECT authorization_material_id, release_subject_digest,
-                       evidence_snapshot_id, evidence_snapshot_digest,
-                       gate_decision_digest, gate_policy_version,
-                       authorization_policy_version, executor_source_revision,
-                       executor_workload_artifact_digest,
-                       executor_job_contract_version, review_ref, review_digest
-                  FROM promotion_release_authorization_materials
-                 WHERE authorization_material_digest=%s
-                """,
-                (material.authorization_material_digest,),
-            ).fetchone()
-            if row is None:
-                raise RepositoryInvariantError(
-                    "authorization material did not converge"
-                )
-            if tuple(row[1:]) != expected:
-                raise RepositoryInvariantError(
-                    "same authorization material digest changed immutable material"
-                )
-            return row[0]
+            raise ValueError('created_by_subject must be canonical and non-empty')
+        values = material.payload()
+        values['schema_version'] = values.pop('schema')
+        values.update(authorization_material_id=uuid4(), evidence_snapshot_id=evidence_snapshot_id,
+            authorization_material_digest=material.authorization_material_digest,
+            canonical_payload=material.canonical_json.encode('utf-8'), created_by_subject=created_by_subject)
+        connection.execute(sql.SQL("INSERT INTO promotion_release_authorization_materials ({}) VALUES ({}) ON CONFLICT (authorization_material_digest) DO NOTHING").format(
+            sql.SQL(',').join(map(sql.Identifier, values)), sql.SQL(',').join(sql.Placeholder() for _ in values)), tuple(values.values()))
+        row=connection.execute("SELECT authorization_material_id,canonical_payload,evidence_snapshot_id FROM promotion_release_authorization_materials WHERE authorization_material_digest=%s",
+            (material.authorization_material_digest,)).fetchone()
+        if row is None or bytes(row[1]) != values['canonical_payload'] or row[2] != evidence_snapshot_id:
+            raise RepositoryInvariantError('V2 authorization material changed immutable binding')
+        return row[0]
 
     def create_promotion_authorization(
         self,

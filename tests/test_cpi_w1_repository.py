@@ -61,7 +61,8 @@ class CpiW1RepositoryTest(unittest.TestCase):
             "def resolve_promotion_release_authorization(",
         ):
             self.assertIn(method, SOURCE)
-        self.assertIn("same authorization material digest changed immutable material", SOURCE)
+        self.assertIn("V2 authorization material changed immutable binding", SOURCE)
+        self.assertIn("LEGACY_AUTHORIZATION_RETIRED", SOURCE)
         self.assertIn("SELECT apply_promotion_release_control", SOURCE)
         self.assertIn("SELECT resolve_promotion_release_authorization", SOURCE)
 

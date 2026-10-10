@@ -11,6 +11,10 @@ from pathlib import Path
 from uuid import uuid4
 
 import psycopg
+from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyV1, CapabilityEvidencePolicyRegistry, canonical_evidence_bytes
+from src.cpi_w1_evidence_snapshot_v2 import PromotionEvidenceSnapshotV2
+from src.cpi_w1_review_artifact import ReviewArtifactV1
+from src.cpi_w1_authorization import PromotionAuthorizationMaterialV2
 
 from scripts.collect_cpi_w1 import CpiW1CollectorOrchestrator
 from src.cpi_w1_artifacts import FilesystemArtifactStore
@@ -88,6 +92,61 @@ TEST_OBSERVATION_SUBJECT = ReleaseSubjectV1(
 
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def reviewed_v2_case(subject_digest, capability_id, executor, test_subject=None):
+    registry = PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json')
+    policy = CapabilityEvidencePolicyRegistry.from_json(Path('config/cpi_w1_capability_evidence_policies.json'), registry).require(capability_id)
+    # Positive execution fixtures are synthetic reviewed test policies, never the
+    # checked-in release gates or readiness evidence. Bind historical extractor
+    # fixtures to their own explicit test registry instead of reinterpreting them.
+    if test_subject is not None:
+        from dataclasses import replace
+        capability=registry.require(capability_id)
+        capability=replace(capability, source_code=test_subject.source_code,
+            artifact_contract_kind=test_subject.artifact_contract_kind,
+            source_contract_version=test_subject.source_contract_version,
+            extractor_contract_version=test_subject.extractor_contract_version,
+            promotion_family=test_subject.promotion_family)
+        registry=PromotionCapabilityRegistry((capability,),digest('synthetic-test-registry'))
+    payload=dict(policy.payload(), release_subject_digest=subject_digest,complete=True,
+        incomplete_reasons=[],coverage_mode='EXPLICIT_HISTORICAL_EXCEPTIONS',
+        coverage_rule={'reference_months':['2025-10']})
+    policy=CapabilityEvidencePolicyV1.from_mapping(payload,registry)
+    snapshot = PromotionEvidenceSnapshotV2.from_mapping({
+        'schema': PromotionEvidenceSnapshotV2.SCHEMA, 'evidence_policy_version': PromotionEvidenceSnapshotV2.POLICY,
+        'release_subject_digest': subject_digest, 'promotion_capability_id': capability_id,
+        'capability_evidence_policy_digest': policy.policy_digest,
+        'capability_corpus_snapshot_digest': digest(f'corpus:{subject_digest}'),
+        'expected_diff_approvals_digest': digest(f'diffs:{subject_digest}'),
+        'replay_result_digest': digest(f'replay:{subject_digest}'),
+        'source_contract_digest': digest('test-source-contract'), 'tested_source_content_digest': digest('test-source-content'),
+        'tested_executor_source_revision': executor.source_revision,
+        'tested_workload_artifact_digest': executor.workload_artifact_digest,
+        'tested_job_contract_version': executor.job_contract_version})
+    bindings = {key: snapshot.payload()[key] for key in ('release_subject_digest','promotion_capability_id',
+        'capability_evidence_policy_digest','source_contract_digest','tested_source_content_digest',
+        'tested_executor_source_revision','tested_workload_artifact_digest','tested_job_contract_version')}
+    bindings.update(evidence_snapshot_digest=snapshot.evidence_snapshot_digest, gate_policy_version='cpi-w1-gate-v2')
+    review = ReviewArtifactV1(f'test-auth-{subject_digest}.json', canonical_evidence_bytes({
+        'schema':'cpi-w1-review-artifact-v1','purpose':'PROMOTION_AUTHORIZATION','bindings':bindings}))
+    gate = CapabilityGateDecision(capability_id,subject_digest,snapshot.evidence_snapshot_digest,
+        'cpi-w1-gate-v2','ELIGIBLE','TEST_ONLY',review.review_ref,review.review_digest,digest(f'gate:{subject_digest}'))
+    material = PromotionAuthorizationMaterialV2.from_review(evidence=snapshot, gate_decision=gate,
+        executor=executor,current_policy=policy,source_contract_digest=snapshot.source_contract_digest,review=review)
+    return snapshot,policy,review,material
+
+
+def persist_v2_case(repository, connection, case):
+    snapshot,policy,review,material = case
+    repository.store_capability_evidence_policy(connection,policy)
+    current = connection.execute('SELECT policy_digest FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s ORDER BY registration_version DESC LIMIT 1', (policy.release_subject_digest,)).fetchone()
+    if current is None:
+        repository.register_capability_evidence_policy(connection,policy,0,'test:policy')
+    repository.store_review_artifact(connection,review)
+    snapshot_id=repository.create_promotion_evidence_snapshot_v2(connection,snapshot,'test:evidence')
+    return repository.create_promotion_authorization_material_v2(connection,material=material,
+        evidence_snapshot_id=snapshot_id,created_by_subject='test:reviewer')
 
 
 class EligibleCapabilityGate:
@@ -402,45 +461,16 @@ class CpiW1PostgresTest(unittest.TestCase):
         )
         if existing is not None:
             return existing
-        snapshot = PromotionEvidenceSnapshotV1(
-            release_subject_digest=release_subject_digest,
-            corpus_snapshot_digest=digest(f"corpus:{release_subject_digest}"),
-            expected_diff_approvals_digest=digest(f"diffs:{release_subject_digest}"),
-            replay_result_digest=digest(f"replay:{release_subject_digest}"),
-            tested_job_contract_version=executor.job_contract_version,
-            tested_source_revision=executor.source_revision,
-            tested_workload_artifact_digest=executor.workload_artifact_digest,
-            evidence_policy_version="cpi-w1-evidence-v1",
-        )
-        gate = CapabilityGateDecision(
-            promotion_capability_id=promotion_capability_id,
-            release_subject_digest=release_subject_digest,
-            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
-            gate_policy_version="cpi-w1-gate-v2",
-            decision="ELIGIBLE",
-            reason_code="TEST_REVIEWED_ELIGIBLE",
-            review_ref=f"TEST-GATE:{release_subject_digest}",
-            review_digest=digest(f"gate-review:{release_subject_digest}"),
-            gate_decision_digest=digest(f"gate-decision:{release_subject_digest}"),
-        )
-        material = PromotionAuthorizationMaterialV1.from_review(
-            evidence=snapshot,
-            gate_decision=gate,
-            executor=executor,
-            review_ref=f"TEST-AUTH:{release_subject_digest}",
-            review_digest=digest(f"auth-review:{release_subject_digest}"),
-        )
-        snapshot_id = repository.create_promotion_evidence_snapshot(
-            connection,
-            snapshot=snapshot,
-            created_by_subject="test:evidence-reviewer",
-        )
-        material_id = repository.create_promotion_authorization_material(
-            connection,
-            evidence_snapshot_id=snapshot_id,
-            material=material,
-            created_by_subject="test:authorization-reviewer",
-        )
+        work=connection.execute("""SELECT a.source_code,a.artifact_contract_kind,a.source_contract_version,
+            w.extractor_contract_version FROM ingestion_work_items w JOIN source_artifacts a ON a.artifact_id=w.input_artifact_id
+            WHERE w.release_subject_digest=%s LIMIT 1""", (release_subject_digest,)).fetchone()
+        test_subject=None
+        if work is not None:
+            capability=PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json').require(promotion_capability_id)
+            test_subject=ReleaseSubjectV1(source_code=work[0],artifact_contract_kind=work[1],source_contract_version=work[2],
+                promotion_capability_id=promotion_capability_id,extractor_contract_version=work[3],promotion_family=capability.promotion_family)
+        material_id = persist_v2_case(repository,connection,
+            reviewed_v2_case(release_subject_digest,promotion_capability_id,executor,test_subject))
         authorization_id = repository.create_promotion_authorization(
             connection,
             authorization_material_id=material_id,
@@ -6558,53 +6588,17 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_release_authorization_control_is_exact_append_only_and_revocable(self) -> None:
-        snapshot = PromotionEvidenceSnapshotV1(
-            release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
-            corpus_snapshot_digest=digest("auth-corpus"),
-            expected_diff_approvals_digest=digest("auth-diffs"),
-            replay_result_digest=digest("auth-replay"),
-            tested_job_contract_version="cpi-w1-promoter-v1",
-            tested_source_revision=digest("auth-tested-source"),
-            tested_workload_artifact_digest=None,
-            evidence_policy_version="cpi-w1-evidence-v1",
-        )
-        gate = CapabilityGateDecision(
-            promotion_capability_id="BLS_CPI_CORE4_HTML",
-            release_subject_digest=snapshot.release_subject_digest,
-            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
-            gate_policy_version="cpi-w1-gate-v2",
-            decision="ELIGIBLE",
-            reason_code="REVIEWED_ELIGIBLE",
-            review_ref="GATE-REVIEW-1",
-            review_digest=digest("gate-review"),
-            gate_decision_digest=digest("gate-decision"),
-        )
         executor = ExecutorProvenanceV1(
             source_revision=digest("executor-source"),
             workload_artifact_digest=digest("executor-workload"),
             job_contract_version="cpi-w1-promoter-v1",
         )
-        material = PromotionAuthorizationMaterialV1.from_review(
-            evidence=snapshot,
-            gate_decision=gate,
-            executor=executor,
-            review_ref="AUTH-REVIEW-1",
-            review_digest=digest("auth-review"),
-        )
+        case = reviewed_v2_case(TEST_OBSERVATION_SUBJECT.release_subject_digest,'BLS_CPI_CORE4_HTML',executor)
+        material = case[3]
 
         with self.connection() as connection:
             repository = CpiW1Repository()
-            snapshot_id = repository.create_promotion_evidence_snapshot(
-                connection,
-                snapshot=snapshot,
-                created_by_subject="worker:evidence-reviewer",
-            )
-            material_id = repository.create_promotion_authorization_material(
-                connection,
-                evidence_snapshot_id=snapshot_id,
-                material=material,
-                created_by_subject="worker:authorization-reviewer",
-            )
+            material_id = persist_v2_case(repository,connection,case)
             authorization_id = repository.create_promotion_authorization(
                 connection,
                 authorization_material_id=material_id,

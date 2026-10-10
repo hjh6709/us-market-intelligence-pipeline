@@ -181,6 +181,130 @@ class CpiEvidenceV2PostgresTest(unittest.TestCase):
                     (release_subject_digest,promotion_capability_id,policy_digest,expected_registration_version,registration_version,actor)
                     VALUES (%s,%s,%s,99,100,'test')""", (policy.release_subject_digest, policy.promotion_capability_id, policy.policy_digest))
 
+    def test_v2_material_exact_build_and_review_binding(self):
+        from src.cpi_w1_repository import CpiW1Repository
+        from src.cpi_w1_authorization import PromotionAuthorizationMaterialV2
+        repository = CpiW1Repository()
+        self.assertTrue(hasattr(repository, 'create_promotion_authorization_material_v2'), 'V2 authorization writer missing')
+        _, evidence, policy, review, executor, gate = v2_case(cpi_w1_evidence_snapshot_v2)
+        repository.store_capability_evidence_policy(self.connection, policy)
+        current=self.connection.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s', (policy.release_subject_digest,)).fetchone()[0]
+        if current is None:
+            repository.register_capability_evidence_policy(self.connection,policy,0,'test')
+        repository.store_review_artifact(self.connection, review)
+        evidence_id = repository.create_promotion_evidence_snapshot_v2(self.connection, evidence, 'test')
+        material = PromotionAuthorizationMaterialV2.from_review(evidence=evidence, current_policy=policy,
+            review=review, executor=executor, gate_decision=gate, source_contract_digest=evidence.source_contract_digest)
+        material_id = repository.create_promotion_authorization_material_v2(self.connection,
+            material=material, evidence_snapshot_id=evidence_id, created_by_subject='test')
+        authorization = repository.create_promotion_authorization(self.connection,
+            authorization_material_id=material_id, release_subject_digest=policy.release_subject_digest,
+            grant_reason_code='TEST_ONLY', created_by_subject='test')
+        repository.apply_promotion_release_control(self.connection, authorization_id=authorization,
+            expected_control_version=0,state='APPROVED',reason_code='TEST_ONLY',actor_subject='test',
+            review_ref=review.review_ref,review_digest=review.review_digest)
+        self.connection.execute('SELECT assert_cpi_v2_authorization_binding(%s)', (authorization,))
+        self.assertEqual(repository.resolve_promotion_release_authorization(self.connection,
+            release_subject_digest=policy.release_subject_digest,executor=executor), authorization)
+        # Valid canonical bytes and valid SHA do not excuse a different tested job/build.
+        import hashlib
+        for field in ('executor_source_revision','executor_workload_artifact_digest','executor_job_contract_version'):
+            payload=material.payload()
+            payload[field] = '0'*64 if field.endswith('digest') else 'other-v1'
+            raw=canonical_evidence_bytes(payload)
+            with self.subTest(field=field), self.assertRaises(psycopg.Error):
+                with self.connection.transaction():
+                    self.connection.execute("""INSERT INTO promotion_release_authorization_materials
+                        (authorization_material_id,release_subject_digest,evidence_snapshot_id,evidence_snapshot_digest,
+                         gate_decision_digest,gate_policy_version,authorization_policy_version,executor_source_revision,
+                         executor_workload_artifact_digest,executor_job_contract_version,review_ref,review_digest,
+                         authorization_material_digest,created_by_subject,schema_version,canonical_payload)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'test',%s,%s)""",
+                        (uuid4(),payload['release_subject_digest'],evidence_id,payload['evidence_snapshot_digest'],
+                         payload['gate_decision_digest'],payload['gate_policy_version'],payload['authorization_policy_version'],
+                         payload['executor_source_revision'],payload['executor_workload_artifact_digest'],payload['executor_job_contract_version'],
+                         payload['review_ref'],payload['review_digest'],hashlib.sha256(raw).hexdigest(),payload['schema'],raw))
+
+
+@unittest.skipUnless(os.environ.get('RUN_POSTGRES_INTEGRATION') == '1', 'isolated PostgreSQL opt-in required')
+class CpiV1TransitionPostgresTest(unittest.TestCase):
+    def test_active_v1_history_survives_but_authorization_is_retired(self):
+        from src.cpi_w1_repository import CpiW1Repository
+        from src.cpi_w1_evidence_snapshot import PromotionEvidenceSnapshotV1
+        from src.cpi_w1_authorization import PromotionAuthorizationMaterialV1
+        from tests.integration.test_cpi_w1_postgres import CpiW1PostgresTest, TEST_EXECUTOR, TEST_OBSERVATION_SUBJECT
+        base=os.environ.get('DATABASE_URL','postgresql://market:market@localhost:55435/market')
+        name='cpi_r1_history_'+uuid4().hex[:12]
+        with psycopg.connect(base,autocommit=True) as admin:
+            admin.execute(sql.SQL('CREATE DATABASE {} TEMPLATE template0').format(sql.Identifier(name)))
+        args=conninfo_to_dict(base); args['dbname']=name
+        try:
+            with psycopg.connect(make_conninfo(**args)) as connection:
+                for path in sorted(Path('db/migrations').glob('[0-9][0-9][0-9]_*.sql')):
+                    if int(path.name[:3]) < 14:
+                        connection.execute(path.read_text())
+                repository=CpiW1Repository()
+                snapshot=PromotionEvidenceSnapshotV1(release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
+                    corpus_snapshot_digest='1'*64,expected_diff_approvals_digest='2'*64,replay_result_digest='3'*64,
+                    tested_job_contract_version=TEST_EXECUTOR.job_contract_version,tested_source_revision='historical-content',
+                    tested_workload_artifact_digest=None,evidence_policy_version='cpi-w1-evidence-v1')
+                evidence_id=repository.create_promotion_evidence_snapshot(connection,snapshot=snapshot,created_by_subject='historical')
+                material=PromotionAuthorizationMaterialV1(release_subject_digest=snapshot.release_subject_digest,
+                    evidence_snapshot_digest=snapshot.evidence_snapshot_digest,gate_decision_digest='4'*64,
+                    gate_policy_version='cpi-w1-gate-v2',authorization_policy_version='cpi-w1-authorization-v1',
+                    executor_source_revision=TEST_EXECUTOR.source_revision,executor_workload_artifact_digest=TEST_EXECUTOR.workload_artifact_digest,
+                    executor_job_contract_version=TEST_EXECUTOR.job_contract_version,review_ref='historical-prose',review_digest='5'*64)
+                values=material.payload(); values.pop('schema')
+                material_id=uuid4()
+                values.update(authorization_material_id=material_id,evidence_snapshot_id=evidence_id,
+                    authorization_material_digest=material.authorization_material_digest,created_by_subject='historical')
+                insert=sql.SQL('INSERT INTO promotion_release_authorization_materials ({}) VALUES ({})').format(
+                    sql.SQL(',').join(map(sql.Identifier,values)),sql.SQL(',').join(sql.Placeholder() for _ in values))
+                connection.execute(insert,tuple(values.values()))
+                authorization=uuid4()
+                connection.execute("INSERT INTO promotion_release_authorizations VALUES (%s,%s,%s,'HISTORICAL','historical',CURRENT_TIMESTAMP)",
+                    (authorization,material_id,snapshot.release_subject_digest))
+                repository.apply_promotion_release_control(connection,authorization_id=authorization,expected_control_version=0,
+                    state='APPROVED',reason_code='HISTORICAL',actor_subject='historical',review_ref='old-prose',review_digest='6'*64)
+                helper=CpiW1PostgresTest()
+                run_id=helper.insert_run(connection,execution_scope='ECONOMIC_PROMOTE')
+                helper.insert_work(connection,run_id,execution_scope='ECONOMIC_PROMOTE',release_subject=TEST_OBSERVATION_SUBJECT)
+                claim=repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR)
+                self.assertIsNotNone(claim, 'pre-014 V1 active claim required')
+                columns=tuple(values)
+                query=sql.SQL('SELECT {} FROM promotion_release_authorization_materials WHERE authorization_material_id=%s').format(sql.SQL(',').join(map(sql.Identifier,columns)))
+                before=connection.execute(query,(material_id,)).fetchone()
+                connection.commit()
+                connection.execute(Path('db/migrations/014_cpi_w1_release_evidence_v2.sql').read_text())
+                self.assertEqual(connection.execute(query,(material_id,)).fetchone(),before)
+                self.assertEqual(connection.execute('SELECT tested_workload_artifact_digest FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_id=%s',(evidence_id,)).fetchone(),(None,))
+                self.assertIsNone(repository.resolve_promotion_release_authorization(connection,
+                    release_subject_digest=snapshot.release_subject_digest,executor=TEST_EXECUTOR))
+                with self.assertRaises(psycopg.Error) as admission_error:
+                    with connection.transaction():
+                        connection.execute("""INSERT INTO ingestion_attempts
+                            (attempt_id,work_item_id,execution_scope,data_domain,attempt_number,release_authorization_id,
+                             release_control_decision_id,executor_source_revision,executor_workload_artifact_digest,executor_job_contract_version)
+                            SELECT %s,work_item_id,execution_scope,data_domain,attempt_number,release_authorization_id,
+                                   release_control_decision_id,executor_source_revision,executor_workload_artifact_digest,executor_job_contract_version
+                              FROM ingestion_attempts WHERE attempt_id=%s""", (uuid4(),claim.attempt_id))
+                self.assertEqual(admission_error.exception.sqlstate,'23514')
+                self.assertIn('LEGACY_AUTHORIZATION_RETIRED',str(admission_error.exception))
+                for operation in ('material','grant'):
+                    with self.subTest(operation=operation),self.assertRaises(psycopg.errors.CheckViolation):
+                        with connection.transaction():
+                            if operation=='material':
+                                values['authorization_material_id']=uuid4()
+                                connection.execute(insert,tuple(values.values()))
+                            else:
+                                connection.execute("INSERT INTO promotion_release_authorizations VALUES (%s,%s,%s,'HISTORICAL','historical',CURRENT_TIMESTAMP)",
+                                    (uuid4(),material_id,snapshot.release_subject_digest))
+                repository.apply_promotion_release_control(connection,authorization_id=authorization,expected_control_version=1,
+                    state='REVOKED',reason_code='LEGACY_RETIRED',actor_subject='test',review_ref='revocation',review_digest='7'*64)
+        finally:
+            with psycopg.connect(base,autocommit=True) as admin:
+                admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(name)))
+
 
 if __name__ == "__main__":
     unittest.main()
