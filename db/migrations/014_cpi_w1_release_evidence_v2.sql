@@ -400,6 +400,11 @@ DECLARE
     expected_review JSONB;
     expected_material JSONB;
 BEGIN
+    -- Advisory locks do not refresh REPEATABLE READ/SERIALIZABLE snapshots.
+    -- Final policy/control reads must see commits preceding lock acquisition.
+    IF current_setting('transaction_isolation') IS DISTINCT FROM 'read committed' THEN
+        RAISE EXCEPTION 'V2 promotion authorization requires READ COMMITTED' USING ERRCODE='23514';
+    END IF;
     PERFORM lock_cpi_domain_shared();
     PERFORM pg_advisory_xact_lock(hashtextextended('CPI_RELEASE_SUBJECT:' || m.release_subject_digest,0));
     IF m.schema_version IS DISTINCT FROM 'cpi-w1-promotion-authorization-material-v2'

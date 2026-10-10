@@ -6417,6 +6417,31 @@ class CpiW1PostgresTest(unittest.TestCase):
                 connection.execute("INSERT INTO core_event_occurrences (event_occurrence_id,event_type,reference_month,created_by_attempt_id) VALUES (%s,'CPI','2026-08-01',%s)",(uuid4(),claim.attempt_id))
             self.assertEqual(connection.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0],0)
 
+    def assert_stale_transaction_snapshot_cannot_promote(self, isolation):
+        with self.connection() as writer:
+            claim = self.make_authorization_overlap_claim(writer)
+            with writer.transaction():
+                writer.execute(f'SET TRANSACTION ISOLATION LEVEL {isolation}')
+                version = writer.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s',
+                                         (claim.release_subject_digest,)).fetchone()[0]
+                with self.connection() as registrar:
+                    self.change_registered_test_policy(registrar, claim)
+                    self.assertEqual(registrar.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s',
+                                                      (claim.release_subject_digest,)).fetchone()[0], version + 1)
+                # The write must refuse a transaction snapshot which cannot see
+                # that committed policy, even after acquiring the release lock.
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    with writer.transaction():
+                        writer.execute("INSERT INTO core_event_occurrences (event_occurrence_id,event_type,reference_month,created_by_attempt_id) VALUES (%s,'CPI','2026-08-01',%s)",
+                                       (uuid4(), claim.attempt_id))
+                self.assertEqual(writer.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0], 0)
+
+    def test_repeatable_read_stale_policy_snapshot_cannot_write_canonical_event(self):
+        self.assert_stale_transaction_snapshot_cannot_promote('REPEATABLE READ')
+
+    def test_serializable_promotion_snapshot_is_rejected_fail_closed(self):
+        self.assert_stale_transaction_snapshot_cannot_promote('SERIALIZABLE')
+
     def test_final_writer_serializes_policy_registration_then_rejects_next_write(self):
         repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as writer:

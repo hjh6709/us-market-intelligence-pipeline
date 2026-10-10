@@ -53,6 +53,13 @@ production deployment or an authorization to create production grants during R1.
 Tasks 6/8/9 must exercise this transition with an isolated pre-014 database containing
 active V1 claims, preserved historical rows, interrupted work, and post-014 rejection.
 
+Task 10 verified enforcement detail: V2 promotion authorization checks require
+READ COMMITTED transactions. REPEATABLE READ and SERIALIZABLE pin snapshots which
+advisory locks do not refresh; the shared 014 assertion rejects them rather than
+letting an old policy/control snapshot authorize canonical writes. Collection and
+historical reads are not redefined. Future migration recovery must verify promotion
+connection isolation before reopening admission; no isolation is silently changed.
+
 ### Original review focus
 
 1. Concurrent policy registrations using the same expected version must have one winner, not two effective policies — Task 6.
