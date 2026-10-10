@@ -733,6 +733,7 @@ def build_report(
         [result.as_dict() for result in results],
         [result.as_dict() for result in conformance_results],
         expected_diff_approvals or [],
+        repo_root=repo_root,
     )
     official_corpus_ready = all(row.status == "READY" for row in readiness)
     evidence_requirements_satisfied = official_corpus_ready and conformance_ready

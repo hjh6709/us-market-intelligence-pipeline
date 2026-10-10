@@ -2,10 +2,12 @@ import copy
 import importlib
 import importlib.util
 import json
+import hashlib
+import tempfile
 from pathlib import Path
 import unittest
 
-from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry
+from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry, CapabilityEvidencePolicyV1, canonical_evidence_bytes
 from src.cpi_w1_promotion_capabilities import PromotionCapabilityRegistry
 
 
@@ -92,6 +94,105 @@ class CapabilityEvidenceReadinessTest(unittest.TestCase):
                   "inventory_status": "MATERIALIZED_PINNED", "semantic_status": "SEMANTIC_UNCHANGED"}
         rows = self.api().evaluate_capability_readiness(self.registry, self.policies, raw, [result], [], [])
         self.assertEqual(next(r for r in rows if r.promotion_capability_id == self.cap).replay_passed, 0)
+
+    def cancellation_case(self):
+        """Hand-declared synthetic readiness input, never official evidence or a gate."""
+        cid = "BLS_CPI_REVISED_RELEASE_DATES"
+        raw = copy.deepcopy(self.manifest)
+        entry = next(e for e in raw["entries"] if e["corpus_id"] == "cpi:2025-10:explicit-cancellation")
+        entry.update(materialization_status="MATERIALIZED", expected_sha256="a" * 64)
+        fixture = dict(copy.deepcopy(entry), fixture_id="synthetic:2025-10:cancellation", fixture_kind="SYNTHETIC_CONFORMANCE")
+        fixture.pop("corpus_id")
+        raw["conformance_fixtures"] = [fixture]
+        capability = self.registry.require(cid)
+        semantics = hashlib.sha256(b'{"schedule_status":"CANCELED"}').hexdigest()
+        result = {"corpus_id": entry["corpus_id"], "promotion_capability_id": cid,
+                  "release_subject_digest": capability.release_subject.release_subject_digest,
+                  "extractor_contract_version": capability.extractor_contract_version,
+                  "artifact_sha256": "a" * 64, "expected_semantics_digest": semantics,
+                  "actual_semantics_digest": semantics, "inventory_status": "MATERIALIZED_PINNED",
+                  "semantic_status": "SEMANTIC_UNCHANGED"}
+        conformance = dict(result, corpus_id=fixture["fixture_id"], inventory_status="SYNTHETIC_CONFORMANCE")
+        return cid, raw, result, conformance
+
+    def cancellation_readiness(self, cid, raw, result, conformance, policies=None):
+        rows = self.api().evaluate_capability_readiness(self.registry, policies or self.policies,
+                                                       raw, [result], [conformance], [])
+        return next(row for row in rows if row.promotion_capability_id == cid)
+
+    def test_each_required_conformance_class_must_be_proven(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        self.assertEqual(self.cancellation_readiness(cid, raw, result, conformance).status, "READY")
+        value = self.policies.require(cid).payload()
+        value["required_conformance_classes"].append("ADDITIONAL_REQUIRED_CLASS")
+        policy = CapabilityEvidencePolicyV1.from_mapping(value, self.registry)
+        policies = CapabilityEvidencePolicyRegistry((policy,))
+        row = self.cancellation_readiness(cid, raw, result, conformance, policies)
+        self.assertEqual(row.status, "NOT_READY")
+        self.assertIn("CONFORMANCE_MISSING_OR_FAILED", row.blocking_reasons)
+
+    def test_unlisted_or_stale_conformance_cannot_satisfy_policy(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        for field, value in (("corpus_id", "unlisted"), ("artifact_sha256", "b" * 64),
+                             ("release_subject_digest", "b" * 64), ("expected_semantics_digest", "b" * 64)):
+            with self.subTest(field=field):
+                row = self.cancellation_readiness(cid, raw, result, dict(conformance, **{field: value}))
+                self.assertEqual(row.status, "NOT_READY")
+                self.assertEqual(row.conformance_passed, 0)
+
+    def test_stale_expected_semantics_or_subject_cannot_count_as_verified_replay(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        entry = next(e for e in raw["entries"] if e["corpus_id"] == result["corpus_id"])
+        entry["capability_expectations"][0]["expected_semantics"]["schedule_status"] = "SCHEDULED"
+        row = self.cancellation_readiness(cid, raw, result, conformance)
+        self.assertEqual(row.status, "NOT_READY")
+        self.assertEqual(row.replay_passed, 0)
+        cid, raw, result, conformance = self.cancellation_case()
+        row = self.cancellation_readiness(cid, raw, dict(result, release_subject_digest="b" * 64), conformance)
+        self.assertEqual(row.replay_passed, 0)
+
+    def test_cancellation_dependency_requires_exact_pinned_replay_binding(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        for field, value in (("artifact_sha256", "b" * 64), ("extractor_contract_version", "stale"),
+                             ("release_subject_digest", "b" * 64), ("actual_semantics_digest", "b" * 64)):
+            with self.subTest(field=field):
+                rows = self.api().evaluate_capability_readiness(self.registry, self.policies, raw,
+                                                               [dict(result, **{field: value})], [], [])
+                core = next(row for row in rows if row.promotion_capability_id == self.cap)
+                self.assertIn("2025-10", core.missing_reference_months)
+
+    def test_changed_replay_without_exact_diff_approval_is_not_ready(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        changed = dict(result, semantic_status="EXPECTED_CHANGED", actual_semantics_digest="b" * 64)
+        row = self.cancellation_readiness(cid, raw, changed, conformance)
+        self.assertEqual(row.status, "NOT_READY")
+        self.assertEqual(row.replay_passed, 0)
+
+    def test_expected_change_requires_matching_canonical_review_bytes(self):
+        cid, raw, result, conformance = self.cancellation_case()
+        entry = next(e for e in raw["entries"] if e["corpus_id"] == result["corpus_id"])
+        entry["capability_expectations"][0]["expected_semantics"]["schedule_status"] = "SCHEDULED"
+        changed = dict(result, semantic_status="EXPECTED_CHANGED",
+                       expected_semantics_digest=hashlib.sha256(b'{"schedule_status":"SCHEDULED"}').hexdigest())
+        bindings = {"release_subject_digest": result["release_subject_digest"], "promotion_capability_id": cid,
+                    "artifact_sha256": "a" * 64, "extractor_contract_version": result["extractor_contract_version"],
+                    "expected_semantics_sha256": changed["expected_semantics_digest"],
+                    "actual_semantics_sha256": result["actual_semantics_digest"]}
+        review = canonical_evidence_bytes({"schema": "cpi-w1-review-artifact-v1",
+                                          "purpose": "EXPECTED_DIFF", "bindings": bindings})
+        approval = dict(bindings, corpus_id=result["corpus_id"], reason_code="TEST_REVIEW",
+                        review_ref="review.json", review_digest=hashlib.sha256(review).hexdigest())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "review.json"
+            path.write_bytes(review)
+            def evaluate():
+                return next(row for row in self.api().evaluate_capability_readiness(
+                    self.registry, self.policies, raw, [changed], [conformance], [approval], repo_root=root)
+                    if row.promotion_capability_id == cid)
+            self.assertEqual(evaluate().status, "READY")
+            path.write_bytes(review + b"\n")
+            self.assertEqual(evaluate().status, "NOT_READY")
 
 
 if __name__ == "__main__":
