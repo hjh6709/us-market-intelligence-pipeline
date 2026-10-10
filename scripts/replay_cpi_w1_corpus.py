@@ -447,16 +447,17 @@ def replay_conformance_fixture(
 def inventory_status(entry: dict[str, Any]) -> str:
     if entry["materialization_status"] != "MATERIALIZED":
         return "REMOTE_ONLY"
-    if not entry.get("extractor_contract_version"):
-        return "BLOCKED_NO_EXTRACTOR"
     return "MATERIALIZED_PINNED"
 
 
-def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
+def _actual_core4(
+    path: Path, reference_month: str, *, extractor_contract_version: str
+) -> dict[str, str]:
     year, month = map(int, reference_month.split("-"))
     bundle = extract_core4_from_release_html(
         path.read_bytes(),
         expected_reference_month=date(year, month, 1),
+        extractor_contract_version=extractor_contract_version,
     )
     actual: dict[str, str] = {}
     for item in bundle.observations:
@@ -470,11 +471,14 @@ def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
     return actual
 
 
-def _actual_release_envelope(path: Path, reference_month: str) -> dict[str, str]:
+def _actual_release_envelope(
+    path: Path, reference_month: str, *, extractor_contract_version: str
+) -> dict[str, str]:
     year, month = map(int, reference_month.split("-"))
     candidate = extract_release_envelope(
         path.read_bytes(),
         expected_reference_month=date(year, month, 1),
+        extractor_contract_version=extractor_contract_version,
     )
     return {
         "event_type": candidate.event_type,
@@ -533,21 +537,27 @@ def _replay_capability(
             detail="materialized artifact has no pinned capability expectation",
         )
     try:
-        if capability.promotion_capability_id == "BLS_CPI_CORE4_HTML":
+        dispatch = (
+            capability.promotion_capability_id,
+            capability.extractor_contract_version,
+        )
+        if dispatch == ("BLS_CPI_CORE4_HTML", "bls-cpi-core4-html-v1"):
             actual = _actual_core4(
                 repo_root / item["local_path"],
                 item["reference_month"],
+                extractor_contract_version=capability.extractor_contract_version,
             )
             expected_value = expected.get("values")
             supported_kind = "CORE4"
-        elif capability.promotion_capability_id == "BLS_CPI_RELEASE_ENVELOPE_HTML":
+        elif dispatch == ("BLS_CPI_RELEASE_ENVELOPE_HTML", "bls-cpi-release-envelope-html-v1"):
             actual = _actual_release_envelope(
                 repo_root / item["local_path"],
                 item["reference_month"],
+                extractor_contract_version=capability.extractor_contract_version,
             )
             expected_value = expected.get("values")
             supported_kind = "RELEASE_ENVELOPE"
-        elif capability.promotion_capability_id == "BLS_CPI_REVISED_RELEASE_DATES":
+        elif dispatch == ("BLS_CPI_REVISED_RELEASE_DATES", "bls-cpi-revised-release-dates-v1"):
             year, month = map(int, item["reference_month"].split("-"))
             candidate = parse_bls_revised_release_dates_html(
                 (repo_root / item["local_path"]).read_bytes(),
@@ -565,7 +575,7 @@ def _replay_capability(
                 "BLOCKED_NO_EXTRACTOR",
                 "NOT_RUN",
                 expected,
-                detail=f"capability not implemented by replay tool: {capability.promotion_capability_id}",
+                detail=f"capability/extractor not implemented by replay tool: {dispatch}",
             )
     except Exception as exc:
         return _result(

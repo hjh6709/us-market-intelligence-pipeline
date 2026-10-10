@@ -1,9 +1,11 @@
 import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
 from scripts.replay_cpi_w1_corpus import (
+    CorpusValidationError,
     _approved_semantic_change,
     _semantic_digest,
     build_report,
@@ -321,6 +323,107 @@ class CpiW1CorpusTest(unittest.TestCase):
         self.assertNotIn("psycopg", source)
         self.assertNotIn("DATABASE_URL", source)
         self.assertNotIn("source_artifacts", source)
+
+
+class CpiW1MaterializedV2ReplayTest(unittest.TestCase):
+    """Temporary synthetic bytes exercise the real materialized path, not official evidence."""
+
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.manifest = load_manifest(MANIFEST_PATH)
+        registry_path = Path("config/cpi_w1_promotion_capabilities.json")
+        (self.root / registry_path).parent.mkdir(parents=True)
+        (self.root / registry_path).write_bytes((ROOT / registry_path).read_bytes())
+        for fixture in self.manifest["conformance_fixtures"]:
+            path = self.root / fixture["local_path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((ROOT / fixture["local_path"]).read_bytes())
+        fixture = self.manifest["conformance_fixtures"][1]
+        self.entry = next(e for e in self.manifest["entries"] if e["reference_month"] == "2026-08")
+        relative = "tests/fixtures/cpi_w1/official/unit-test-only.html"
+        path = self.root / relative
+        path.parent.mkdir(parents=True)
+        path.write_bytes((ROOT / fixture["local_path"]).read_bytes())
+        self.entry.update(
+            materialization_status="MATERIALIZED", local_path=relative,
+            expected_sha256=fixture["expected_sha256"],
+            capability_expectations=json.loads(json.dumps(fixture["capability_expectations"])),
+        )
+
+    def results(self, approvals=None):
+        report = build_report(self.manifest, repo_root=self.root, expected_diff_approvals=approvals)
+        return [r for r in report["results"] if r["corpus_id"] == self.entry["corpus_id"]]
+
+    def test_materialized_v2_replays_both_registry_scoped_extractors(self) -> None:
+        validate_manifest(self.manifest, self.root)
+        results = self.results()
+        self.assertEqual(len(results), 2)
+        self.assertEqual({r["semantic_status"] for r in results}, {"SEMANTIC_UNCHANGED"})
+        self.assertEqual(
+            {r["promotion_capability_id"]: r["extractor_contract_version"] for r in results},
+            {"BLS_CPI_RELEASE_ENVELOPE_HTML": "bls-cpi-release-envelope-html-v1",
+             "BLS_CPI_CORE4_HTML": "bls-cpi-core4-html-v1"},
+        )
+        self.assertEqual(len({r["release_subject_digest"] for r in results}), 2)
+        self.assertTrue(all(r["artifact_sha256"] == self.entry["expected_sha256"] for r in results))
+
+    def test_artifact_wide_extractor_remains_forbidden(self) -> None:
+        self.entry["extractor_contract_version"] = "bls-cpi-core4-html-v1"
+        with self.assertRaisesRegex(CorpusValidationError, "legacy artifact-wide"):
+            self.results()
+
+    def test_unknown_capability_fails_closed(self) -> None:
+        self.entry["capability_expectations"][0]["promotion_capability_id"] = "UNKNOWN"
+        with self.assertRaisesRegex(CorpusValidationError, "unknown promotion capability"):
+            self.results()
+
+    def test_artifact_capability_mismatch_fails_closed(self) -> None:
+        self.entry["capability_expectations"][0]["promotion_capability_id"] = "BLS_CPI_SCHEDULE_HTML"
+        with self.assertRaisesRegex(CorpusValidationError, "artifact contract mismatch"):
+            self.results()
+
+    def test_materialized_replay_digest_ignores_expectation_order(self) -> None:
+        first = self.results()
+        self.entry["capability_expectations"].reverse()
+        second = self.results()
+        self.assertEqual(replay_result_digest(first), replay_result_digest(second))
+        self.assertEqual({r["semantic_status"] for r in second}, {"SEMANTIC_UNCHANGED"})
+
+    def test_unimplemented_registry_extractor_version_cannot_run_v1_parser(self) -> None:
+        path = self.root / "config/cpi_w1_promotion_capabilities.json"
+        registry = json.loads(path.read_text())
+        for capability in registry["capabilities"]:
+            if capability["promotion_capability_id"] == "BLS_CPI_CORE4_HTML":
+                capability["extractor_contract_version"] = "bls-cpi-core4-html-v2"
+        path.write_text(json.dumps(registry))
+        result = next(r for r in self.results() if r["promotion_capability_id"] == "BLS_CPI_CORE4_HTML")
+        self.assertEqual(result["extractor_contract_version"], "bls-cpi-core4-html-v2")
+        self.assertEqual(result["inventory_status"], "BLOCKED_NO_EXTRACTOR")
+        self.assertEqual(result["semantic_status"], "NOT_RUN")
+
+    def test_materialized_expected_diff_requires_every_exact_scope_field(self) -> None:
+        core = self.entry["capability_expectations"][1]
+        core["expected_semantics"]["values"]["CPI_HEADLINE_MOM"] = "9.9"
+        before = {"CPI_HEADLINE_MOM": "9.9", "CPI_HEADLINE_YOY": "3.4", "CPI_CORE_MOM": "0.3", "CPI_CORE_YOY": "2.4"}
+        after = dict(before, CPI_HEADLINE_MOM="0.4")
+        approval = {
+            "corpus_id": self.entry["corpus_id"], "artifact_sha256": self.entry["expected_sha256"],
+            "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+            "release_subject_digest": "9be6522e1b2db41e0745c687799f44446b7f375a578b057b94a09c218a28dfe7",
+            "extractor_contract_version": "bls-cpi-core4-html-v1",
+            "expected_semantics_sha256": _semantic_digest(before),
+            "actual_semantics_sha256": _semantic_digest(after),
+            "reason_code": "UNIT_TEST_ONLY", "review_ref": "UNIT_TEST_ONLY_NOT_OFFICIAL_APPROVAL",
+        }
+        outcomes = {r["promotion_capability_id"]: r["semantic_status"] for r in self.results([approval])}
+        self.assertEqual(outcomes, {"BLS_CPI_CORE4_HTML": "EXPECTED_CHANGED", "BLS_CPI_RELEASE_ENVELOPE_HTML": "SEMANTIC_UNCHANGED"})
+        for field in ("corpus_id", "artifact_sha256", "promotion_capability_id", "release_subject_digest", "extractor_contract_version", "expected_semantics_sha256", "actual_semantics_sha256"):
+            with self.subTest(field=field):
+                changed = dict(approval, **{field: "different"})
+                result = next(r for r in self.results([changed]) if r["promotion_capability_id"] == "BLS_CPI_CORE4_HTML")
+                self.assertEqual(result["semantic_status"], "UNEXPECTED_CHANGED")
 
 
 if __name__ == "__main__":
