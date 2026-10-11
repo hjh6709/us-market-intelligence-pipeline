@@ -130,6 +130,7 @@ def _approved_semantic_change(
     extractor_contract_version: str,
     expected: Any,
     actual: Any,
+    repo_root: Path | None = None,
 ) -> bool:
     corpus_id = corpus_id or entry.get("corpus_id") or entry.get("fixture_id")
     if not isinstance(corpus_id, str) or not corpus_id:
@@ -156,6 +157,17 @@ def _approved_semantic_change(
                 and review_ref
                 and review_ref == review_ref.strip()
             ):
+                from src.cpi_w1_review_artifact import load_review_artifact
+                try:
+                    review = load_review_artifact(
+                        repo_root or Path(__file__).resolve().parents[1],
+                        review_ref, approval.get("review_digest"),
+                    )
+                    if review.payload()["purpose"] != "EXPECTED_DIFF":
+                        continue
+                    review.require_bindings({key: value for key, value in required.items() if key != "corpus_id"})
+                except (ValueError, OSError):
+                    continue
                 matches.append(approval)
     if len(matches) > 1:
         raise CorpusValidationError(
@@ -447,16 +459,17 @@ def replay_conformance_fixture(
 def inventory_status(entry: dict[str, Any]) -> str:
     if entry["materialization_status"] != "MATERIALIZED":
         return "REMOTE_ONLY"
-    if not entry.get("extractor_contract_version"):
-        return "BLOCKED_NO_EXTRACTOR"
     return "MATERIALIZED_PINNED"
 
 
-def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
+def _actual_core4(
+    path: Path, reference_month: str, *, extractor_contract_version: str
+) -> dict[str, str]:
     year, month = map(int, reference_month.split("-"))
     bundle = extract_core4_from_release_html(
         path.read_bytes(),
         expected_reference_month=date(year, month, 1),
+        extractor_contract_version=extractor_contract_version,
     )
     actual: dict[str, str] = {}
     for item in bundle.observations:
@@ -470,11 +483,14 @@ def _actual_core4(path: Path, reference_month: str) -> dict[str, str]:
     return actual
 
 
-def _actual_release_envelope(path: Path, reference_month: str) -> dict[str, str]:
+def _actual_release_envelope(
+    path: Path, reference_month: str, *, extractor_contract_version: str
+) -> dict[str, str]:
     year, month = map(int, reference_month.split("-"))
     candidate = extract_release_envelope(
         path.read_bytes(),
         expected_reference_month=date(year, month, 1),
+        extractor_contract_version=extractor_contract_version,
     )
     return {
         "event_type": candidate.event_type,
@@ -533,21 +549,27 @@ def _replay_capability(
             detail="materialized artifact has no pinned capability expectation",
         )
     try:
-        if capability.promotion_capability_id == "BLS_CPI_CORE4_HTML":
+        dispatch = (
+            capability.promotion_capability_id,
+            capability.extractor_contract_version,
+        )
+        if dispatch == ("BLS_CPI_CORE4_HTML", "bls-cpi-core4-html-v1"):
             actual = _actual_core4(
                 repo_root / item["local_path"],
                 item["reference_month"],
+                extractor_contract_version=capability.extractor_contract_version,
             )
             expected_value = expected.get("values")
             supported_kind = "CORE4"
-        elif capability.promotion_capability_id == "BLS_CPI_RELEASE_ENVELOPE_HTML":
+        elif dispatch == ("BLS_CPI_RELEASE_ENVELOPE_HTML", "bls-cpi-release-envelope-html-v1"):
             actual = _actual_release_envelope(
                 repo_root / item["local_path"],
                 item["reference_month"],
+                extractor_contract_version=capability.extractor_contract_version,
             )
             expected_value = expected.get("values")
             supported_kind = "RELEASE_ENVELOPE"
-        elif capability.promotion_capability_id == "BLS_CPI_REVISED_RELEASE_DATES":
+        elif dispatch == ("BLS_CPI_REVISED_RELEASE_DATES", "bls-cpi-revised-release-dates-v1"):
             year, month = map(int, item["reference_month"].split("-"))
             candidate = parse_bls_revised_release_dates_html(
                 (repo_root / item["local_path"]).read_bytes(),
@@ -565,7 +587,7 @@ def _replay_capability(
                 "BLOCKED_NO_EXTRACTOR",
                 "NOT_RUN",
                 expected,
-                detail=f"capability not implemented by replay tool: {capability.promotion_capability_id}",
+                detail=f"capability/extractor not implemented by replay tool: {dispatch}",
             )
     except Exception as exc:
         return _result(
@@ -599,6 +621,7 @@ def _replay_capability(
             extractor_contract_version=capability.extractor_contract_version,
             expected=expected_value,
             actual=actual,
+            repo_root=repo_root,
         )
         else "UNEXPECTED_CHANGED"
     )
@@ -699,6 +722,20 @@ def build_report(
         result.semantic_status in _PASS_SEMANTIC
         for result in conformance_results
     )
+    from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry
+    from src.cpi_w1_evidence_readiness import evaluate_capability_readiness
+
+    policy_path = repo_root / "config/cpi_w1_capability_evidence_policies.json"
+    policies = (CapabilityEvidencePolicyRegistry.from_json(policy_path, registry)
+                if policy_path.is_file() else CapabilityEvidencePolicyRegistry(()))
+    readiness = evaluate_capability_readiness(
+        registry, policies, manifest,
+        [result.as_dict() for result in results],
+        [result.as_dict() for result in conformance_results],
+        expected_diff_approvals or [],
+        repo_root=repo_root,
+    )
+    official_corpus_ready = all(row.status == "READY" for row in readiness)
     evidence_requirements_satisfied = official_corpus_ready and conformance_ready
     return {
         "schema_version": _SCHEMA_VERSION,
@@ -706,6 +743,7 @@ def build_report(
         "official_corpus_ready": official_corpus_ready,
         "conformance_ready": conformance_ready,
         "evidence_requirements_satisfied": evidence_requirements_satisfied,
+        "capability_readiness": [row.as_dict() for row in readiness],
         "counts": {
             "entries": len(manifest["entries"]),
             "capability_results": len(results),

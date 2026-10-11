@@ -5,8 +5,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
+
+from psycopg import sql
+from psycopg.errors import CheckViolation
+from psycopg.types.json import Jsonb
 
 from src.cpi_w1_authorization import (
     ExecutorProvenanceV1,
@@ -139,6 +144,86 @@ def _validate_reason(outcome: str, reason_code: str | None) -> None:
 
 
 class CpiW1Repository:
+    def __init__(self, *, evidence_policy_loader=None):
+        # Trusted dependency injection for declared test/checkout policy inputs;
+        # production defaults to the actual checked-in registry on every check.
+        self._evidence_policy_loader = evidence_policy_loader
+
+    def _assert_configured_policy(self, connection, release_subject_digest):
+        from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyRegistry
+        from src.cpi_w1_promotion_capabilities import PromotionCapabilityRegistry
+        row = connection.execute("""SELECT promotion_capability_id, policy_digest
+            FROM promotion_capability_evidence_policy_registrations
+            WHERE release_subject_digest=%s ORDER BY registration_version DESC LIMIT 1""",
+            (release_subject_digest,)).fetchone()
+        if row is None:
+            raise RepositoryInvariantError('effective evidence policy missing')
+        try:
+            if self._evidence_policy_loader is not None:
+                policy = self._evidence_policy_loader(row[0], release_subject_digest)
+            else:
+                root = Path(__file__).resolve().parents[1]
+                registry = PromotionCapabilityRegistry.from_json(root / 'config/cpi_w1_promotion_capabilities.json')
+                policy = CapabilityEvidencePolicyRegistry.from_json(
+                    root / 'config/cpi_w1_capability_evidence_policies.json', registry).require(row[0])
+            if (policy.release_subject_digest != release_subject_digest
+                or policy.promotion_capability_id != row[0] or not policy.complete
+                or policy.policy_digest != row[1]):
+                raise ValueError('configured/effective evidence policy mismatch')
+        except (ValueError, KeyError, OSError) as error:
+            raise RepositoryInvariantError('configured/effective evidence policy mismatch or unavailable') from error
+
+    def store_capability_evidence_policy(self, connection, policy) -> str:
+        payload = policy.payload()
+        connection.execute("""INSERT INTO promotion_capability_evidence_policies
+            (policy_digest,release_subject_digest,promotion_capability_id,schema_version,
+             policy_version,complete,canonical_payload,payload) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (policy_digest) DO NOTHING""", (policy.policy_digest,
+            policy.release_subject_digest, policy.promotion_capability_id, payload['schema'],
+            payload['policy_version'], policy.complete, policy.canonical_bytes, Jsonb(payload)))
+        row = connection.execute("SELECT canonical_payload FROM promotion_capability_evidence_policies WHERE policy_digest=%s",
+            (policy.policy_digest,)).fetchone()
+        if row is None or bytes(row[0]) != policy.canonical_bytes:
+            raise RepositoryInvariantError('policy digest changed immutable bytes')
+        return policy.policy_digest
+
+    def register_capability_evidence_policy(self, connection, policy, expected_version: int, actor: str) -> UUID:
+        # Registration is explicit: storing or reading a policy never registers it.
+        return connection.execute("SELECT register_cpi_capability_evidence_policy(%s,%s,%s,%s,%s)",
+            (policy.release_subject_digest, policy.promotion_capability_id,
+             policy.policy_digest, expected_version, actor)).fetchone()[0]
+
+    def store_review_artifact(self, connection, review) -> tuple[str, str]:
+        payload = review.payload()
+        connection.execute("""INSERT INTO promotion_release_review_artifacts
+            (review_ref,review_digest,raw_bytes,payload,schema_version,purpose,bindings)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (review_ref,review_digest) DO NOTHING""",
+            (review.review_ref, review.review_digest, review.raw_bytes, Jsonb(payload),
+             payload['schema'], payload['purpose'], Jsonb(payload['bindings'])))
+        row = connection.execute("SELECT raw_bytes FROM promotion_release_review_artifacts WHERE review_ref=%s AND review_digest=%s",
+            (review.review_ref, review.review_digest)).fetchone()
+        if row is None or bytes(row[0]) != review.raw_bytes:
+            raise RepositoryInvariantError('review reference changed immutable bytes')
+        return review.review_ref, review.review_digest
+
+    def create_promotion_evidence_snapshot_v2(self, connection, snapshot, created_by_subject: str) -> UUID:
+        from src.cpi_w1_evidence_snapshot_v2 import PromotionEvidenceSnapshotV2
+        if not isinstance(snapshot, PromotionEvidenceSnapshotV2):
+            raise ValueError('explicit V2 snapshot required')
+        if not created_by_subject or created_by_subject != created_by_subject.strip():
+            raise ValueError('created_by_subject must be canonical and non-empty')
+        values = snapshot.payload()
+        values['schema_version'] = values.pop('schema')
+        values.update(evidence_snapshot_id=uuid4(), evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
+                      canonical_payload=snapshot.canonical_json.encode('utf-8'), created_by_subject=created_by_subject)
+        connection.execute(sql.SQL("INSERT INTO promotion_release_evidence_snapshots ({}) VALUES ({}) ON CONFLICT (evidence_snapshot_digest) DO NOTHING").format(
+            sql.SQL(',').join(map(sql.Identifier, values)), sql.SQL(',').join(sql.Placeholder() for _ in values)), tuple(values.values()))
+        row = connection.execute("SELECT evidence_snapshot_id,canonical_payload FROM promotion_release_evidence_snapshots WHERE evidence_snapshot_digest=%s",
+            (snapshot.evidence_snapshot_digest,)).fetchone()
+        if row is None or bytes(row[1]) != values['canonical_payload']:
+            raise RepositoryInvariantError('V2 snapshot digest changed immutable bytes')
+        return row[0]
+
     def create_promotion_evidence_snapshot(
         self,
         connection: Any,
@@ -213,67 +298,28 @@ class CpiW1Repository:
         material: PromotionAuthorizationMaterialV1,
         created_by_subject: str,
     ) -> UUID:
+        raise ValueError('LEGACY_AUTHORIZATION_RETIRED')
+
+    def create_promotion_authorization_material_v2(
+        self, connection, *, material, evidence_snapshot_id: UUID, created_by_subject: str,
+    ) -> UUID:
+        from src.cpi_w1_authorization import PromotionAuthorizationMaterialV2
+        if not isinstance(material, PromotionAuthorizationMaterialV2):
+            raise ValueError('explicit V2 authorization material required')
         if not created_by_subject or created_by_subject != created_by_subject.strip():
-            raise ValueError("created_by_subject must be canonical and non-empty")
-        candidate_id = uuid4()
-        expected = (
-            material.release_subject_digest,
-            evidence_snapshot_id,
-            material.evidence_snapshot_digest,
-            material.gate_decision_digest,
-            material.gate_policy_version,
-            material.authorization_policy_version,
-            material.executor_source_revision,
-            material.executor_workload_artifact_digest,
-            material.executor_job_contract_version,
-            material.review_ref,
-            material.review_digest,
-        )
-        with connection.transaction():
-            connection.execute(
-                """
-                INSERT INTO promotion_release_authorization_materials (
-                    authorization_material_id, release_subject_digest,
-                    evidence_snapshot_id, evidence_snapshot_digest,
-                    gate_decision_digest, gate_policy_version,
-                    authorization_policy_version, executor_source_revision,
-                    executor_workload_artifact_digest,
-                    executor_job_contract_version, review_ref, review_digest,
-                    authorization_material_digest, created_by_subject
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                ON CONFLICT (authorization_material_digest) DO NOTHING
-                """,
-                (
-                    candidate_id,
-                    *expected,
-                    material.authorization_material_digest,
-                    created_by_subject,
-                ),
-            )
-            row = connection.execute(
-                """
-                SELECT authorization_material_id, release_subject_digest,
-                       evidence_snapshot_id, evidence_snapshot_digest,
-                       gate_decision_digest, gate_policy_version,
-                       authorization_policy_version, executor_source_revision,
-                       executor_workload_artifact_digest,
-                       executor_job_contract_version, review_ref, review_digest
-                  FROM promotion_release_authorization_materials
-                 WHERE authorization_material_digest=%s
-                """,
-                (material.authorization_material_digest,),
-            ).fetchone()
-            if row is None:
-                raise RepositoryInvariantError(
-                    "authorization material did not converge"
-                )
-            if tuple(row[1:]) != expected:
-                raise RepositoryInvariantError(
-                    "same authorization material digest changed immutable material"
-                )
-            return row[0]
+            raise ValueError('created_by_subject must be canonical and non-empty')
+        values = material.payload()
+        values['schema_version'] = values.pop('schema')
+        values.update(authorization_material_id=uuid4(), evidence_snapshot_id=evidence_snapshot_id,
+            authorization_material_digest=material.authorization_material_digest,
+            canonical_payload=material.canonical_json.encode('utf-8'), created_by_subject=created_by_subject)
+        connection.execute(sql.SQL("INSERT INTO promotion_release_authorization_materials ({}) VALUES ({}) ON CONFLICT (authorization_material_digest) DO NOTHING").format(
+            sql.SQL(',').join(map(sql.Identifier, values)), sql.SQL(',').join(sql.Placeholder() for _ in values)), tuple(values.values()))
+        row=connection.execute("SELECT authorization_material_id,canonical_payload,evidence_snapshot_id FROM promotion_release_authorization_materials WHERE authorization_material_digest=%s",
+            (material.authorization_material_digest,)).fetchone()
+        if row is None or bytes(row[1]) != values['canonical_payload'] or row[2] != evidence_snapshot_id:
+            raise RepositoryInvariantError('V2 authorization material changed immutable binding')
+        return row[0]
 
     def create_promotion_authorization(
         self,
@@ -376,6 +422,11 @@ class CpiW1Repository:
         ).fetchone()
         if row is None:
             raise RepositoryInvariantError("authorization resolver returned no row")
+        if row[0] is not None:
+            try:
+                self._assert_configured_policy(connection, release_subject_digest)
+            except RepositoryInvariantError:
+                return None
         return row[0]
 
     def create_run(
@@ -763,15 +814,22 @@ class CpiW1Repository:
 
         with connection.transaction():
             if work_key_prefix is None:
-                row = connection.execute(
-                    CLAIM_SELECT_SQL,
-                    (execution_scope,),
-                ).fetchone()
+                query = CLAIM_SELECT_SQL
+                parameters = (execution_scope,)
             else:
-                row = connection.execute(
-                    CLAIM_SELECT_PREFIX_SQL,
-                    (execution_scope, work_key_prefix, work_key_prefix),
-                ).fetchone()
+                query = CLAIM_SELECT_PREFIX_SQL
+                parameters = (execution_scope, work_key_prefix, work_key_prefix)
+            if execution_scope == 'ECONOMIC_PROMOTE':
+                self.lock_cpi_domain_shared(connection)
+                # Discover without a work lock, then reselect under the exact
+                # release fence. Never wait for release while holding work.
+                candidate = connection.execute(query.replace(' FOR UPDATE OF w SKIP LOCKED',''),parameters).fetchone()
+                if candidate is None:
+                    return None
+                self.lock_cpi_release_subject(connection,candidate[9])
+                query = query.replace(' ORDER BY', ' AND w.release_subject_digest=%s\n ORDER BY')
+                parameters = (*parameters,candidate[9])
+            row = connection.execute(query,parameters).fetchone()
             if row is None:
                 return None
 
@@ -1022,6 +1080,15 @@ class CpiW1Repository:
             raise RepositoryInvariantError(
                 "promotion claim is missing exact authorization identity"
             )
+        try:
+            # Savepoint preserves the existing heartbeat pause path when DB
+            # revalidation rejects a grant; the surrounding transaction survives.
+            with connection.transaction():
+                connection.execute('SELECT assert_cpi_v2_authorization_binding(%s)',
+                    (claim.release_authorization_id,))
+        except CheckViolation as error:
+            raise RepositoryInvariantError(f'current V2 promotion authorization rejected: {error}') from error
+        self._assert_configured_policy(connection, claim.release_subject_digest)
         row = connection.execute(
             """
             SELECT a.release_subject_digest,

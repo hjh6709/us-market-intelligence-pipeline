@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from src.cpi_w1_authorization import (
     ExecutorProvenanceV1,
@@ -41,22 +42,25 @@ def decision(state: str = "ELIGIBLE") -> CapabilityGateDecision:
     )
 
 
+def historical_material():
+    return PromotionAuthorizationMaterialV1(
+            release_subject_digest=SUBJECT,
+            evidence_snapshot_digest=EVIDENCE.evidence_snapshot_digest,
+            gate_decision_digest="9" * 64,
+            gate_policy_version="cpi-w1-gate-v2",
+            authorization_policy_version="cpi-w1-authorization-v1",
+            executor_source_revision=EXECUTOR.source_revision,
+            executor_workload_artifact_digest=EXECUTOR.workload_artifact_digest,
+            executor_job_contract_version=EXECUTOR.job_contract_version,
+            review_ref="AUTH-REVIEW-1",
+            review_digest="a" * 64,
+        )
+
+
 class PromotionAuthorizationMaterialV1Test(unittest.TestCase):
-    def test_exact_eligible_gate_builds_deterministic_material(self) -> None:
-        first = PromotionAuthorizationMaterialV1.from_review(
-            evidence=EVIDENCE,
-            gate_decision=decision(),
-            executor=EXECUTOR,
-            review_ref="AUTH-REVIEW-1",
-            review_digest="a" * 64,
-        )
-        second = PromotionAuthorizationMaterialV1.from_review(
-            evidence=EVIDENCE,
-            gate_decision=decision(),
-            executor=EXECUTOR,
-            review_ref="AUTH-REVIEW-1",
-            review_digest="a" * 64,
-        )
+    def test_historical_material_retains_deterministic_identity(self) -> None:
+        first = historical_material()
+        second = historical_material()
         self.assertEqual(first.authorization_material_digest, second.authorization_material_digest)
         self.assertEqual(first.release_subject_digest, SUBJECT)
         self.assertEqual(first.evidence_snapshot_digest, EVIDENCE.evidence_snapshot_digest)
@@ -87,24 +91,8 @@ class PromotionAuthorizationMaterialV1Test(unittest.TestCase):
             )
 
     def test_executor_identity_is_authorization_material(self) -> None:
-        original = PromotionAuthorizationMaterialV1.from_review(
-            evidence=EVIDENCE,
-            gate_decision=decision(),
-            executor=EXECUTOR,
-            review_ref="AUTH-REVIEW-1",
-            review_digest="a" * 64,
-        )
-        changed = PromotionAuthorizationMaterialV1.from_review(
-            evidence=EVIDENCE,
-            gate_decision=decision(),
-            executor=ExecutorProvenanceV1(
-                source_revision="b" * 64,
-                workload_artifact_digest="7" * 64,
-                job_contract_version="cpi-w1-promoter-v1",
-            ),
-            review_ref="AUTH-REVIEW-1",
-            review_digest="a" * 64,
-        )
+        original = historical_material()
+        changed = replace(original, executor_source_revision="b" * 64)
         self.assertNotEqual(
             original.authorization_material_digest,
             changed.authorization_material_digest,

@@ -1513,14 +1513,18 @@ gate can be considered complete. An entry may remain REMOTE_ONLY during corpus
 construction, but such an entry keeps the release gate incomplete rather than being
 silently skipped as success.
 
-Extractor contract version is entry-scoped because CPI release HTML, Table 1 XLSX,
-schedule/exception surfaces, and correction evidence do not share one parser identity.
+Extractor identity is scoped to an artifact × promotion-capability evaluation.
+An artifact may be evaluated by multiple capabilities, each with its own extractor
+contract resolved through the promotion capability registry. Artifact-wide extractor
+identity is forbidden because one artifact may support independent release-envelope
+and observation-bundle evaluations.
 
 
-A candidate extractor version is run against the entire approved corpus.
+A candidate extractor version is run against the entire applicable approved corpus
+for its promotion capability, without silently omitting required coverage.
 
 Expected-diff approval is cryptographically scoped to the exact corpus artifact hash,
-extractor-contract version, prior expected semantic digest, and new actual semantic
+promotion capability identity, extractor-contract version, prior expected semantic digest, and new actual semantic
 digest, plus a durable review reference. A broad "expected change" flag is forbidden.
 Parser failures remain hard-blocking in W1 because free-text exception identity is not
 a stable semantic contract.

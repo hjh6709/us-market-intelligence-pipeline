@@ -33,6 +33,7 @@ class MigrationEquivalenceResult:
     migration_names: tuple[str, ...]
     differences: tuple[str, ...]
     legacy_fixture_preserved: bool
+    historical_fixture_preserved: bool | None = None
 
 
 def load_hash_manifest(path: Path) -> tuple[MigrationHash, ...]:
@@ -69,6 +70,20 @@ def verify_immutable_baseline(
                 f"expected={entry.digest} actual={actual}"
             )
     return tuple(failures)
+
+
+def load_foundation_hash_manifest(
+    path: Path = MIGRATION_DIR / 'immutable-001-013.sha256',
+) -> tuple[MigrationHash, ...]:
+    entries = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        match = re.fullmatch(r'([0-9a-f]{64})  (db/migrations/(?:00[1-9]|01[0-3])_[^/]+\.sql)', line)
+        if match is None:
+            raise ValueError('invalid foundation manifest line')
+        entries.append(MigrationHash(match[1], Path(match[2])))
+    if [int(entry.path.name[:3]) for entry in entries] != list(range(1, 14)):
+        raise ValueError('foundation manifest must contain exactly ordered 001-013')
+    return tuple(entries)
 
 
 def migration_paths() -> tuple[Path, ...]:
@@ -214,8 +229,51 @@ def _database_dsn(base_dsn: str, dbname: str) -> str:
 
 
 def compare_fresh_and_upgrade(base_dsn: str) -> MigrationEquivalenceResult:
+    return _compare_upgrade(base_dsn,foundation=False)
+
+
+def compare_foundation_upgrade(base_dsn: str) -> MigrationEquivalenceResult:
+    return _compare_upgrade(base_dsn,foundation=True)
+
+
+def _foundation_history_snapshot(connection):
+    result={}
+    for table in ('promotion_release_evidence_snapshots','promotion_release_authorization_materials',
+                  'promotion_release_authorizations','promotion_release_control_decisions'):
+        # Compare every original business column, not newly added schema fields.
+        excluded = ['promotion_capability_id','capability_evidence_policy_digest','capability_corpus_snapshot_digest',
+                    'source_contract_digest','tested_source_content_digest','tested_executor_source_revision','canonical_payload']
+        if table == 'promotion_release_authorization_materials':
+            excluded.append('schema_version')
+        result[table]=connection.execute(sql.SQL('SELECT to_jsonb(t) - %s::text[] FROM {} t ORDER BY 1').format(sql.Identifier(table)),(excluded,)).fetchall()
+    return result
+
+
+def _insert_foundation_history(connection):
+    # Historical fixture is inserted only before 014 in a UUID-named test DB.
+    evidence_id,material_id,authorization_id=uuid4(),uuid4(),uuid4()
+    connection.execute("""INSERT INTO promotion_release_evidence_snapshots
+        (evidence_snapshot_id,schema_version,release_subject_digest,corpus_snapshot_digest,expected_diff_approvals_digest,
+         replay_result_digest,tested_job_contract_version,tested_source_revision,tested_workload_artifact_digest,
+         evidence_policy_version,evidence_snapshot_digest,created_by_subject)
+        VALUES (%s,'cpi-w1-promotion-evidence-snapshot-v1',%s,%s,%s,%s,'cpi-w1-promoter-v1','historical-content',NULL,
+                'cpi-w1-evidence-v1',%s,'historical-test')""",(evidence_id,'1'*64,'2'*64,'3'*64,'4'*64,'5'*64))
+    connection.execute("""INSERT INTO promotion_release_authorization_materials
+        (authorization_material_id,release_subject_digest,evidence_snapshot_id,evidence_snapshot_digest,gate_decision_digest,
+         gate_policy_version,authorization_policy_version,executor_source_revision,executor_workload_artifact_digest,
+         executor_job_contract_version,review_ref,review_digest,authorization_material_digest,created_by_subject)
+        VALUES (%s,%s,%s,%s,%s,'cpi-w1-gate-v2','cpi-w1-authorization-v1','historical-build',%s,
+                'cpi-w1-promoter-v1','historical-prose',%s,%s,'historical-test')""",
+        (material_id,'1'*64,evidence_id,'5'*64,'6'*64,'7'*64,'8'*64,'9'*64))
+    connection.execute("INSERT INTO promotion_release_authorizations VALUES (%s,%s,%s,'HISTORICAL','historical-test',CURRENT_TIMESTAMP)",
+        (authorization_id,material_id,'1'*64))
+    connection.execute("SELECT apply_promotion_release_control(%s,0,'APPROVED','HISTORICAL','historical-test','old-prose',%s)",
+        (authorization_id,'a'*64))
+
+
+def _compare_upgrade(base_dsn: str, *, foundation: bool) -> MigrationEquivalenceResult:
     entries = load_hash_manifest(IMMUTABLE_BASELINE_MANIFEST)
-    failures = verify_immutable_baseline(entries)
+    failures = verify_immutable_baseline((*entries,*load_foundation_hash_manifest()))
     if failures:
         raise RuntimeError("; ".join(failures))
 
@@ -246,9 +304,14 @@ def compare_fresh_and_upgrade(base_dsn: str) -> MigrationEquivalenceResult:
             fresh_snapshot = _schema_snapshot(fresh)
 
         with psycopg.connect(_database_dsn(base_dsn, upgrade_name)) as upgrade:
-            _apply(upgrade, paths[:9])
+            split=13 if foundation else 9
+            _apply(upgrade, paths[:split])
             _insert_legacy_fixture(upgrade)
-            _apply(upgrade, paths[9:])
+            if foundation:
+                _insert_foundation_history(upgrade)
+                history_before=_foundation_history_snapshot(upgrade)
+            _apply(upgrade, paths[split:])
+            history_preserved=history_before==_foundation_history_snapshot(upgrade) if foundation else None
             fixture_count = upgrade.execute(
                 "SELECT count(*) FROM market_bars WHERE symbol = 'CPIW1_FIXTURE'"
             ).fetchone()[0]
@@ -263,6 +326,7 @@ def compare_fresh_and_upgrade(base_dsn: str) -> MigrationEquivalenceResult:
             migration_names=tuple(path.name for path in paths),
             differences=differences,
             legacy_fixture_preserved=fixture_count == 1,
+            historical_fixture_preserved=history_preserved,
         )
     finally:
         with psycopg.connect(admin_dsn, autocommit=True) as admin:

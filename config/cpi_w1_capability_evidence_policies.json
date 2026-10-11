@@ -1,0 +1,225 @@
+{
+  "schema": "cpi-w1-capability-evidence-policy-registry-v1",
+  "policies": [
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_SCHEDULE_HTML",
+      "release_subject_digest": "ef694a2f208bdf98db0f656a81cef83dfdd394c51184d58cda81abd1f05c879c",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "CPI_SCHEDULE_HTML"
+      },
+      "required_official_evidence_classes": [
+        "CPI_SCHEDULE_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_SCHEDULE_HTML"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_GLOBAL_ICS_SCHEDULE",
+      "release_subject_digest": "a178dde883fc07ada6682bd99e2e0dd7428e1de1308af4e2872e408761537abc",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "BLS_GLOBAL_ICS"
+      },
+      "required_official_evidence_classes": [
+        "BLS_GLOBAL_ICS"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_GLOBAL_ICS_SCHEDULE"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_REVISED_RELEASE_DATES",
+      "release_subject_digest": "0d49979142dc9ae5f4e35f2446ebf00d9c4e0e775b037ab7a37e1dd77872e432",
+      "coverage_mode": "EXPLICIT_HISTORICAL_EXCEPTIONS",
+      "coverage_rule": {
+        "reference_months": [
+          "2025-10"
+        ]
+      },
+      "required_official_evidence_classes": [
+        "BLS_REVISED_RELEASE_DATES_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_REVISED_RELEASE_DATES"
+      ],
+      "required_exceptional_cases": [
+        "EXPLICIT_CANCELLATION"
+      ],
+      "zero_official_allowed": false,
+      "complete": true,
+      "incomplete_reasons": []
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_RELEASE_ENVELOPE_HTML",
+      "release_subject_digest": "3fe048ad6168e1a5bf2b3211bb6b0d045df3b35ff7fd5c280af6733d60504b9f",
+      "coverage_mode": "HISTORICAL_MONTHLY_BASELINE",
+      "coverage_rule": {
+        "start_reference_month": "2022-01",
+        "end_reference_month": "2026-08",
+        "verified_cancellation_required": true
+      },
+      "required_official_evidence_classes": [
+        "CPI_RELEASE_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_RELEASE_ENVELOPE_HTML"
+      ],
+      "required_exceptional_cases": [
+        "ORDINARY_RELEASE",
+        "NEGATIVE_MONTHLY_CHANGE",
+        "ZERO_VALUE",
+        "ANNUAL_JANUARY",
+        "PARTIAL_AVAILABILITY",
+        "POST_SHUTDOWN_RECOVERY",
+        "CURRENT_RELEASE",
+        "DISCOVERED_CHANGED_BYTES",
+        "RELEVANT_CORRECTIONS"
+      ],
+      "zero_official_allowed": false,
+      "complete": true,
+      "incomplete_reasons": []
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_CORE4_HTML",
+      "release_subject_digest": "9be6522e1b2db41e0745c687799f44446b7f375a578b057b94a09c218a28dfe7",
+      "coverage_mode": "HISTORICAL_MONTHLY_BASELINE",
+      "coverage_rule": {
+        "start_reference_month": "2022-01",
+        "end_reference_month": "2026-08",
+        "verified_cancellation_required": true
+      },
+      "required_official_evidence_classes": [
+        "CPI_RELEASE_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_CORE4_HTML"
+      ],
+      "required_exceptional_cases": [
+        "ORDINARY_RELEASE",
+        "NEGATIVE_MONTHLY_CHANGE",
+        "ZERO_VALUE",
+        "ANNUAL_JANUARY",
+        "PARTIAL_AVAILABILITY",
+        "POST_SHUTDOWN_RECOVERY",
+        "CURRENT_RELEASE",
+        "DISCOVERED_CHANGED_BYTES",
+        "RELEVANT_CORRECTIONS"
+      ],
+      "zero_official_allowed": false,
+      "complete": true,
+      "incomplete_reasons": []
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_TABLE1_REPRESENTATION_XLSX",
+      "release_subject_digest": "967e574d1a6eb27b16e46e24e14024f42d53155ecce50cedb0de63757ef15c77",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "CPI_TABLE1_XLSX"
+      },
+      "required_official_evidence_classes": [
+        "CPI_TABLE1_XLSX"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_TABLE1_REPRESENTATION_XLSX"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_CORE4_XLSX",
+      "release_subject_digest": "031457a8de495edbf10a01485479ead089d2196e58a336cbad4ecbac49b90263",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "CPI_TABLE1_XLSX"
+      },
+      "required_official_evidence_classes": [
+        "CPI_TABLE1_XLSX"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_CORE4_XLSX"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_CORRECTION_NOTICE_HTML",
+      "release_subject_digest": "2c4fc07a54389e83caffe9660698d0c11848c93a0def0085dc535979628b9804",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "CPI_CORRECTION_HTML"
+      },
+      "required_official_evidence_classes": [
+        "CPI_CORRECTION_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_CORRECTION_NOTICE_HTML"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    },
+    {
+      "schema": "cpi-w1-capability-evidence-policy-v1",
+      "policy_version": "cpi-w1-capability-evidence-v1",
+      "promotion_capability_id": "BLS_CPI_CORRECTED_OBSERVATIONS_HTML",
+      "release_subject_digest": "f39cae4fea4654a53a6b571d787636ada26f990dfebc27bfea5959ed3939458d",
+      "coverage_mode": "UNFROZEN_SURFACE_COVERAGE",
+      "coverage_rule": {
+        "surface": "CPI_CORRECTION_HTML"
+      },
+      "required_official_evidence_classes": [
+        "CPI_CORRECTION_HTML"
+      ],
+      "required_conformance_classes": [
+        "BLS_CPI_CORRECTED_OBSERVATIONS_HTML"
+      ],
+      "required_exceptional_cases": [],
+      "zero_official_allowed": false,
+      "complete": false,
+      "incomplete_reasons": [
+        "COVERAGE_RULE_NOT_FROZEN"
+      ]
+    }
+  ]
+}

@@ -11,6 +11,13 @@ from src.cpi_w1_migration_verification import (
 
 
 class CpiW1MigrationManifestTest(unittest.TestCase):
+    def test_foundation_manifest_freezes_exact_001_through_013(self):
+        from src import cpi_w1_migration_verification as verification
+        self.assertTrue(hasattr(verification, 'load_foundation_hash_manifest'))
+        entries = verification.load_foundation_hash_manifest()
+        self.assertEqual(len(entries), 13)
+        self.assertEqual([int(entry.path.name[:3]) for entry in entries], list(range(1, 14)))
+        self.assertEqual(verify_immutable_baseline(entries), ())
     def test_manifest_freezes_exact_001_through_009_bytes(self) -> None:
         entries = load_hash_manifest(IMMUTABLE_BASELINE_MANIFEST)
         self.assertEqual(
@@ -47,6 +54,14 @@ class CpiW1MigrationManifestTest(unittest.TestCase):
     "set RUN_POSTGRES_INTEGRATION=1 to test isolated migration databases",
 )
 class CpiW1MigrationEquivalencePostgresTest(unittest.TestCase):
+    def test_foundation_upgrade_preserves_historical_v1_and_matches_fresh_014(self):
+        from src import cpi_w1_migration_verification as verification
+        self.assertTrue(hasattr(verification,'compare_foundation_upgrade'))
+        result=verification.compare_foundation_upgrade(os.environ.get('DATABASE_URL','postgresql://market:market@localhost:55435/market'))
+        self.assertEqual(result.differences,())
+        self.assertTrue(result.historical_fixture_preserved)
+        self.assertTrue(result.legacy_fixture_preserved)
+        self.assertEqual(result.migration_names[-1],'014_cpi_w1_release_evidence_v2.sql')
     def test_fresh_and_legacy_upgrade_have_equivalent_target_schema(self) -> None:
         result = compare_fresh_and_upgrade(
             os.environ.get(
@@ -56,7 +71,7 @@ class CpiW1MigrationEquivalencePostgresTest(unittest.TestCase):
         )
         self.assertEqual(result.differences, ())
         self.assertTrue(result.legacy_fixture_preserved)
-        self.assertEqual(result.migration_names[-1], "013_cpi_w1_governance_serving.sql")
+        self.assertEqual(result.migration_names[-1], "014_cpi_w1_release_evidence_v2.sql")
 
 
 if __name__ == "__main__":

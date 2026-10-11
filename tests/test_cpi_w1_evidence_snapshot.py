@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -68,7 +69,7 @@ class PromotionEvidenceSnapshotV1Test(unittest.TestCase):
                 **dict(VALID, tested_workload_artifact_digest="not-a-digest")
             )
 
-    def test_checked_in_snapshots_reproduce_exact_capability_evidence(self) -> None:
+    def test_checked_in_snapshots_reproduce_frozen_evidence_and_stale_source_is_blocked(self) -> None:
         manifest = load_manifest(ROOT / "tests/fixtures/cpi_w1/corpus.json")
         approvals = load_expected_diffs(
             ROOT / "tests/fixtures/cpi_w1/expected-diffs.json"
@@ -84,6 +85,12 @@ class PromotionEvidenceSnapshotV1Test(unittest.TestCase):
         snapshots = PromotionEvidenceSnapshotRegistry.from_json(
             ROOT / "config/cpi_w1_evidence_snapshots.json"
         )
+        decisions = {
+            item["promotion_capability_id"]: item["decision"]
+            for item in json.loads(
+                (ROOT / "config/cpi_w1_extractor_release_gate.json").read_text()
+            )["decisions"]
+        }
 
         self.assertEqual(
             set(snapshots.by_capability),
@@ -113,10 +120,10 @@ class PromotionEvidenceSnapshotV1Test(unittest.TestCase):
                 snapshot.replay_result_digest,
                 replay_result_digest(result_vector),
             )
-            self.assertEqual(
-                snapshot.tested_source_revision,
-                tested_source_revision_digest(ROOT),
-            )
+            # Frozen historical evidence must not be rewritten to follow code edits.
+            # A stale source identity may never remain release-eligible.
+            if snapshot.tested_source_revision != tested_source_revision_digest(ROOT):
+                self.assertEqual(decisions[capability.promotion_capability_id], "BLOCKED")
 
 
 if __name__ == "__main__":

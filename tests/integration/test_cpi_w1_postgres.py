@@ -11,6 +11,10 @@ from pathlib import Path
 from uuid import uuid4
 
 import psycopg
+from src.cpi_w1_evidence_policy import CapabilityEvidencePolicyV1, CapabilityEvidencePolicyRegistry, canonical_evidence_bytes
+from src.cpi_w1_evidence_snapshot_v2 import PromotionEvidenceSnapshotV2
+from src.cpi_w1_review_artifact import ReviewArtifactV1
+from src.cpi_w1_authorization import PromotionAuthorizationMaterialV2
 
 from scripts.collect_cpi_w1 import CpiW1CollectorOrchestrator
 from src.cpi_w1_artifacts import FilesystemArtifactStore
@@ -90,6 +94,73 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+_TEST_EVIDENCE_POLICIES = {}
+
+
+def test_evidence_policy_loader(capability_id, subject_digest):
+    """Declared synthetic current-policy input, not production config or DB discovery."""
+    policy = _TEST_EVIDENCE_POLICIES[subject_digest]
+    if policy.promotion_capability_id != capability_id:
+        raise ValueError('test current policy identity mismatch')
+    return policy
+
+
+def reviewed_v2_case(subject_digest, capability_id, executor, test_subject=None):
+    registry = PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json')
+    policy = CapabilityEvidencePolicyRegistry.from_json(Path('config/cpi_w1_capability_evidence_policies.json'), registry).require(capability_id)
+    # Positive execution fixtures are synthetic reviewed test policies, never the
+    # checked-in release gates or readiness evidence. Bind historical extractor
+    # fixtures to their own explicit test registry instead of reinterpreting them.
+    if test_subject is not None:
+        from dataclasses import replace
+        capability=registry.require(capability_id)
+        capability=replace(capability, source_code=test_subject.source_code,
+            artifact_contract_kind=test_subject.artifact_contract_kind,
+            source_contract_version=test_subject.source_contract_version,
+            extractor_contract_version=test_subject.extractor_contract_version,
+            promotion_family=test_subject.promotion_family)
+        registry=PromotionCapabilityRegistry((capability,),digest('synthetic-test-registry'))
+    payload=dict(policy.payload(), release_subject_digest=subject_digest,complete=True,
+        incomplete_reasons=[],coverage_mode='EXPLICIT_HISTORICAL_EXCEPTIONS',
+        coverage_rule={'reference_months':['2025-10']})
+    policy=CapabilityEvidencePolicyV1.from_mapping(payload,registry)
+    snapshot = PromotionEvidenceSnapshotV2.from_mapping({
+        'schema': PromotionEvidenceSnapshotV2.SCHEMA, 'evidence_policy_version': PromotionEvidenceSnapshotV2.POLICY,
+        'release_subject_digest': subject_digest, 'promotion_capability_id': capability_id,
+        'capability_evidence_policy_digest': policy.policy_digest,
+        'capability_corpus_snapshot_digest': digest(f'corpus:{subject_digest}'),
+        'expected_diff_approvals_digest': digest(f'diffs:{subject_digest}'),
+        'replay_result_digest': digest(f'replay:{subject_digest}'),
+        'source_contract_digest': digest('test-source-contract'), 'tested_source_content_digest': digest('test-source-content'),
+        'tested_executor_source_revision': executor.source_revision,
+        'tested_workload_artifact_digest': executor.workload_artifact_digest,
+        'tested_job_contract_version': executor.job_contract_version})
+    bindings = {key: snapshot.payload()[key] for key in ('release_subject_digest','promotion_capability_id',
+        'capability_evidence_policy_digest','source_contract_digest','tested_source_content_digest',
+        'tested_executor_source_revision','tested_workload_artifact_digest','tested_job_contract_version')}
+    bindings.update(evidence_snapshot_digest=snapshot.evidence_snapshot_digest, gate_policy_version='cpi-w1-gate-v2')
+    review = ReviewArtifactV1(f'test-auth-{subject_digest}.json', canonical_evidence_bytes({
+        'schema':'cpi-w1-review-artifact-v1','purpose':'PROMOTION_AUTHORIZATION','bindings':bindings}))
+    gate = CapabilityGateDecision(capability_id,subject_digest,snapshot.evidence_snapshot_digest,
+        'cpi-w1-gate-v2','ELIGIBLE','TEST_ONLY',review.review_ref,review.review_digest,digest(f'gate:{subject_digest}'))
+    material = PromotionAuthorizationMaterialV2.from_review(evidence=snapshot, gate_decision=gate,
+        executor=executor,current_policy=policy,source_contract_digest=snapshot.source_contract_digest,review=review)
+    return snapshot,policy,review,material
+
+
+def persist_v2_case(repository, connection, case):
+    snapshot,policy,review,material = case
+    _TEST_EVIDENCE_POLICIES[policy.release_subject_digest] = policy
+    repository.store_capability_evidence_policy(connection,policy)
+    current = connection.execute('SELECT policy_digest FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s ORDER BY registration_version DESC LIMIT 1', (policy.release_subject_digest,)).fetchone()
+    if current is None:
+        repository.register_capability_evidence_policy(connection,policy,0,'test:policy')
+    repository.store_review_artifact(connection,review)
+    snapshot_id=repository.create_promotion_evidence_snapshot_v2(connection,snapshot,'test:evidence')
+    return repository.create_promotion_authorization_material_v2(connection,material=material,
+        evidence_snapshot_id=snapshot_id,created_by_subject='test:reviewer')
+
+
 class EligibleCapabilityGate:
     gate_fingerprint = digest("integration-gate")
 
@@ -143,6 +214,8 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """
                 TRUNCATE cpi_domain_recovery_changes,
                          cpi_domain_recovery_snapshots,
+                         promotion_capability_evidence_policies,
+                         promotion_release_review_artifacts,
                          promotion_release_evidence_snapshots,
                          interpretation_subjects, source_artifacts,
                          ingestion_attempts, ingestion_work_items, ingestion_runs
@@ -394,7 +467,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         promotion_capability_id,
         executor=TEST_EXECUTOR,
     ):
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         existing = repository.resolve_promotion_release_authorization(
             connection,
             release_subject_digest=release_subject_digest,
@@ -402,45 +475,16 @@ class CpiW1PostgresTest(unittest.TestCase):
         )
         if existing is not None:
             return existing
-        snapshot = PromotionEvidenceSnapshotV1(
-            release_subject_digest=release_subject_digest,
-            corpus_snapshot_digest=digest(f"corpus:{release_subject_digest}"),
-            expected_diff_approvals_digest=digest(f"diffs:{release_subject_digest}"),
-            replay_result_digest=digest(f"replay:{release_subject_digest}"),
-            tested_job_contract_version=executor.job_contract_version,
-            tested_source_revision=executor.source_revision,
-            tested_workload_artifact_digest=executor.workload_artifact_digest,
-            evidence_policy_version="cpi-w1-evidence-v1",
-        )
-        gate = CapabilityGateDecision(
-            promotion_capability_id=promotion_capability_id,
-            release_subject_digest=release_subject_digest,
-            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
-            gate_policy_version="cpi-w1-gate-v2",
-            decision="ELIGIBLE",
-            reason_code="TEST_REVIEWED_ELIGIBLE",
-            review_ref=f"TEST-GATE:{release_subject_digest}",
-            review_digest=digest(f"gate-review:{release_subject_digest}"),
-            gate_decision_digest=digest(f"gate-decision:{release_subject_digest}"),
-        )
-        material = PromotionAuthorizationMaterialV1.from_review(
-            evidence=snapshot,
-            gate_decision=gate,
-            executor=executor,
-            review_ref=f"TEST-AUTH:{release_subject_digest}",
-            review_digest=digest(f"auth-review:{release_subject_digest}"),
-        )
-        snapshot_id = repository.create_promotion_evidence_snapshot(
-            connection,
-            snapshot=snapshot,
-            created_by_subject="test:evidence-reviewer",
-        )
-        material_id = repository.create_promotion_authorization_material(
-            connection,
-            evidence_snapshot_id=snapshot_id,
-            material=material,
-            created_by_subject="test:authorization-reviewer",
-        )
+        work=connection.execute("""SELECT a.source_code,a.artifact_contract_kind,a.source_contract_version,
+            w.extractor_contract_version FROM ingestion_work_items w JOIN source_artifacts a ON a.artifact_id=w.input_artifact_id
+            WHERE w.release_subject_digest=%s LIMIT 1""", (release_subject_digest,)).fetchone()
+        test_subject=None
+        if work is not None:
+            capability=PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json').require(promotion_capability_id)
+            test_subject=ReleaseSubjectV1(source_code=work[0],artifact_contract_kind=work[1],source_contract_version=work[2],
+                promotion_capability_id=promotion_capability_id,extractor_contract_version=work[3],promotion_family=capability.promotion_family)
+        material_id = persist_v2_case(repository,connection,
+            reviewed_v2_case(release_subject_digest,promotion_capability_id,executor,test_subject))
         authorization_id = repository.create_promotion_authorization(
             connection,
             authorization_material_id=material_id,
@@ -807,7 +851,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         return artifact_id
 
     def promote_normal_release(self, connection):
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path(
             "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
@@ -896,7 +940,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         observations: tuple[ObservationCandidate, ...],
         material_seed: str,
     ):
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         content_sha256 = digest(material_seed)
         artifact_id = self.make_artifact(
@@ -1109,7 +1153,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 """,
                 (uuid4(), work_id),
             )
-            with self.assertRaises(psycopg.errors.NoDataFound):
+            with self.assertRaisesRegex(psycopg.errors.CheckViolation, 'current work fence'):
                 connection.execute(
                     """
                     INSERT INTO core_event_occurrences (
@@ -2701,7 +2745,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_repository_claim_starts_run_and_creates_aligned_attempt(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -2738,7 +2782,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(attempt, (1, "RUNNING"))
 
     def test_repository_renews_active_claim_without_changing_owner(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -2783,7 +2827,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(after[2], renewed_until)
 
     def test_repository_cannot_renew_expired_claim(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -2817,7 +2861,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_repository_reclaim_fences_old_claim(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -2858,7 +2902,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_reclaim_closes_expired_attempt_and_retry_preserves_history(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -2933,7 +2977,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_paused_promotion_is_not_claimable_and_resume_advances_generation(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -3070,7 +3114,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_pending_pause_creates_zero_attempts_and_resume_does_not_authorize(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -3157,7 +3201,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(state, ("PAUSED", 0))
 
     def test_approval_does_not_auto_resume_pending_pause(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -3192,7 +3236,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(state, ("PAUSED", 0))
 
     def test_stale_owner_cannot_pause_reclaimed_work(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -3246,7 +3290,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_artifact_same_identity_rejects_metadata_drift(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(connection)
             work_id = self.insert_work(
@@ -3302,7 +3346,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_artifact_promotion_targets_are_exact_idempotent_and_immutable(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(connection)
             self.insert_work(
@@ -3370,7 +3414,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_concurrent_promotion_scheduling_creates_one_run(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         registry = PromotionCapabilityRegistry.from_json(
             "config/cpi_w1_promotion_capabilities.json"
         )
@@ -3449,7 +3493,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assertEqual(run_count, 1)
 
     def test_promotion_scheduling_preserves_two_structured_target_months(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         registry = PromotionCapabilityRegistry.from_json(
             "config/cpi_w1_promotion_capabilities.json"
         )
@@ -3518,7 +3562,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assert_scheduler_rejects_unsafe_existing_target(None)
 
     def assert_scheduler_rejects_unsafe_existing_target(self, target) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         registry = PromotionCapabilityRegistry.from_json("config/cpi_w1_promotion_capabilities.json")
         with self.connection() as connection:
             artifact_id = self.make_artifact(connection, f"wrong-target-key:{uuid4()}")
@@ -3581,7 +3625,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone()[0], 0)
 
     def test_structured_target_month_constraints_and_immutability(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             collect_run = self.insert_run(connection)
             collect_id = repository.create_work_item(
@@ -3636,7 +3680,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_retry_delay_uses_database_clock_and_rejects_unbounded_delay(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -3695,7 +3739,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_deferred_promotion_audit_is_capability_scoped_and_idempotent(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         gate_a = "a" * 64
         gate_b = "b" * 64
         evidence = "c" * 64
@@ -3780,7 +3824,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_evidence_snapshot_converges_by_digest_and_is_immutable(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         snapshot = PromotionEvidenceSnapshotV1(
             release_subject_digest="1" * 64,
             corpus_snapshot_digest="2" * 64,
@@ -3815,7 +3859,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_schedule_assertion_promotion_persists_authoritative_evidence(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         body = Path("tests/fixtures/cpi_w1/schedule/exact.html").read_bytes()
         candidate = parse_cpi_schedule_html(
@@ -3881,7 +3925,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         from dataclasses import replace
         from src.cpi_w1_contracts import SourceAuthorityRole
 
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         body = Path("tests/fixtures/cpi_w1/schedule/exact.html").read_bytes()
         candidate = parse_cpi_schedule_html(
@@ -3936,7 +3980,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_explicit_cancellation_schedule_promotion_is_preserved(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         body = b"""<table>
         <tr><th>Release</th><th>Reference period</th>
@@ -3995,7 +4039,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(row, ("CANCELED", None, None, None))
 
     def test_promoter_rejects_candidate_outside_structured_target_even_with_matching_key(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(fixture, expected_reference_month=date(2026, 8, 1))
         with self.connection() as connection:
@@ -4027,7 +4071,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assert_expired_promotion_lock_wait_rejected("ATTEMPT")
 
     def assert_expired_promotion_lock_wait_rejected(self, lock_kind) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(fixture, expected_reference_month=date(2026, 8, 1))
         with self.connection() as connection:
@@ -4110,7 +4154,7 @@ class CpiW1PostgresTest(unittest.TestCase):
         self.assert_lifecycle_attempt_wait_rejected("PAUSE")
 
     def assert_lifecycle_attempt_wait_rejected(self, operation) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(connection)
             self.insert_work(connection, run_id)
@@ -4171,7 +4215,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone(), ("RUNNING", None))
 
     def test_collect_heartbeat_cannot_renew_after_work_row_lock_expiry(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(connection)
             self.insert_work(connection, run_id)
@@ -4222,7 +4266,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone(), (deadline, "CLAIMED"))
 
     def test_release_envelope_promotion_is_atomic_and_observation_free(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(
@@ -4279,7 +4323,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(state, ("TERMINAL", "SUCCEEDED"))
 
     def test_split_promotion_allows_disclosed_envelope_and_quarantined_core4(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
@@ -4376,7 +4420,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_core4_bundle_promotes_four_assertions_atomically(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
@@ -4459,7 +4503,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_promotion_family_claim_cannot_be_swapped(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
@@ -4496,7 +4540,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_release_envelope_retry_converges_without_duplicate_evidence(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         candidate = extract_release_envelope(
@@ -4608,7 +4652,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_same_observation_parse_identity_cannot_schedule_conflicting_second_work(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
@@ -4760,7 +4804,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_core4_db_failure_rolls_back_all_partial_assertions(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path("tests/fixtures/cpi_w1/html/normal_aug_2026.html").read_bytes()
         envelope = extract_release_envelope(
@@ -4862,7 +4906,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_conflicting_official_representation_materials_are_both_retained(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path(
             "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
@@ -5078,7 +5122,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_promoter_rejects_candidate_from_different_artifact_bytes(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path(
             "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
@@ -5129,7 +5173,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             )
 
     def test_repository_finalizes_run_after_all_work_is_terminal(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -5168,7 +5212,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertFalse(repository.finalize_run_if_complete(connection, run_id))
 
     def test_revoked_authorization_blocks_final_canonical_commit(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         fixture = Path(
             "tests/fixtures/cpi_w1/html/normal_aug_2026.html"
@@ -5240,7 +5284,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 self.assertEqual(count, 0, table)
 
     def test_repository_does_not_finalize_run_with_pending_work(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -5569,7 +5613,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_correction_observations_require_correction_notice_topology(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         with self.connection() as connection:
             promoted = self.promote_normal_release(connection)
@@ -5637,7 +5681,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertIsNotNone(promoted["event_id"])
 
     def test_correction_notice_survives_quarantined_observation_work(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         promoter = CpiW1Promoter(repository)
         with self.connection() as connection:
             promoted = self.promote_normal_release(connection)
@@ -6112,7 +6156,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_promotion_attempt_binds_exact_authorization_control_and_executor(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -6166,7 +6210,7 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_unauthorized_executor_pauses_pending_work_without_attempt(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         unauthorized = ExecutorProvenanceV1(
             source_revision=digest("unauthorized-source"),
             workload_artifact_digest=digest("unauthorized-workload"),
@@ -6210,7 +6254,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(attempt_count, 0)
 
     def test_reclaim_revoked_authorization_closes_old_attempt_and_pauses(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -6309,7 +6353,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertEqual(audit_payload["claim_generation"], 1)
 
     def approve_second_matching_authorization(self, connection, claim):
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         material_id = connection.execute(
             "SELECT authorization_material_id FROM promotion_release_authorizations WHERE authorization_id=%s",
             (claim.release_authorization_id,),
@@ -6328,13 +6372,140 @@ class CpiW1PostgresTest(unittest.TestCase):
         return authorization_b
 
     def make_authorization_overlap_claim(self, connection):
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         run_id = self.insert_run(connection, execution_scope="ECONOMIC_PROMOTE")
         self.insert_work(connection, run_id, execution_scope="ECONOMIC_PROMOTE")
         return self.claim_work_item(repository, connection, execution_scope="ECONOMIC_PROMOTE")
 
+    def change_registered_test_policy(self, connection, claim):
+        registry=PromotionCapabilityRegistry.from_json('config/cpi_w1_promotion_capabilities.json')
+        row=connection.execute("""SELECT p.payload,r.registration_version FROM promotion_capability_evidence_policy_registrations r
+            JOIN promotion_capability_evidence_policies p USING (policy_digest)
+            WHERE r.release_subject_digest=%s ORDER BY r.registration_version DESC LIMIT 1""", (claim.release_subject_digest,)).fetchone()
+        payload=dict(row[0]); payload['required_exceptional_cases']=payload['required_exceptional_cases']+['TEST_POLICY_CHANGE']
+        policy=CapabilityEvidencePolicyV1.from_mapping(payload,registry)
+        repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+        repository.store_capability_evidence_policy(connection,policy)
+        repository.register_capability_evidence_policy(connection,policy,row[1],'test:policy-change')
+
+    def test_changed_policy_rejects_final_authorization(self):
+        repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.assert_current_promotion_authorization(connection,claim)
+
+    def test_changed_policy_heartbeat_pauses_without_auto_resume(self):
+        repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.renew_claim(connection,claim)
+            self.assertEqual(connection.execute('SELECT state FROM ingestion_work_items WHERE work_item_id=%s',(claim.work_item_id,)).fetchone()[0],'PAUSED')
+            self.assertIsNone(repository.claim_work_item(connection,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR))
+
+    def test_changed_policy_direct_canonical_insert_is_rejected(self):
+        with self.connection() as connection:
+            claim=self.make_authorization_overlap_claim(connection)
+            with self.connection() as writer:
+                self.change_registered_test_policy(writer,claim)
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                connection.execute("INSERT INTO core_event_occurrences (event_occurrence_id,event_type,reference_month,created_by_attempt_id) VALUES (%s,'CPI','2026-08-01',%s)",(uuid4(),claim.attempt_id))
+            self.assertEqual(connection.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0],0)
+
+    def assert_stale_transaction_snapshot_cannot_promote(self, isolation):
+        with self.connection() as writer:
+            claim = self.make_authorization_overlap_claim(writer)
+            with writer.transaction():
+                writer.execute(f'SET TRANSACTION ISOLATION LEVEL {isolation}')
+                version = writer.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s',
+                                         (claim.release_subject_digest,)).fetchone()[0]
+                with self.connection() as registrar:
+                    self.change_registered_test_policy(registrar, claim)
+                    self.assertEqual(registrar.execute('SELECT max(registration_version) FROM promotion_capability_evidence_policy_registrations WHERE release_subject_digest=%s',
+                                                      (claim.release_subject_digest,)).fetchone()[0], version + 1)
+                # The write must refuse a transaction snapshot which cannot see
+                # that committed policy, even after acquiring the release lock.
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    with writer.transaction():
+                        writer.execute("INSERT INTO core_event_occurrences (event_occurrence_id,event_type,reference_month,created_by_attempt_id) VALUES (%s,'CPI','2026-08-01',%s)",
+                                       (uuid4(), claim.attempt_id))
+                self.assertEqual(writer.execute('SELECT count(*) FROM core_event_occurrences').fetchone()[0], 0)
+
+    def test_repeatable_read_stale_policy_snapshot_cannot_write_canonical_event(self):
+        self.assert_stale_transaction_snapshot_cannot_promote('REPEATABLE READ')
+
+    def test_serializable_promotion_snapshot_is_rejected_fail_closed(self):
+        self.assert_stale_transaction_snapshot_cannot_promote('SERIALIZABLE')
+
+    def test_final_writer_serializes_policy_registration_then_rejects_next_write(self):
+        repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+        with self.connection() as writer:
+            claim=self.make_authorization_overlap_claim(writer)
+            pid_queue=Queue()
+            def register():
+                with self.connection() as registrar:
+                    registrar.execute("SET lock_timeout='5s'")
+                    pid_queue.put(registrar.info.backend_pid)
+                    self.change_registered_test_policy(registrar,claim)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with writer.transaction():
+                    repository.lock_cpi_domain_shared(writer)
+                    repository.lock_cpi_release_subject(writer,claim.release_subject_digest)
+                    repository.assert_current_claim(writer,claim)
+                    repository.assert_current_promotion_authorization(writer,claim)
+                    future=pool.submit(register)
+                    registrar_pid=pid_queue.get(timeout=5)
+                    deadline=time.monotonic()+3
+                    blocked=False
+                    with self.connection() as observer:
+                        while time.monotonic()<deadline:
+                            blockers=observer.execute('SELECT pg_blocking_pids(%s)',(registrar_pid,)).fetchone()[0]
+                            if writer.info.backend_pid in blockers:
+                                blocked=True; break
+                            time.sleep(0.01)
+                    self.assertTrue(blocked,'prove registration wait through PostgreSQL lock graph')
+                    repository.assert_current_promotion_authorization(writer,claim)
+                future.result(timeout=5)
+            with self.assertRaises(RepositoryInvariantError):
+                repository.assert_current_promotion_authorization(writer,claim)
+
+    def test_claim_waiting_for_release_does_not_hold_work_lock(self):
+        repository=CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+        with self.connection() as writer:
+            claim=self.make_authorization_overlap_claim(writer)
+            writer.execute("UPDATE ingestion_work_items SET lease_until=clock_timestamp()-interval '1 second' WHERE work_item_id=%s",(claim.work_item_id,))
+            pid_queue=Queue()
+            def reclaim():
+                with self.connection() as claimer:
+                    claimer.execute("SET lock_timeout='5s'")
+                    pid_queue.put(claimer.info.backend_pid)
+                    return repository.claim_work_item(claimer,execution_scope='ECONOMIC_PROMOTE',executor=TEST_EXECUTOR)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with writer.transaction():
+                    repository.lock_cpi_domain_shared(writer)
+                    repository.lock_cpi_release_subject(writer,claim.release_subject_digest)
+                    future=pool.submit(reclaim); claimer_pid=pid_queue.get(timeout=5)
+                    deadline=time.monotonic()+3; blocked=False
+                    with self.connection() as observer:
+                        while time.monotonic()<deadline:
+                            if writer.info.backend_pid in observer.execute('SELECT pg_blocking_pids(%s)',(claimer_pid,)).fetchone()[0]:
+                                blocked=True; break
+                            time.sleep(0.01)
+                    self.assertTrue(blocked)
+                    try:
+                        with writer.transaction():
+                            writer.execute('SELECT work_item_id FROM ingestion_work_items WHERE work_item_id=%s FOR UPDATE NOWAIT',(claim.work_item_id,))
+                    except psycopg.errors.LockNotAvailable:
+                        self.fail('claim acquired work before release: canonical writer deadlock risk')
+                self.assertIsNotNone(future.result(timeout=5))
+
     def test_second_approval_does_not_break_bound_heartbeat(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             claim = self.make_authorization_overlap_claim(connection)
             self.approve_second_matching_authorization(connection, claim)
@@ -6350,7 +6521,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone(), (claim.release_authorization_id, claim.release_control_decision_id, "RUNNING"))
 
     def test_second_approval_cannot_rescue_revoked_bound_heartbeat(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             claim = self.make_authorization_overlap_claim(connection)
             authorization_b = self.approve_second_matching_authorization(connection, claim)
@@ -6373,7 +6544,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             self.assertNotEqual(authorization_b, claim.release_authorization_id)
 
     def test_new_claim_with_two_matching_approvals_remains_ambiguous(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             claim = self.make_authorization_overlap_claim(connection)
             self.approve_second_matching_authorization(connection, claim)
@@ -6391,7 +6562,7 @@ class CpiW1PostgresTest(unittest.TestCase):
             ).fetchone()[0], 0)
 
     def test_heartbeat_revocation_pauses_current_claim(self) -> None:
-        repository = CpiW1Repository()
+        repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
         with self.connection() as connection:
             run_id = self.insert_run(
                 connection,
@@ -6558,53 +6729,17 @@ class CpiW1PostgresTest(unittest.TestCase):
                 )
 
     def test_release_authorization_control_is_exact_append_only_and_revocable(self) -> None:
-        snapshot = PromotionEvidenceSnapshotV1(
-            release_subject_digest=TEST_OBSERVATION_SUBJECT.release_subject_digest,
-            corpus_snapshot_digest=digest("auth-corpus"),
-            expected_diff_approvals_digest=digest("auth-diffs"),
-            replay_result_digest=digest("auth-replay"),
-            tested_job_contract_version="cpi-w1-promoter-v1",
-            tested_source_revision=digest("auth-tested-source"),
-            tested_workload_artifact_digest=None,
-            evidence_policy_version="cpi-w1-evidence-v1",
-        )
-        gate = CapabilityGateDecision(
-            promotion_capability_id="BLS_CPI_CORE4_HTML",
-            release_subject_digest=snapshot.release_subject_digest,
-            evidence_snapshot_digest=snapshot.evidence_snapshot_digest,
-            gate_policy_version="cpi-w1-gate-v2",
-            decision="ELIGIBLE",
-            reason_code="REVIEWED_ELIGIBLE",
-            review_ref="GATE-REVIEW-1",
-            review_digest=digest("gate-review"),
-            gate_decision_digest=digest("gate-decision"),
-        )
         executor = ExecutorProvenanceV1(
             source_revision=digest("executor-source"),
             workload_artifact_digest=digest("executor-workload"),
             job_contract_version="cpi-w1-promoter-v1",
         )
-        material = PromotionAuthorizationMaterialV1.from_review(
-            evidence=snapshot,
-            gate_decision=gate,
-            executor=executor,
-            review_ref="AUTH-REVIEW-1",
-            review_digest=digest("auth-review"),
-        )
+        case = reviewed_v2_case(TEST_OBSERVATION_SUBJECT.release_subject_digest,'BLS_CPI_CORE4_HTML',executor)
+        material = case[3]
 
         with self.connection() as connection:
-            repository = CpiW1Repository()
-            snapshot_id = repository.create_promotion_evidence_snapshot(
-                connection,
-                snapshot=snapshot,
-                created_by_subject="worker:evidence-reviewer",
-            )
-            material_id = repository.create_promotion_authorization_material(
-                connection,
-                evidence_snapshot_id=snapshot_id,
-                material=material,
-                created_by_subject="worker:authorization-reviewer",
-            )
+            repository = CpiW1Repository(evidence_policy_loader=test_evidence_policy_loader)
+            material_id = persist_v2_case(repository,connection,case)
             authorization_id = repository.create_promotion_authorization(
                 connection,
                 authorization_material_id=material_id,
